@@ -263,6 +263,7 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [featuredRank, setFeaturedRank] = useState(String(product.featuredRank ?? 99))
   const [sortOrder, setSortOrder] = useState(String(product.sortOrder ?? product.featuredRank ?? 99))
   const [visible, setVisible] = useState(product.visible !== false)
+  const [isModular, setIsModular] = useState(Boolean(product.isModular))
   const [leadTimeDays, setLeadTimeDays] = useState(String(inventory?.leadTimeDays ?? product.leadTimeDays ?? 4))
   const [allowCustomColorRequest, setAllowCustomColorRequest] = useState(Boolean(inventory?.allowCustomColorRequest ?? product.allowCustomColorRequest))
   const [materialRecipe, setMaterialRecipe] = useState<DraftMaterialRequirement[]>(
@@ -591,6 +592,7 @@ export function ProductEditor({ slug }: { slug: string }) {
     setFeaturedRank(String(product.featuredRank ?? 99))
     setSortOrder(String(product.sortOrder ?? product.featuredRank ?? 99))
     setVisible(product.visible !== false)
+    setIsModular(Boolean(product.isModular))
     setLeadTimeDays(String(inventory?.leadTimeDays ?? product.leadTimeDays ?? 4))
     setAllowCustomColorRequest(Boolean(inventory?.allowCustomColorRequest ?? product.allowCustomColorRequest))
     setMaterialRecipe(getProductMaterialRecipe(product).map(item => ({ label: item.label, grams: String(item.grams) })))
@@ -797,6 +799,7 @@ export function ProductEditor({ slug }: { slug: string }) {
           featured,
           featuredRank: Number(featuredRank) || 99,
           sortOrder: Number(sortOrder) || 99,
+          isModular,
           materialGrams: recipe.reduce((sum, item) => sum + item.grams, 0),
           materialRecipe: recipe,
           visible,
@@ -1038,6 +1041,15 @@ export function ProductEditor({ slug }: { slug: string }) {
                     <Label htmlFor="sort-order">Sort Order</Label>
                     <Input id="sort-order" type="number" min="1" value={sortOrder} onChange={event => setSortOrder(event.target.value)} className="mt-1.5" />
                   </div>
+                  <label className="md:col-span-3 flex items-start gap-3 rounded-lg border border-border bg-secondary/40 p-4 text-sm">
+                    <input type="checkbox" checked={isModular} onChange={event => setIsModular(event.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-primary" />
+                    <span>
+                      <span className="block font-semibold text-foreground">Usar construtor modular</span>
+                      <span className="mt-1 block text-muted-foreground">
+                        Ativa o fluxo mobile-first por peças em /criar para lightboxes modulares.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </section>
             </TabsContent>

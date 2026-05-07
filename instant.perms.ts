@@ -112,6 +112,24 @@ const rules = {
         "validInitialStatus && validShipping && validPayment && totalsReasonable", // && hasContact",
     },
   },
+  orderRequests: {
+    allow: {
+      view: "isAdmin",
+      create: "isPublicRequest",
+      update: "isAdmin",
+      delete: "isAdmin",
+    },
+    bind: {
+      isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
+      validStatus: "data.status == 'PENDING_REVIEW'",
+      validBaseColor: "data.baseColor == null || data.baseColor in ['black', 'wood']",
+      validPaidState: "data.isPaid == null || data.isPaid == false",
+      hasCustomer:
+        "size(data.customerName) >= 2 && size(data.customerEmail) >= 6 && size(data.customerPhone) >= 6",
+      hasImage: "size(data.imageUrl) >= 12",
+      isPublicRequest: "validStatus && validBaseColor && validPaidState && hasCustomer && hasImage",
+    },
+  },
   aiUsageLogs: {
     allow: {
       view: "isAdmin",

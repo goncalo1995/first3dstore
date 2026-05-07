@@ -99,6 +99,7 @@ const _schema = i.schema({
       }[]>(),
       multiColor: i.boolean(),
       multiColorCount: i.number(),
+      isModular: i.boolean().indexed().optional(),
       colorSelectionMode: i.string<'single' | 'flexible_parts' | 'preset_options'>().optional(),
       multiColorPriceAdd: i.number().optional(),
       variants: i.json<{
@@ -130,8 +131,8 @@ const _schema = i.schema({
         source?: 'upload' | 'tripo3d'
       }[]>().optional(),
       slicerNotes: i.string().optional(),
-      featured: i.boolean(),
-      featuredRank: i.number(),
+      featured: i.boolean().indexed(),
+      featuredRank: i.number().indexed(),
       sortOrder: i.number().optional(),
       materialGrams: i.number().optional(),
       materialRecipe: i.json<{
@@ -139,7 +140,7 @@ const _schema = i.schema({
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
       }[]>().optional(),
-      visible: i.boolean(),
+      visible: i.boolean().indexed(),
       updatedAt: i.date(),
     }),
     marketingPosts: i.entity({
@@ -236,6 +237,30 @@ const _schema = i.schema({
       createdAt: i.date(),
       updatedAt: i.date(),
     }),
+    orderRequests: i.entity({
+      customerName: i.string(),
+      customerEmail: i.string().indexed(),
+      customerPhone: i.string(),
+      imageUrl: i.string(),
+      baseColor: i.string<'black' | 'wood'>().optional(),
+      productSlug: i.string().indexed().optional(),
+      productName: i.string().optional(),
+      variantId: i.string().optional(),
+      variantName: i.string().optional(),
+      selectedPrice: i.number().optional(),
+      lightMode: i.string<'desligada' | 'quente' | 'fria'>().optional(),
+      canvasConfig: i.json<{
+        version: number
+        type: 'simple' | 'modular-list'
+        [key: string]: any
+      }>().optional(),
+      engravingText: i.string().optional(),
+      isPaid: i.boolean().optional(),
+      notes: i.string().optional(),
+      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED'>().indexed(),
+      createdAt: i.date().indexed(),
+      updatedAt: i.date(),
+    }),
     productInventory: i.entity({
       productSlug: i.string().unique().indexed(),
       activeColorNames: i.json<string[]>(),
@@ -268,11 +293,15 @@ const _schema = i.schema({
     }),
     productionJobs: i.entity({
       orderId: i.string().indexed(),
+      orderRequestId: i.string().indexed().optional(),
       orderItemIndex: i.number(),
       productId: i.string().indexed().optional(),
+      productSlug: i.string().indexed().optional(),
       selectedVariantId: i.string().optional(),
       selectedVariantName: i.string().optional(),
       productName: i.string(),
+      imageUrl: i.string().optional(),
+      source: i.string<'order' | 'order_request'>().optional(),
       partLabel: i.string(),
       colorName: i.string().indexed(),
       colorHex: i.string(),

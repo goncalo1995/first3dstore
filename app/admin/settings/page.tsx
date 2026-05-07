@@ -16,6 +16,7 @@ import {
   X,
   Eye,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +52,7 @@ import {
 const ENTITIES: {
   key: ExportableEntity
   label: string
-  icon: React.ElementType
+  icon: LucideIcon
   description: string
 }[] = [
   { key: 'catalogProducts', label: 'Products', icon: Package, description: 'All catalog products and variants' },

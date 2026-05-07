@@ -67,6 +67,7 @@ export interface Product {
   featured?: boolean
   featuredRank?: number
   sortOrder?: number
+  isModular?: boolean
   inStock?: boolean // non-customizable stock can dispatch faster
   acceptsCustomColor?: boolean // can request any hex color
   allowCustomColorRequest?: boolean
@@ -246,31 +247,31 @@ export const defaultGlobalColors: GlobalColor[] = colorPalette.map(color => ({
 }))
 
 export const products: Product[] = [
-  {
-    id: '1',
-    name: 'Golf Ball Planter',
-    slug: 'golf-ball-planter',
-    category: 'gift',
-    priceFrom: 15,
-    priceTo: 15,
-    benefit: 'Never lose your ball marker again',
-    description: 'A distinctive ball planter that can hold a golf ball. Personalise with your initials for a truly unique piece that stands out on any green.',
-    image: 'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
-    images: [
-      'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
-      'https://files.golfprint.pt/products/GolfBallPlanter-2.webp'
-    ],
-    colors: [
-      { name: 'Branco', hex: '#ffffff' },
-    ],
-    customizable: false,
-    featured: true,
-    featuredRank: 1,
-    materialGrams: 12,
-    materialRecipe: [{ label: 'Base', grams: 12 }],
-    acceptsCustomColor: false,
-    inStock: true,
-  },
+  // {
+  //   id: '1',
+  //   name: 'Golf Ball Planter',
+  //   slug: 'golf-ball-planter',
+  //   category: 'gift',
+  //   priceFrom: 15,
+  //   priceTo: 15,
+  //   benefit: 'Never lose your ball marker again',
+  //   description: 'A distinctive ball planter that can hold a golf ball. Personalise with your initials for a truly unique piece that stands out on any green.',
+  //   image: 'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
+  //   images: [
+  //     'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
+  //     'https://files.golfprint.pt/products/GolfBallPlanter-2.webp'
+  //   ],
+  //   colors: [
+  //     { name: 'Branco', hex: '#ffffff' },
+  //   ],
+  //   customizable: false,
+  //   featured: true,
+  //   featuredRank: 1,
+  //   materialGrams: 12,
+  //   materialRecipe: [{ label: 'Base', grams: 12 }],
+  //   acceptsCustomColor: false,
+  //   inStock: true,
+  // },
   // {
   //   "id": "golf-ball-alignment-stencil",
   //   "name": "Three-Line Golf Ball Alignment Stencil",
@@ -588,6 +589,7 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     featured: catalogProduct.featured ?? false,
     featuredRank: catalogProduct.featuredRank ?? 99,
     sortOrder: catalogProduct.sortOrder ?? 99,
+    isModular: catalogProduct.isModular ?? false,
     acceptsCustomColor: catalogProduct.acceptsCustomColor ?? false,
     allowCustomColorRequest: catalogProduct.allowCustomColorRequest ?? false,
     materialGrams: catalogProduct.materialGrams ?? 25,
@@ -653,6 +655,7 @@ export function applyCatalogProduct(product: Product, catalogProduct?: CatalogPr
     featured: catalogProduct.featured ?? product.featured,
     featuredRank: catalogProduct.featuredRank ?? product.featuredRank,
     sortOrder: catalogProduct.sortOrder ?? product.sortOrder,
+    isModular: catalogProduct.isModular ?? product.isModular,
   }
   mergedProduct.colors = deriveProductDisplayColors({
     variants: mergedProduct.variants,

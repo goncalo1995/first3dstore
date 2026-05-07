@@ -1,260 +1,234 @@
-import Link from 'next/link'
-import Image from 'next/image'
-import { ArrowRight, CheckCircle2, Package, Printer, ShieldCheck, Sparkles, Star, Truck, Palette } from 'lucide-react'
-import { Header } from '@/components/header'
-import { Footer } from '@/components/footer'
-import { WhatsAppButton } from '@/components/whatsapp-button'
-import { Button } from '@/components/ui/button'
-import { categoryLabels, categoryDescriptions, products, type ProductCategory } from '@/lib/products'
-import { HomeFeaturedProducts } from './home-featured-products'
+'use client'
 
-const categories: { key: ProductCategory; image: string }[] = [
-  { key: 'on-course', image: '/products/ball-marker.jpg' },
-  { key: 'gift', image: '/products/gift-box.jpg' },
-  { key: 'practice', image: '/products/putting-gate.jpg' },
-]
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { ArrowRight, Home, ImageIcon, Loader2, PackageCheck, Power, Sparkles } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { db } from '@/lib/db'
+
+type CatalogProduct = {
+  id: string
+  slug: string
+  name: string
+  benefit?: string
+  description: string
+  image?: string
+  priceFrom: number
+  priceTo?: number
+  salePrice?: number
+  variants?: {
+    id: string
+    name: string
+    finalPrice?: number
+    priceAdd?: number
+  }[]
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(value)
+}
+
+function productPrice(product: CatalogProduct) {
+  if (product.salePrice) return formatPrice(product.salePrice)
+  if (product.priceTo && product.priceTo > product.priceFrom) {
+    return `desde ${formatPrice(product.priceFrom)}`
+  }
+  return formatPrice(product.priceFrom)
+}
 
 export default function HomePage() {
+  const [lightsOn, setLightsOn] = useState(false)
+  const productsQuery = db.useQuery({
+    catalogProducts: {
+      $: {
+        where: { visible: true, featured: true },
+        order: { featuredRank: 'asc' },
+      },
+    },
+  })
+
+  const products = useMemo(
+    () => ((productsQuery.data?.catalogProducts ?? []) as CatalogProduct[]).slice(0, 3),
+    [productsQuery.data?.catalogProducts],
+  )
+
   return (
-    <>
-      <Header />
-      <main>
-        <section className="relative h-[88vh] overflow-hidden bg-foreground">
-          <Image
-            src="/hero.png"
-            alt="Acessórios de golfe personalizados GolfPrint"
-            fill
-            className="object-cover object-right"
-            sizes="100vw"
-            preload
-            loading="eager"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-foreground/95 via-foreground/72 to-foreground/22" />
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
+    <main className="min-h-screen overflow-hidden bg-[#121212] text-white">
+      <section className="relative min-h-screen px-5 py-6 sm:px-8">
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-[70vh] max-w-5xl"
+          initial={false}
+          animate={{
+            opacity: lightsOn ? 1 : 0.12,
+            scale: lightsOn ? 1 : 0.74,
+          }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          style={{
+            background:
+              'radial-gradient(circle at 50% 0%, rgba(255,170,0,0.5), rgba(255,170,0,0.18) 28%, transparent 68%)',
+            filter: 'blur(18px)',
+          }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_36%),linear-gradient(180deg,rgba(18,18,18,0)_0%,#121212_76%)]" />
 
-          <div className="container relative mx-auto flex min-h-[88vh] items-center px-4 pb-20 pt-16">
-            <div className="max-w-3xl">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-background/12 px-4 py-2 text-sm font-medium text-background ring-1 ring-background/20 backdrop-blur">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Acessórios de golfe personalizados
-              </div>
+        <div className="relative mx-auto flex min-h-[calc(100vh-3rem)] max-w-7xl flex-col">
+          <nav className="flex items-center justify-between">
+            <Link href="/" className="font-sans text-lg font-semibold tracking-tight">
+              Foto3D.pt
+            </Link>
+            <Button asChild className="hidden border border-white/15 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 sm:inline-flex">
+              <Link href="#produtos">Ver molduras</Link>
+            </Button>
+          </nav>
 
-              <p className="mt-6 max-w-2xl text-lg leading-relaxed text-background/78 md:text-xl">
-                Marcadores de bola, ferramentas para reparar pitches, acessórios de treino e conjuntos de oferta personalizados, impressos em 3D e feitos para golfistas que apreciam os detalhes.
-              </p>
+          <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
+            <motion.button
+              type="button"
+              onClick={() => setLightsOn((value) => !value)}
+              className="group relative mb-10 flex h-28 w-28 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white shadow-2xl backdrop-blur-md transition-colors hover:bg-white/16"
+              initial={false}
+              animate={{
+                boxShadow: lightsOn
+                  ? '0 0 28px rgba(255,170,0,0.75), 0 0 120px rgba(255,170,0,0.38)'
+                  : '0 0 18px rgba(255,255,255,0.08)',
+              }}
+              transition={{ duration: 0.45 }}
+              aria-pressed={lightsOn}
+              aria-label={lightsOn ? 'Desligar luz' : 'Ligar luz'}
+            >
+              <span className="absolute inset-3 rounded-full border border-white/10" />
+              <Power className="h-11 w-11 text-[#ffaa00] transition-transform group-hover:scale-105" />
+            </motion.button>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className="h-14 bg-primary px-8 text-base text-primary-foreground hover:bg-primary/90">
-                  <Link href="/shop">
-                    Explorar Loja
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg" className="h-14 border-background/35 bg-background/10 px-8 text-base text-background backdrop-blur hover:bg-background/20">
-                  <Link href="/shop?category=gift">
-                    Ver Presentes
-                  </Link>
-                </Button>
-              </div>
+            <motion.p
+              className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 font-sans text-sm text-white/70 backdrop-blur-md"
+              animate={{ opacity: lightsOn ? 1 : 0.45 }}
+            >
+              <Sparkles className="h-4 w-4 text-[#ffaa00]" />
+              A magia revela-se quando a luz acende
+            </motion.p>
+            <motion.h1
+              className="max-w-4xl font-serif text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl lg:text-7xl"
+              animate={{ opacity: lightsOn ? 1 : 0.34, filter: lightsOn ? 'blur(0px)' : 'blur(1.5px)' }}
+              transition={{ duration: 0.55 }}
+            >
+              Transforme a sua foto numa memória iluminada. Feito à mão em Portugal.
+            </motion.h1>
+            <motion.p
+              className="mt-6 max-w-2xl font-sans text-lg leading-8 text-white/72"
+              animate={{ opacity: lightsOn ? 1 : 0.28 }}
+              transition={{ duration: 0.55, delay: 0.08 }}
+            >
+              Uma lithophane personalizada parece uma peça discreta em plástico branco até ganhar vida com a sua fotografia.
+            </motion.p>
+            <motion.div
+              className="mt-9 flex flex-col gap-3 sm:flex-row"
+              animate={{ opacity: lightsOn ? 1 : 0.45, y: lightsOn ? 0 : 8 }}
+            >
+              <Button asChild size="lg" className="h-14 bg-[#ffaa00] px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+                <Link href="#produtos">
+                  Escolher formato
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-14 border-white/15 bg-white/8 px-8 font-sans text-base text-white backdrop-blur-md hover:bg-white/15 hover:text-white">
+                <Link href="#como-funciona">Como funciona</Link>
+              </Button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      <section id="produtos" className="relative px-5 py-16 sm:px-8 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Formatos em destaque</p>
+              <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight text-white sm:text-5xl">
+                Escolha a moldura da sua memória.
+              </h2>
             </div>
+            {productsQuery.isLoading && (
+              <div className="flex items-center gap-2 font-sans text-sm text-white/60">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                A carregar produtos
+              </div>
+            )}
           </div>
-        </section>
 
-        {/* Barra de Confiança */}
-        <section className="bg-background">
-          <div className="container mx-auto px-6 py-12">
-            <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground md:grid-cols-4 md:gap-6">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-8 w-8 text-primary" />
-                <span>Produção em Lisboa</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-8 w-8 text-primary" />
-                <span>Materiais ecológicos</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Truck className="h-10 w-10 text-primary" />
-                <span>Envio para Portugal continental</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Palette className="h-10 w-10 text-primary" />
-                <span>Mais de 10 cores disponíveis</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Comprar por Categoria */}
-        <section className="container mx-auto px-4 py-16 md:py-24">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-              Comprar por categoria
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-              Encontre a peça perfeita para si ou para oferecer
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {categories.map(({ key, image }) => (
-              <Link
-                key={key}
-                href={`/shop?category=${key}`}
-                className="group relative aspect-[4/3] rounded-xl overflow-hidden"
+          <div className="grid gap-5 md:grid-cols-3">
+            {products.map((product, index) => (
+              <motion.article
+                key={product.id}
+                className="group overflow-hidden rounded-lg border border-white/10 bg-white/8 shadow-2xl shadow-black/30 backdrop-blur-md"
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-80px' }}
+                transition={{ duration: 0.45, delay: index * 0.08 }}
               >
-                <Image
-                  src={image}
-                  alt={categoryLabels[key]}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  sizes="(max-width: 768px) 100vw, 33vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                <div className="absolute inset-0 flex flex-col justify-end p-6">
-                  <h3 className="text-xl font-bold text-white mb-1">
-                    {categoryLabels[key]}
-                  </h3>
-                  <p className="text-sm text-white/80 mb-3">
-                    {categoryDescriptions[key]}
-                  </p>
-                  <span className="inline-flex items-center text-sm font-medium text-white group-hover:underline">
-                    Explorar {categoryLabels[key]}
-                    <ArrowRight className="ml-1 w-4 h-4 transition-transform group-hover:translate-x-1" />
-                  </span>
+                <div className="relative aspect-[4/3] overflow-hidden bg-white/5">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-full w-full object-cover opacity-78 transition duration-500 group-hover:scale-105 group-hover:opacity-100"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center bg-[radial-gradient(circle,#ffaa0040,transparent_62%)]">
+                      <ImageIcon className="h-14 w-14 text-white/40" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent" />
                 </div>
-              </Link>
+                <div className="p-5">
+                  <div className="mb-3 flex items-start justify-between gap-4">
+                    <h3 className="font-serif text-2xl font-bold text-white">{product.name}</h3>
+                    <span className="rounded-full border border-[#ffaa00]/30 bg-[#ffaa00]/12 px-3 py-1 font-sans text-sm font-semibold text-[#ffd38b]">
+                      {productPrice(product)}
+                    </span>
+                  </div>
+                  <p className="min-h-16 font-sans text-sm leading-6 text-white/64">
+                    {product.benefit || product.description}
+                  </p>
+                  <Button asChild className="mt-5 h-11 w-full bg-white text-[#121212] hover:bg-[#ffaa00]">
+                    <Link href={`/produto/${product.slug}`}>
+                      Personalizar
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </motion.article>
             ))}
           </div>
-        </section>
 
-        <HomeFeaturedProducts products={products} />
+          {!productsQuery.isLoading && products.length === 0 && (
+            <div className="rounded-lg border border-white/10 bg-white/8 p-8 text-center font-sans text-white/62 backdrop-blur-md">
+              Ainda não há produtos em destaque. Active produtos no painel de administração.
+            </div>
+          )}
+        </div>
+      </section>
 
-        {/* Acompanhar Encomenda */}
-        <section className="bg-secondary">
-          <div className="container mx-auto px-4 py-12">
-            <div className="grid items-center gap-6 rounded-xl border border-border bg-background p-6 md:grid-cols-[1fr_auto] md:p-8">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">
-                  Já fez uma encomenda?
-                </h2>
-                <p className="mt-2 max-w-2xl text-muted-foreground">
-                  Consulte o estado geral, pagamento e o progresso de cada artigo com o ID da encomenda e o email ou telemóvel usado no pedido.
-                </p>
-              </div>
-              <Button asChild size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Link href="/track-order">
-                  Acompanhar encomenda
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* Como Funciona */}
-        <section className="container mx-auto px-4 py-16 md:py-24">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-              Como funciona
-            </h2>
-            <p className="mt-2 text-muted-foreground">
-              Produtos em stock quando disponíveis, feitos por encomenda quando quer personalização
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-primary rounded-full flex items-center justify-center mb-6">
-                <Package className="w-8 h-8 text-primary-foreground" />
-              </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">
-                1. Escolha a sua peça
-              </h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Escolha um produto e uma cor disponível. Adicione texto personalizado apenas quando o produto o permitir.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-primary rounded-full flex items-center justify-center mb-6">
-                <Printer className="w-8 h-8 text-primary-foreground" />
-              </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">
-                2. Preparamos ou imprimimos
-              </h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Artigos em stock podem sair mais depressa; texto personalizado ou cores esgotadas são impressos em Lisboa.
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto bg-primary rounded-full flex items-center justify-center mb-6">
-                <Truck className="w-8 h-8 text-primary-foreground" />
-              </div>
-              <h3 className="font-semibold text-lg text-foreground mb-2">
-                3. Recolha ou entrega
-              </h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Recolha em Carcavelos ou escolha envio para Portugal continental, gratuito acima de 50€.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Feed do Instagram */}
-        <section className="bg-secondary">
-          <div className="container mx-auto px-4 py-16 md:py-24">
-            <div className="text-center mb-10">
-              <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                Siga o processo de fabrico
-              </h2>
-              <p className="mt-2 text-muted-foreground">
-                Bastidores e golfistas satisfeitos em @golfprint.pt
-              </p>
-            </div>
-            {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <a
-                  key={i}
-                  href="https://instagram.com/golfprint.pt"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="aspect-square bg-background rounded-lg flex items-center justify-center hover:opacity-80 transition-opacity border border-border"
-                >
-                  <span className="text-muted-foreground text-sm">@golfprint.pt</span>
-                </a>
-              ))}
-            </div> */}
-            <div className="text-center mt-8">
-              <Button asChild variant="outline" className="border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-                <a href="https://instagram.com/golfprint.pt" target="_blank" rel="noopener noreferrer">
-                  Siga-nos no Instagram
-                </a>
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* Banner B2B */}
-        <section className="bg-primary">
-          <div className="container mx-auto px-4 py-12 md:py-16">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="text-center md:text-left">
-                <h2 className="text-xl md:text-2xl font-bold text-primary-foreground">
-                  Parceiro de loja profissional?
-                </h2>
-                <p className="mt-2 text-primary-foreground/80">
-                  Ofereça merch personalizada sem risco de stock. Impressão sob demanda para o seu clube.
-                </p>
-              </div>
-              <Button asChild variant="secondary" size="lg" className="bg-white text-primary hover:bg-white/90">
-                <Link href="/contact#b2b">
-                  Parceria connosco
-                  <ArrowRight className="ml-2 w-4 h-4" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-      </main>
-      <Footer />
-      <WhatsAppButton />
-    </>
+      <section id="como-funciona" className="px-5 pb-20 sm:px-8 lg:pb-28">
+        <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-3">
+          {[
+            { title: '1. Carrega a Foto', text: 'Envia a imagem e escolhe o formato ideal.', icon: ImageIcon },
+            { title: '2. Imprimimos em 3D', text: 'Validamos a foto, modelamos a peça e preparamos a impressão.', icon: PackageCheck },
+            { title: '3. Recebe em Casa via CTT', text: 'A sua luz segue embalada com cuidado para oferta.', icon: Home },
+          ].map(({ title, text, icon: Icon }) => (
+            <article key={title} className="rounded-lg border border-white/10 bg-white/8 p-6 backdrop-blur-md">
+              <Icon className="mb-5 h-8 w-8 text-[#ffaa00]" />
+              <h3 className="font-serif text-2xl font-bold text-white">{title}</h3>
+              <p className="mt-3 font-sans leading-7 text-white/62">{text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
   )
 }
