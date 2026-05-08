@@ -24,7 +24,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { db } from '@/lib/db'
 
@@ -218,6 +218,48 @@ function B2BModal({
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const firstInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (open && firstInputRef.current) {
+      firstInputRef.current.focus()
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    const handleTabTrap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+
+      const focusableElements = document.querySelectorAll(
+        '#b2b-modal button, #b2b-modal [href], #b2b-modal input, #b2b-modal select, #b2b-modal textarea, #b2b-modal [tabindex]:not([tabindex="-1"])'
+      )
+      const firstElement = focusableElements[0] as HTMLElement
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement?.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement?.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleTabTrap)
+    return () => {
+      document.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('keydown', handleTabTrap)
+    }
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -264,12 +306,23 @@ function B2BModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-5">
-      <div className="w-full border border-white/10 bg-[#151515] shadow-2xl shadow-black/50 sm:mx-auto sm:max-w-xl sm:rounded-lg">
+    <div
+      className="fixed inset-0 z-50 flex items-end bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-5"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        id="b2b-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="b2b-modal-title"
+        className="w-full border border-white/10 bg-[#151515] shadow-2xl shadow-black/50 sm:mx-auto sm:max-w-xl sm:rounded-lg"
+      >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
           <div>
             <p className="font-sans text-xs font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Para Empresas</p>
-            <h2 className="mt-2 font-serif text-2xl font-bold text-white">Pedir Orçamento Especial</h2>
+            <h2 id="b2b-modal-title" className="mt-2 font-serif text-2xl font-bold text-white">Pedir Orçamento Especial</h2>
           </div>
           <button
             type="button"
@@ -285,6 +338,7 @@ function B2BModal({
           <div>
             <label htmlFor="b2b-name" className="font-sans text-sm font-medium text-white/78">Nome</label>
             <input
+              ref={firstInputRef}
               id="b2b-name"
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}

@@ -281,9 +281,17 @@ async function seedProducts(): Promise<void> {
   const transactions = []
   let created = 0
   let skipped = 0
+  const forceUpdate = process.argv.includes('--force')
 
   for (const product of productsToSeed) {
     const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
+
+    if (existingProduct && !forceUpdate) {
+      console.log(`   ⏭️  Skipping ${product.slug}: already exists (use --force to update)`)
+      skipped++
+      continue
+    }
+
     const productId = existingProduct?.id ?? id()
     const now = new Date()
 
@@ -320,9 +328,12 @@ async function seedProducts(): Promise<void> {
         updatedAt: now,
       })
     )
-    console.log(`   ${existingProduct ? '🔁 Updating' : '✨ Creating'} ${product.slug}: ${product.name} (€${product.priceFrom})`)
-    if (existingProduct) skipped++
-    else created++
+    if (existingProduct && forceUpdate) {
+      console.log(`   🔁 Force updating ${product.slug}: ${product.name} (€${product.priceFrom})`)
+    } else {
+      console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
+      created++
+    }
   }
 
   if (transactions.length > 0) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Save, Plus, Search, Pencil, Trash2, X, Hammer, Package, Truck, CheckCircle2, Clock, AlertCircle, RotateCcw, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -101,6 +101,10 @@ function OrderEditDialog({
   }, [order, allProductionJobs])
   const [productionJobs, setProductionJobs] = useState<any[]>(linkedJobs)
   const [pendingJobAction, setPendingJobAction] = useState<{ jobId: string; action: 'requeue' | 'cancel' } | null>(null)
+
+  useEffect(() => {
+    setProductionJobs(linkedJobs)
+  }, [linkedJobs])
   const updateDraft = (patch: Partial<OrderRecord>) => onDraftChange({ ...draft, ...patch })
   const updateItem = (index: number, patch: Partial<OrderItem>) => {
     onDraftChange({
@@ -520,22 +524,41 @@ export function OrdersManager({
   const saveEditedOrder = async () => {
     if (!editingOrder || !draftOrder) return
     setIsEditing(true)
-    await updateOrder(editingOrder, {
-      customerName: draftOrder.customerName,
-      customerEmail: draftOrder.customerEmail,
-      customerPhone: draftOrder.customerPhone,
-      paymentPreference: draftOrder.paymentPreference,
-      shippingMethod: draftOrder.shippingMethod,
-      shippingAddress: draftOrder.shippingAddress,
-      items: draftOrder.items,
-      subtotal: draftOrder.subtotal,
-      shippingCost: draftOrder.shippingCost,
-      total: draftOrder.total,
-      paymentStatus: draftOrder.paymentStatus,
-      fulfillmentStatus: draftOrder.fulfillmentStatus,
-      notes: draftOrder.notes,
-      updatedAt: new Date(),
-    })
+
+    if (editingOrder.isRequest) {
+      // Update order request
+      await db.transact(
+        db.tx.orderRequests[editingOrder.id].update({
+          customerName: draftOrder.customerName,
+          customerEmail: draftOrder.customerEmail,
+          customerPhone: draftOrder.customerPhone,
+          status: draftOrder.fulfillmentStatus === 'shipped' ? 'SHIPPED' : draftOrder.fulfillmentStatus === 'printing' ? 'IN_PRODUCTION' : 'PENDING_REVIEW',
+          isPaid: draftOrder.paymentStatus === 'paid',
+          selectedPrice: draftOrder.total || draftOrder.subtotal,
+          notes: draftOrder.notes,
+          updatedAt: new Date(),
+        }),
+      )
+    } else {
+      // Update normal order
+      await updateOrder(editingOrder, {
+        customerName: draftOrder.customerName,
+        customerEmail: draftOrder.customerEmail,
+        customerPhone: draftOrder.customerPhone,
+        paymentPreference: draftOrder.paymentPreference,
+        shippingMethod: draftOrder.shippingMethod,
+        shippingAddress: draftOrder.shippingAddress,
+        items: draftOrder.items,
+        subtotal: draftOrder.subtotal,
+        shippingCost: draftOrder.shippingCost,
+        total: draftOrder.total,
+        paymentStatus: draftOrder.paymentStatus,
+        fulfillmentStatus: draftOrder.fulfillmentStatus,
+        notes: draftOrder.notes,
+        updatedAt: new Date(),
+      })
+    }
+
     setIsEditing(false)
     setEditingOrder(null)
     setDraftOrder(null)

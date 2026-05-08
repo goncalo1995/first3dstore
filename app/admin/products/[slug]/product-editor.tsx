@@ -277,8 +277,8 @@ export function ProductEditor({ slug }: { slug: string }) {
     if (templates && templates.length > 0) {
       return JSON.stringify(templates, null, 2)
     }
-    // Default template for new products
-    return JSON.stringify([{ partLabel: 'Parte principal', colorSource: 'baseColor', materialGrams: 100, materialType: 'PLA' }], null, 2)
+    // Initialize to empty array when no templates exist
+    return JSON.stringify([], null, 2)
   })
   const [colorInventory, setColorInventory] = useState<DraftColorInventory[]>(initialInventory)
   const [isSaving, setIsSaving] = useState(false)
@@ -608,9 +608,7 @@ export function ProductEditor({ slug }: { slug: string }) {
     setStlFiles(product.stlFiles ?? [])
     setSlicerNotes(product.slicerNotes ?? '')
     const templates = (product as any).productionJobTemplates as ProductionJobTemplate[] | undefined
-    if (templates && templates.length > 0) {
-      setProductionJobTemplatesJson(JSON.stringify(templates, null, 2))
-    }
+    setProductionJobTemplatesJson(JSON.stringify(templates ?? [], null, 2))
     setColorInventory(initialInventory)
   }, [initialInventory, inventory?.allowCustomColorRequest, inventory?.leadTimeDays, product, query.isLoading])
 
@@ -742,9 +740,11 @@ export function ProductEditor({ slug }: { slug: string }) {
             requiresLithophaneProcessing: Boolean(t.requiresLithophaneProcessing),
           }))
         }
-      } catch {
-        // Invalid JSON, don't save templates
-        productionJobTemplates = undefined
+      } catch (parseError) {
+        // Invalid JSON, abort save
+        setError('Invalid JSON in production job templates. Please fix the JSON syntax.')
+        setIsSaving(false)
+        return
       }
       const gramsByColor = new Map(colors.map(color => [color.name, color.gramsAvailable]))
       const normalizedColorInventory = colorInventory.map(color => ({

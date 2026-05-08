@@ -304,9 +304,9 @@ const _schema = i.schema({
       userId: i.string().indexed(),
     }),
     productionJobs: i.entity({
-      orderId: i.string().indexed(),
+      orderId: i.string().indexed().optional(),
       orderRequestId: i.string().indexed().optional(),
-      orderItemIndex: i.number(),
+      orderItemIndex: i.number().optional(),
       productId: i.string().indexed().optional(),
       productSlug: i.string().indexed().optional(),
       selectedVariantId: i.string().optional(),

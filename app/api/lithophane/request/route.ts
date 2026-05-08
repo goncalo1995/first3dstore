@@ -52,7 +52,12 @@ async function notifyAdmin(params: {
   const recipients = getRecipients()
 
   if (!process.env.RESEND_API_KEY || !recipients.length) {
-    console.info('New lithophane request:', params)
+    console.info('New lithophane request:', {
+      requestId: params.requestId,
+      productSlug: params.productSlug,
+      productName: params.productName,
+      variantId: params.variantId,
+    })
     return { mode: 'console' as const }
   }
 
@@ -97,7 +102,6 @@ export async function POST(req: NextRequest) {
     const variantId = asString(formData.get('variantId'))
     const variantName = asString(formData.get('variantName'))
     const selectedPriceRaw = asString(formData.get('selectedPrice'))
-    const selectedPrice = selectedPriceRaw ? Number(selectedPriceRaw) : undefined
     const lightMode = asString(formData.get('lightMode'))
     const canvasConfigRaw = asString(formData.get('canvasConfig'))
     const engravingText = asString(formData.get('engravingText')).slice(0, 20)
@@ -124,8 +128,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Escolha um modo de luz válido.' }, { status: 400 })
     }
 
-    if (selectedPrice !== undefined && (!Number.isFinite(selectedPrice) || selectedPrice < 0)) {
-      return NextResponse.json({ error: 'O preço selecionado não é válido.' }, { status: 400 })
+    // Resolve price server-side from product catalog
+    let selectedPrice: number | undefined
+    if (productSlug && variantId) {
+      try {
+        const catalogResult = await dbAdmin.query({
+          catalogProducts: {
+            $: { where: { slug: productSlug } }
+          }
+        })
+        const product = catalogResult.catalogProducts?.[0] as any
+        if (product && Array.isArray(product.variants)) {
+          const variant = product.variants.find((v: any) => v.id === variantId)
+          if (variant) {
+            selectedPrice = variant.finalPrice ?? (product.priceFrom + (variant.priceAdd ?? 0))
+          } else {
+            selectedPrice = product.priceFrom
+          }
+        }
+      } catch (priceError) {
+        console.error('Failed to resolve price from catalog:', priceError)
+        // Continue without price
+      }
+    } else if (selectedPriceRaw) {
+      // Fallback to advisory price if no product/variant specified
+      const advisoryPrice = Number(selectedPriceRaw)
+      if (Number.isFinite(advisoryPrice) && advisoryPrice > 0) {
+        selectedPrice = advisoryPrice
+      }
     }
 
     let canvasConfig: any | undefined

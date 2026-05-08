@@ -441,6 +441,7 @@ export function ProductExperience({ product }: { product: Product }) {
       return
     }
 
+    setSubmitted(false)
     setModalOpen(true)
   }
 
@@ -469,6 +470,7 @@ export function ProductExperience({ product }: { product: Product }) {
           }
         : null,
       lightMode,
+      baseColor: 'black' as 'black' | 'wood',
       pricing: {
         total: currentPrice,
         currency: 'EUR',
@@ -516,6 +518,7 @@ export function ProductExperience({ product }: { product: Product }) {
         formData.set('variantName', selectedVariant?.name ?? '')
         formData.set('selectedPrice', String(currentPrice))
         formData.set('lightMode', lightMode)
+        formData.set('baseColor', buildCanvasConfig().baseColor || 'black')
         formData.set('engravingText', engravingText.trim())
         formData.set('notes', notes)
         formData.set('canvasConfig', JSON.stringify(buildCanvasConfig()))
@@ -851,7 +854,7 @@ export function ProductExperience({ product }: { product: Product }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog open={modalOpen} onOpenChange={(open) => { if (!open) setSubmitted(false); setModalOpen(open) }}>
         <DialogContent className="max-h-[92vh] overflow-y-auto">
           {submitted ? (
             <div className="space-y-4 py-4 text-center">
@@ -864,7 +867,7 @@ export function ProductExperience({ product }: { product: Product }) {
                   Foto recebida! Vamos rever a qualidade da fotografia e enviar-lhe os próximos passos por email.
                 </DialogDescription>
               </DialogHeader>
-              <Button className="w-full bg-[#121212] text-white hover:bg-[#2a2a2a]" onClick={() => setModalOpen(false)}>
+              <Button className="w-full bg-[#121212] text-white hover:bg-[#2a2a2a]" onClick={() => { setSubmitted(false); setModalOpen(false) }}>
                 Fechar
               </Button>
             </div>
