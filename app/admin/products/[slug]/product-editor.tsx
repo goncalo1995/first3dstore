@@ -814,6 +814,9 @@ export function ProductEditor({ slug }: { slug: string }) {
       let productionJobTemplates: ProductionJobTemplate[] | undefined
       try {
         const parsed = JSON.parse(productionJobTemplatesJson)
+        if (!Array.isArray(parsed)) {
+          throw new Error('Production job templates must be an array')
+        }
         if (Array.isArray(parsed) && parsed.length > 0) {
           productionJobTemplates = parsed.map((t: any) => ({
             partLabel: String(t.partLabel || 'Part'),
