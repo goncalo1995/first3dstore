@@ -8,8 +8,8 @@ import { categoryLabels } from '@/lib/products'
 import { ShopContent } from './shop-content'
 
 export const metadata: Metadata = {
-  title: 'Loja | GolfPrint.pt',
-  description: 'Loja de acessórios de golfe personalizados, impressos em 3D.',
+  title: 'Loja | foto3d.pt',
+  description: 'Loja de produtos personalizados, impressos em 3D. Produção Local em Lisboa',
 }
 
 export default async function ShopPage() {
@@ -26,7 +26,7 @@ export default async function ShopPage() {
               Loja
             </h1>
             <p className="mt-3 text-muted-foreground max-w-2xl">
-              Acessórios de golfe personalizados, impressos em 3D.
+              Mais que uma prenda, ofereça uma memória viva
             </p>
           </div>
         </section>

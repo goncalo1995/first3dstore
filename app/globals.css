@@ -14,7 +14,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* GolfPrint Brand Colors */
+  /* Foto3D Brand Colors */
   --background: #FFFFFF;
   --foreground: #2A2A2A;
   --card: #F5F0EB;

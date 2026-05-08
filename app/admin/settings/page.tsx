@@ -102,7 +102,7 @@ export default function SettingsPage() {
     try {
       const result = await exportData(entity)
       const date = new Date().toISOString().split('T')[0]
-      downloadJson(result.data, `golfprint-${entity}-backup-${date}.json`)
+      downloadJson(result.data, `foto3d.pt-${entity}-backup-${date}.json`)
       toast.success(`Exported ${result.count} ${entity} records`)
     } catch (err: any) {
       toast.error(`Export failed: ${err.message}`)

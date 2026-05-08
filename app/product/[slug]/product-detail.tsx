@@ -324,7 +324,7 @@ Por favor, confirme a disponibilidade!`
   const handleShare = async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : `/product/${product.slug}`
     const shareTitle = displayProduct.name
-    const shareText = `${displayProduct.name} da GolfPrint.pt - ${displayProduct.benefit}`
+    const shareText = `${displayProduct.name} da Foto3d.pt - ${displayProduct.benefit}`
     
     const shareData: ShareData = {
       title: shareTitle,

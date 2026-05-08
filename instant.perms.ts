@@ -121,13 +121,17 @@ const rules = {
     },
     bind: {
       isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
-      validStatus: "data.status == 'PENDING_REVIEW'",
+      validPhotoStatus: "data.status == 'PENDING_REVIEW'",
+      validB2BStatus: "data.status == 'B2B_LEAD'",
       validBaseColor: "data.baseColor == null || data.baseColor in ['black', 'wood']",
       validPaidState: "data.isPaid == null || data.isPaid == false",
       hasCustomer:
-        "size(data.customerName) >= 2 && size(data.customerEmail) >= 6 && size(data.customerPhone) >= 6",
-      hasImage: "size(data.imageUrl) >= 12",
-      isPublicRequest: "validStatus && validBaseColor && validPaidState && hasCustomer && hasImage",
+        "size(data.customerName) >= 2 && size(data.customerEmail) >= 6 && data.customerPhone != null && size(data.customerPhone) >= 6",
+      hasImage: "data.imageUrl != null && size(data.imageUrl) >= 12",
+      hasB2BLead: "size(data.customerEmail) >= 6 && data.notes != null && size(data.notes) >= 10",
+      isPublicPhotoRequest: "validPhotoStatus && validBaseColor && validPaidState && hasCustomer && hasImage",
+      isPublicB2BLead: "validB2BStatus && validPaidState && hasB2BLead",
+      isPublicRequest: "isPublicPhotoRequest || isPublicB2BLead",
     },
   },
   aiUsageLogs: {

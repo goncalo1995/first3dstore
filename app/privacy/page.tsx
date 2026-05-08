@@ -3,8 +3,8 @@ import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidade | GolfPrint.pt',
-  description: 'Política de privacidade da GolfPrint.pt.',
+  title: 'Política de Privacidade | Foto3D.pt',
+  description: 'Política de privacidade genérica da Foto3D.pt.',
 }
 
 export default function PrivacyPage() {
@@ -12,60 +12,58 @@ export default function PrivacyPage() {
     <>
       <Header />
       <main className="min-h-screen">
-        <section className="bg-secondary border-b border-border">
+        <section className="border-b border-border bg-secondary">
           <div className="container mx-auto px-4 py-12 md:py-16">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground">Política de Privacidade</h1>
-            <p className="mt-3 max-w-2xl text-muted-foreground">
-              Última atualização: 30 de abril de 2026
-            </p>
+            <h1 className="text-3xl font-bold text-foreground md:text-4xl">Política de Privacidade</h1>
+            <p className="mt-3 max-w-2xl text-muted-foreground">Última atualização: 8 de maio de 2026</p>
           </div>
         </section>
 
         <section className="container mx-auto max-w-3xl px-4 py-12">
           <div className="space-y-8 text-sm leading-7 text-muted-foreground">
             <p>
-              Esta política explica como a GolfPrint.pt trata os dados pessoais enquanto testa uma pequena loja de acessórios de golfe impressos em 3D. Substitua os dados do vendedor/responsável abaixo pelos seus dados legais antes de aceitar encomendas públicas pagas.
+              Esta política é um texto genérico provisório para a Foto3D.pt. Deve ser revista e completada antes de aceitar encomendas públicas pagas.
             </p>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Dados que Recolhemos</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Dados Recolhidos</h2>
               <p>
-              Podemos recolher o seu nome, e-mail, número de telefone, dados de envio ou recolha, conteúdo da encomenda, texto personalizado, estado do pagamento e mensagens que nos enviar. Se nos contactar através do WhatsApp, Instagram ou e-mail, esses serviços podem processar os seus dados de acordo com as suas próprias políticas.
+                Podemos recolher nome, email, telefone, empresa, morada de entrega, descrição do pedido, fotografias, ficheiros enviados, preferências de produto, histórico de comunicações e estado da encomenda.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Para que Utilizamos os Dados</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Finalidade</h2>
               <p>
-              Utilizamos os dados para responder a perguntas, confirmar disponibilidade, produzir e entregar encomendas, gerir o estado dos pagamentos, prestar apoio e manter registos comerciais básicos.
+                Usamos estes dados para responder a pedidos, validar fotografias, preparar orçamentos, produzir peças personalizadas, gerir pagamentos, entregar encomendas e prestar apoio ao cliente.
               </p>
             </div>
 
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Armazenamento e Serviços</h2>
               <p>
-              Os dados da loja e da administração podem ser armazenados na InstantDB. As análises estatísticas podem ser fornecidas pela Vercel em produção. Não insira informações sensíveis desnecessárias em textos personalizados ou notas de encomenda.
+                A aplicação pode usar serviços como InstantDB, armazenamento de ficheiros, email transacional, alojamento web e ferramentas de análise técnica. Fotografias e ficheiros enviados são tratados apenas para preparar e gerir o pedido.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Retenção de Dados</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Retenção</h2>
               <p>
-              Mantemos registos de encomendas e comunicações apenas durante o tempo necessário para o processamento de encomendas, apoio ao cliente, contabilidade, obrigações legais ou gestão administrativa razoável.
+                Mantemos dados durante o período necessário para responder ao pedido, cumprir obrigações administrativas e resolver questões relacionadas com encomendas. Ficheiros podem ser apagados mediante pedido quando já não forem necessários.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Os Seus Direitos</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Direitos</h2>
               <p>
-              Dependendo da legislação aplicável, pode ter direito a aceder, retificar, apagar, limitar ou opor-se ao tratamento dos seus dados pessoais. Contacte hello@golfprint.pt para fazer um pedido.
+                Pode pedir acesso, correção ou eliminação dos seus dados através de geral@foto3d.pt. A resposta dependerá das obrigações legais aplicáveis e da necessidade de manter registos administrativos mínimos.
               </p>
             </div>
 
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Contacto</h2>
               <p>
-              Responsável pelos dados: projeto em fase de teste da GolfPrint.pt. Contacto: hello@golfprint.pt. Substitua esta informação pelo seu nome legal, morada e quaisquer dados de registo obrigatórios antes do lançamento.
+                Responsável pelos dados: Foto3D.pt, dados legais completos a preencher. Contacto provisório: geral@foto3d.pt.
               </p>
             </div>
           </div>

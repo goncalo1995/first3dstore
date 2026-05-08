@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { ArrowUpRight, Menu, ShoppingBag, X } from 'lucide-react'
@@ -11,7 +10,8 @@ import { cn } from '@/lib/utils'
 
 const navLinks = [
   { href: '/', label: 'Início' },
-  { href: '/shop', label: 'Loja' },
+  { href: '/#produtos', label: 'Produtos' },
+  { href: '/#para-empresas', label: 'Para Empresas' },
   { href: '/about', label: 'Sobre' },
   { href: '/contact', label: 'Contactos' },
 ]
@@ -38,14 +38,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-xl supports-[backdrop-filter]:bg-background/75">
       <nav className="container mx-auto px-4 h-16 flex items-center justify-between">
-        {/* Logótipo */}
-        <Link href="/" className="flex items-center gap-2">
-          <Image
-            src="/logo_horizontal.png"
-            alt="GolfPrint.pt Logótipo"
-            width={150}
-            height={30}
-          />
+        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground">
+          Foto3D.pt
         </Link>
 
         {/* Navegação Desktop */}
@@ -67,7 +61,7 @@ export function Header() {
         {/* Desktop CTA + Carrinho */}
         <div className="hidden md:flex items-center gap-4">
           <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <Link href="/shop">Comprar Agora</Link>
+            <Link href="/#produtos">Comprar Agora</Link>
           </Button>
           <button
             onClick={openCart}
@@ -124,8 +118,8 @@ export function Header() {
           )}
         >
           <div className="border-b border-border bg-secondary/50 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">GolfPrint.pt</p>
-            <p className="mt-1 text-sm text-muted-foreground">Acessórios de golfe em pequenas séries da região de Lisboa.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Foto3D.pt</p>
+            <p className="mt-1 text-sm text-muted-foreground">Memórias luminosas e peças 3D personalizadas feitas em Lisboa.</p>
           </div>
 
           <nav className="px-5 py-5">
@@ -147,7 +141,7 @@ export function Header() {
 
             <div className="mt-6 grid grid-cols-1 gap-3">
               <Button asChild className="h-12 bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/shop">Comprar Agora</Link>
+                <Link href="/#produtos">Comprar Agora</Link>
               </Button>
             </div>
 

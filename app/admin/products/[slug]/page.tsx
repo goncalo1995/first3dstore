@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import { ProductEditor } from './product-editor'
 
 export const metadata: Metadata = {
-  title: 'Edit Product | GolfPrint.pt',
+  title: 'Edit Product | Foto3D.pt',
   robots: {
     index: false,
     follow: false,

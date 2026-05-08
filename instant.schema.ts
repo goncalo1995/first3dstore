@@ -140,6 +140,13 @@ const _schema = i.schema({
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
       }[]>().optional(),
+      productionJobTemplates: i.json<{
+        partLabel: string
+        colorSource: 'baseColor' | 'none' | 'lithophane'
+        materialGrams: number
+        materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+        requiresLithophaneProcessing?: boolean
+      }[]>().optional(),
       visible: i.boolean().indexed(),
       updatedAt: i.date(),
     }),
@@ -240,8 +247,9 @@ const _schema = i.schema({
     orderRequests: i.entity({
       customerName: i.string(),
       customerEmail: i.string().indexed(),
-      customerPhone: i.string(),
-      imageUrl: i.string(),
+      customerPhone: i.string().optional(),
+      imageUrl: i.string().optional(),
+      companyName: i.string().optional(),
       baseColor: i.string<'black' | 'wood'>().optional(),
       productSlug: i.string().indexed().optional(),
       productName: i.string().optional(),
@@ -255,9 +263,10 @@ const _schema = i.schema({
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),
+      leadType: i.string<'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
-      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED'>().indexed(),
+      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
       createdAt: i.date().indexed(),
       updatedAt: i.date(),
     }),

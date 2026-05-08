@@ -25,6 +25,7 @@ import {
   type ProductStlFile,
   type ProductVariantOption,
   type ProductMaterialRequirement,
+  type ProductionJobTemplate,
 } from '@/lib/products'
 import { AIActionType, useAIActions } from '@/hooks/useAIActions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -271,6 +272,14 @@ export function ProductEditor({ slug }: { slug: string }) {
   )
   const [stlFiles, setStlFiles] = useState<DraftStlFile[]>(product.stlFiles ?? [])
   const [slicerNotes, setSlicerNotes] = useState(product.slicerNotes ?? '')
+  const [productionJobTemplatesJson, setProductionJobTemplatesJson] = useState<string>(() => {
+    const templates = (product as any).productionJobTemplates as ProductionJobTemplate[] | undefined
+    if (templates && templates.length > 0) {
+      return JSON.stringify(templates, null, 2)
+    }
+    // Default template for new products
+    return JSON.stringify([{ partLabel: 'Parte principal', colorSource: 'baseColor', materialGrams: 100, materialType: 'PLA' }], null, 2)
+  })
   const [colorInventory, setColorInventory] = useState<DraftColorInventory[]>(initialInventory)
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -598,6 +607,10 @@ export function ProductEditor({ slug }: { slug: string }) {
     setMaterialRecipe(getProductMaterialRecipe(product).map(item => ({ label: item.label, grams: String(item.grams) })))
     setStlFiles(product.stlFiles ?? [])
     setSlicerNotes(product.slicerNotes ?? '')
+    const templates = (product as any).productionJobTemplates as ProductionJobTemplate[] | undefined
+    if (templates && templates.length > 0) {
+      setProductionJobTemplatesJson(JSON.stringify(templates, null, 2))
+    }
     setColorInventory(initialInventory)
   }, [initialInventory, inventory?.allowCustomColorRequest, inventory?.leadTimeDays, product, query.isLoading])
 
@@ -716,6 +729,23 @@ export function ProductEditor({ slug }: { slug: string }) {
         label: item.label || `Part ${index + 1}`,
         grams: Math.max(1, Number(item.grams) || 1),
       }))
+      // Parse and validate production job templates
+      let productionJobTemplates: ProductionJobTemplate[] | undefined
+      try {
+        const parsed = JSON.parse(productionJobTemplatesJson)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          productionJobTemplates = parsed.map((t: any) => ({
+            partLabel: String(t.partLabel || 'Part'),
+            colorSource: ['baseColor', 'none', 'lithophane'].includes(t.colorSource) ? t.colorSource : 'baseColor',
+            materialGrams: Math.max(1, Number(t.materialGrams) || 1),
+            materialType: ['PLA', 'PETG', 'ABS', 'TPU'].includes(t.materialType) ? t.materialType : 'PLA',
+            requiresLithophaneProcessing: Boolean(t.requiresLithophaneProcessing),
+          }))
+        }
+      } catch {
+        // Invalid JSON, don't save templates
+        productionJobTemplates = undefined
+      }
       const gramsByColor = new Map(colors.map(color => [color.name, color.gramsAvailable]))
       const normalizedColorInventory = colorInventory.map(color => ({
         ...color,
@@ -802,6 +832,7 @@ export function ProductEditor({ slug }: { slug: string }) {
           isModular,
           materialGrams: recipe.reduce((sum, item) => sum + item.grams, 0),
           materialRecipe: recipe,
+          productionJobTemplates,
           visible,
           updatedAt: now,
         }), categories, productCategorySlugs, inventoryId, getCatalogCategoryIds(catalogProduct), getCatalogPrimaryCategoryId(catalogProduct)),
@@ -1638,6 +1669,58 @@ export function ProductEditor({ slug }: { slug: string }) {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-border bg-background p-6 shadow-sm">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-foreground">Production Job Templates</h3>
+                        <p className="text-xs text-muted-foreground">Define jobs created when order requests are approved.</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">JSON</Badge>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      <span className="font-semibold">colorSource:</span>{' '}
+                      <code className="rounded bg-secondary px-1">baseColor</code> (uses customer's color),{' '}
+                      <code className="rounded bg-secondary px-1">lithophane</code> → Branco,{' '}
+                      <code className="rounded bg-secondary px-1">none</code> → Branco
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <textarea
+                      value={productionJobTemplatesJson}
+                      onChange={event => setProductionJobTemplatesJson(event.target.value)}
+                      rows={12}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono leading-relaxed focus:border-primary outline-none"
+                      placeholder='[{ "partLabel": "Moldura", "colorSource": "baseColor", "materialGrams": 60, "materialType": "PLA" }]'
+                    />
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(productionJobTemplatesJson)
+                        if (!Array.isArray(parsed)) return <p className="text-[11px] text-destructive">Must be an array</p>
+                        return (
+                          <div className="space-y-1">
+                            {parsed.map((t: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-[11px]">
+                                <span className="font-medium">{i + 1}.</span>
+                                <span>{t.partLabel || 'Unnamed'}</span>
+                                <Badge variant="secondary" className="h-4 px-1 text-[9px]">{t.colorSource}</Badge>
+                                <span className="text-muted-foreground">{t.materialGrams}g</span>
+                                {t.requiresLithophaneProcessing && (
+                                  <Badge variant="outline" className="h-4 px-1 text-[9px] border-amber-300 bg-amber-50 text-amber-700" title="Requires manual STL generation (ItsLitho)">
+                                    ⚠️ Lithophane
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      } catch {
+                        return <p className="text-[11px] text-destructive">Invalid JSON</p>
+                      }
+                    })()}
                   </div>
                 </section>
 

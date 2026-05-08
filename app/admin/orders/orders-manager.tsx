@@ -80,6 +80,7 @@ function OrderEditDialog({
   onClose,
   onSave,
   isSaving,
+  allProductionJobs,
 }: {
   order: any
   draft: any
@@ -87,9 +88,18 @@ function OrderEditDialog({
   onClose: () => void
   onSave: () => void
   isSaving: boolean
+  allProductionJobs: any[]
 }) {
   const router = useRouter()
-  const [productionJobs, setProductionJobs] = useState<any[]>(() => order.productionJobs ?? [])
+  // Combine jobs linked via orderId (from order.productionJobs) and orderRequestId
+  const linkedJobs = useMemo(() => {
+    const orderJobs = order.productionJobs ?? []
+    const requestJobs = order.isRequest
+      ? allProductionJobs.filter(j => j.orderRequestId === order.id)
+      : []
+    return [...orderJobs, ...requestJobs]
+  }, [order, allProductionJobs])
+  const [productionJobs, setProductionJobs] = useState<any[]>(linkedJobs)
   const [pendingJobAction, setPendingJobAction] = useState<{ jobId: string; action: 'requeue' | 'cancel' } | null>(null)
   const updateDraft = (patch: Partial<OrderRecord>) => onDraftChange({ ...draft, ...patch })
   const updateItem = (index: number, patch: Partial<OrderItem>) => {
@@ -346,7 +356,47 @@ function OrderEditDialog({
   )
 }
 
-export function OrdersManager({ orders }: { orders: any[] }) {
+type OrderRequest = {
+  id: string
+  customerName: string
+  customerEmail: string
+  customerPhone?: string
+  companyName?: string
+  productName?: string
+  productSlug?: string
+  status: 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+  isPaid?: boolean
+  selectedPrice?: number
+  createdAt: Date | string
+}
+
+const orderRequestStatusLabels: Record<OrderRequest['status'], string> = {
+  PENDING_REVIEW: 'Pendente',
+  MODELING: 'Modelação',
+  AWAITING_PAYMENT: 'Aguarda pagamento',
+  IN_PRODUCTION: 'Em produção',
+  SHIPPED: 'Enviado',
+  B2B_LEAD: 'Lead B2B',
+}
+
+const orderRequestStatusTone: Record<OrderRequest['status'], string> = {
+  PENDING_REVIEW: 'bg-sky-100 text-sky-900',
+  MODELING: 'bg-violet-100 text-violet-900',
+  AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
+  IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
+  SHIPPED: 'bg-indigo-100 text-indigo-900',
+  B2B_LEAD: 'bg-orange-100 text-orange-900',
+}
+
+export function OrdersManager({
+  orders,
+  orderRequests,
+  allProductionJobs,
+}: {
+  orders: any[]
+  orderRequests: OrderRequest[]
+  allProductionJobs: any[]
+}) {
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
@@ -364,6 +414,7 @@ export function OrdersManager({ orders }: { orders: any[] }) {
   const [editingOrder, setEditingOrder] = useState<any | null>(null)
   const [draftOrder, setDraftOrder] = useState<any | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [activeTab, setActiveTab] = useState<'orders' | 'requests'>('orders')
 
   const shippingCost = shippingMethod === 'mainland_portugal' && Number(subtotal) < 50 ? 9.99 : 0
   const total = (Number(subtotal) || 0) + shippingCost
@@ -433,18 +484,37 @@ export function OrdersManager({ orders }: { orders: any[] }) {
     await db.transact(db.tx.orders[order.id].delete())
   }
 
-  const openEditor = (order: any) => {
-    setEditingOrder(order)
-    setDraftOrder({
-      ...order,
-      items: order.items.map((item: any) => ({
-        ...item,
-        itemStatus: getOrderItemStatus(item),
-        adminNotes: item.adminNotes ?? '',
-        scheduledFor: item.scheduledFor ?? '',
-        quantityDone: item.quantityDone ?? 0,
-      })),
-    })
+  const openEditor = (order: any, isRequest: boolean = false) => {
+    setEditingOrder({ ...order, isRequest })
+    if (isRequest) {
+      // For order requests, we don't have items array
+      setDraftOrder({
+        ...order,
+        items: [{
+          productName: order.productName || order.productSlug || 'Custom product',
+          quantity: 1,
+          colors: [],
+          unitPrice: order.selectedPrice || 0,
+          itemStatus: order.status === 'IN_PRODUCTION' ? 'printing' : 'new',
+        }],
+        paymentStatus: order.isPaid ? 'paid' : 'pending',
+        fulfillmentStatus: order.status === 'SHIPPED' ? 'shipped' : order.status === 'IN_PRODUCTION' ? 'printing' : 'new',
+        total: order.selectedPrice || 0,
+        subtotal: order.selectedPrice || 0,
+        shippingCost: 0,
+      })
+    } else {
+      setDraftOrder({
+        ...order,
+        items: order.items.map((item: any) => ({
+          ...item,
+          itemStatus: getOrderItemStatus(item),
+          adminNotes: item.adminNotes ?? '',
+          scheduledFor: item.scheduledFor ?? '',
+          quantityDone: item.quantityDone ?? 0,
+        })),
+      })
+    }
   }
 
   const saveEditedOrder = async () => {
@@ -517,13 +587,59 @@ export function OrdersManager({ orders }: { orders: any[] }) {
     return counts
   }, [orders])
 
+  // Filter order requests based on search query
+  const filteredRequests = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return orderRequests.filter(request => {
+      if (!normalizedQuery) return true
+      const haystack = [
+        request.id,
+        request.customerName,
+        request.customerEmail ?? '',
+        request.customerPhone ?? '',
+        request.companyName ?? '',
+        request.productName ?? '',
+        request.productSlug ?? '',
+      ].join(' ').toLowerCase()
+      return haystack.includes(normalizedQuery)
+    })
+  }, [orderRequests, query])
+
   return (
     <div className="space-y-4">
       <section className="rounded-lg border border-border bg-background p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-foreground">Orders Manager</h2>
-            <p className="text-sm text-muted-foreground">Manage order lifecycle and production status.</p>
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl font-bold text-foreground">Orders Manager</h2>
+              <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
+                <button
+                  onClick={() => setActiveTab('orders')}
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                    activeTab === 'orders'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Orders ({orders.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
+                    activeTab === 'requests'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Requests ({orderRequests.length})
+                </button>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground mt-2">
+              {activeTab === 'orders'
+                ? 'Manage order lifecycle and production status.'
+                : 'Custom product order requests awaiting review and production.'}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
              <div className="relative w-full max-w-sm">
@@ -601,22 +717,24 @@ export function OrdersManager({ orders }: { orders: any[] }) {
       </section>
 
       <section className="overflow-hidden rounded-lg border border-border bg-background">
-        <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:gap-4">
-          <span>Customer</span>
-          <span>Items</span>
-          <span>Factory Status</span>
-          <span>Payment</span>
-          <span>Fulfillment</span>
-          <span>Total</span>
-          <span className="text-right">Edit</span>
-        </div>
-        <div className="divide-y divide-border">
-          {filteredOrders.length === 0 ? (
-            <div className="p-12 text-center text-sm text-muted-foreground">
-               <Package className="h-8 w-8 mx-auto mb-2 opacity-20" />
-               No orders found for this status.
+        {activeTab === 'orders' ? (
+          <>
+            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:gap-4">
+              <span>Customer</span>
+              <span>Items</span>
+              <span>Factory Status</span>
+              <span>Payment</span>
+              <span>Fulfillment</span>
+              <span>Total</span>
+              <span className="text-right">Edit</span>
             </div>
-          ) : filteredOrders.map(order => {
+            <div className="divide-y divide-border">
+              {filteredOrders.length === 0 ? (
+                <div className="p-12 text-center text-sm text-muted-foreground">
+                   <Package className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                   No orders found for this status.
+                </div>
+              ) : filteredOrders.map(order => {
             const factory = getFactoryStatus(order.productionJobs)
 
             return (
@@ -669,7 +787,70 @@ export function OrdersManager({ orders }: { orders: any[] }) {
               </article>
             )
           })}
-        </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:gap-4">
+              <span>Customer</span>
+              <span>Product</span>
+              <span>Jobs</span>
+              <span>Payment</span>
+              <span>Status</span>
+              <span>Price</span>
+              <span className="text-right">Edit</span>
+            </div>
+            <div className="divide-y divide-border">
+              {filteredRequests.length === 0 ? (
+                <div className="p-12 text-center text-sm text-muted-foreground">
+                   <Package className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                   No order requests found.
+                </div>
+              ) : filteredRequests.map(request => {
+                const requestJobs = allProductionJobs.filter(j => j.orderRequestId === request.id)
+                const factory = getFactoryStatus(requestJobs)
+
+                return (
+                  <article key={request.id} className="p-4 hover:bg-muted/30 transition-colors">
+                    <div className="grid gap-4 xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:items-start xl:gap-4">
+                      <div>
+                        <h3 className="font-bold text-sm text-foreground">{request.customerName || 'Contacto B2B'}</h3>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">#{request.id.slice(0, 8)} · {formatOrderDate(request.createdAt)}</p>
+                        {request.companyName && <p className="mt-1 text-[10px] text-muted-foreground">{request.companyName}</p>}
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-xs font-medium">{request.status === 'B2B_LEAD' ? 'Para Empresas' : request.productName || request.productSlug || 'Custom product'}</span>
+                      </div>
+                      <div>
+                        <Badge variant="outline" className={`text-[9px] uppercase font-bold px-1.5 h-5 border-none shadow-none ${factory.tone}`}>
+                          {requestJobs.length > 0 ? `${requestJobs.length} jobs` : factory.label}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Badge variant={request.isPaid ? 'default' : 'outline'} className="text-[10px] h-5">
+                          {request.status === 'B2B_LEAD' ? 'N/A' : request.isPaid ? 'Paid' : 'Pending'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <Badge className={`text-[10px] h-5 ${orderRequestStatusTone[request.status]}`}>
+                          {orderRequestStatusLabels[request.status]}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="font-bold text-foreground text-sm">€{(request.selectedPrice || 0).toFixed(2)}</p>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditor(request, true)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </>
+        )}
       </section>
 
       {editingOrder && draftOrder && (
@@ -683,6 +864,7 @@ export function OrdersManager({ orders }: { orders: any[] }) {
           }}
           onSave={saveEditedOrder}
           isSaving={isEditing}
+          allProductionJobs={allProductionJobs}
         />
       )}
     </div>

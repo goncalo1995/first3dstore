@@ -1,7 +1,6 @@
 import { init, id } from '@instantdb/admin';
 import schema from '../instant.schema';
 
-// ID for app: golfprint
 const dbAdmin = init({
   appId: process.env.NEXT_PUBLIC_INSTANT_APP_ID!,
   schema,

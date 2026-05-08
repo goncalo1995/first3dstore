@@ -11,14 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { approveOrderRequestForProduction, approveOrderRequestPhoto, updateOrderRequestPaymentReceived, updateOrderRequestStatus } from './actions'
 
-type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED'
+type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
 
 type OrderRequest = {
   id: string
   customerName: string
   customerEmail: string
-  customerPhone: string
-  imageUrl: string
+  customerPhone?: string
+  imageUrl?: string
+  companyName?: string
   productSlug?: string
   productName?: string
   variantId?: string
@@ -29,6 +30,7 @@ type OrderRequest = {
   engravingText?: string
   isPaid?: boolean
   notes?: string
+  leadType?: 'photo_request' | 'b2b'
   status: OrderRequestStatus
   createdAt: Date | string
   updatedAt: Date | string
@@ -46,6 +48,7 @@ const statusLabels: Record<OrderRequestStatus, string> = {
   AWAITING_PAYMENT: 'Aguarda pagamento',
   IN_PRODUCTION: 'Em produção',
   SHIPPED: 'Enviado',
+  B2B_LEAD: 'Lead B2B',
 }
 
 const statusDescriptions: Record<OrderRequestStatus, string> = {
@@ -54,6 +57,7 @@ const statusDescriptions: Record<OrderRequestStatus, string> = {
   AWAITING_PAYMENT: 'aprovado, pagamento pendente',
   IN_PRODUCTION: 'em impressão/montagem',
   SHIPPED: 'enviado ao cliente',
+  B2B_LEAD: 'pedido empresarial por qualificar',
 }
 
 const statusTone: Record<OrderRequestStatus, string> = {
@@ -62,6 +66,7 @@ const statusTone: Record<OrderRequestStatus, string> = {
   AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
   IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
   SHIPPED: 'bg-indigo-100 text-indigo-900',
+  B2B_LEAD: 'bg-orange-100 text-orange-900',
 }
 
 function formatDate(value: Date | string) {
@@ -90,6 +95,7 @@ function RequestDrawer({
 }) {
   const [isPending, startTransition] = useTransition()
   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
+  const isB2BLead = request.status === 'B2B_LEAD'
 
   const runStatusUpdate = (status: OrderRequestStatus) => {
     startTransition(async () => {
@@ -106,7 +112,8 @@ function RequestDrawer({
     startTransition(async () => {
       try {
         const result = await approveOrderRequestForProduction(request.id)
-        toast.success(result.created ? 'Pedido aprovado e job criado' : 'Pedido aprovado; job já existia')
+        const jobCount = result.jobIds?.length || 0
+        toast.success(result.created ? `Pedido aprovado e ${jobCount} job(s) criado(s)` : 'Pedido aprovado; job(s) já existia(m)')
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Não foi possível aprovar para produção.')
       }
@@ -157,7 +164,8 @@ function RequestDrawer({
               <CardContent className="space-y-2 text-sm">
                 <p><span className="font-semibold">Nome:</span> {request.customerName}</p>
                 <p><span className="font-semibold">Email:</span> {request.customerEmail}</p>
-                <p><span className="font-semibold">Telemóvel:</span> {request.customerPhone}</p>
+                <p><span className="font-semibold">Telemóvel:</span> {request.customerPhone || '-'}</p>
+                <p><span className="font-semibold">Empresa:</span> {request.companyName || '-'}</p>
                 <p><span className="font-semibold">Criado:</span> {formatDate(request.createdAt)}</p>
               </CardContent>
             </Card>
@@ -167,7 +175,7 @@ function RequestDrawer({
                 <CardTitle>Produto</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <p><span className="font-semibold">Produto:</span> {request.productName || request.productSlug || '-'}</p>
+                <p><span className="font-semibold">Produto:</span> {isB2BLead ? 'Pedido empresarial' : request.productName || request.productSlug || '-'}</p>
                 <p><span className="font-semibold">Variante:</span> {request.variantName || request.variantId || '-'}</p>
                 <p><span className="font-semibold">Preço:</span> {formatPrice(request.selectedPrice)}</p>
                 <p><span className="font-semibold">Pagamento:</span> {request.isPaid === true ? 'Pago' : 'Pagamento por confirmar'}</p>
@@ -204,6 +212,9 @@ function RequestDrawer({
               <CardContent className="space-y-3 text-sm">
                 <p><span className="font-semibold">Tipo:</span> {request.canvasConfig?.type === 'modular-list' ? 'Modular' : 'Simples'}</p>
                 <p><span className="font-semibold">Versão:</span> {request.canvasConfig?.version ?? '-'}</p>
+                {!request.canvasConfig && isB2BLead && (
+                  <p className="text-muted-foreground">Lead B2B sem configuração de moldura.</p>
+                )}
                 {request.canvasConfig?.type === 'modular-list' && (
                   <>
                     <p><span className="font-semibold">Dimensão estimada:</span> {request.canvasConfig.estimate?.widthCm}x{request.canvasConfig.estimate?.heightCm}cm</p>
@@ -295,15 +306,20 @@ function RequestDrawer({
                     </span>
                   </label>
                 )}
-                <Button onClick={approvePhoto} disabled={isPending || request.status === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
+                <Button onClick={approvePhoto} disabled={isPending || isB2BLead || request.status === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
                   {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                   Aprovar Foto
                 </Button>
-                <Button onClick={approve} disabled={isPending || request.status !== 'AWAITING_PAYMENT' || request.isPaid !== true || relatedJobs.length > 0} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                <Button onClick={approve} disabled={isPending || isB2BLead || request.status !== 'AWAITING_PAYMENT' || request.isPaid !== true || relatedJobs.length > 0} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                   {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}
                   Aprovar para Produção
                 </Button>
-                {request.status !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
+                {isB2BLead && (
+                  <p className="text-xs text-muted-foreground">
+                    Este pedido é um lead empresarial. Qualifique o contacto antes de criar um orçamento ou produção.
+                  </p>
+                )}
+                {!isB2BLead && request.status !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     A produção só fica disponível depois de aprovar a fotografia e confirmar o pagamento.
                   </p>
@@ -324,6 +340,7 @@ function RequestDrawer({
 
 export default function AdminOrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<OrderRequestStatus | 'ALL'>('ALL')
   const query = db.useQuery({
     orderRequests: {
       $: {
@@ -335,13 +352,16 @@ export default function AdminOrderRequestsPage() {
 
   const requests = (query.data?.orderRequests ?? []) as OrderRequest[]
   const jobs = (query.data?.productionJobs ?? []) as ProductionJob[]
+  const visibleRequests = statusFilter === 'ALL'
+    ? requests
+    : requests.filter((request) => request.status === statusFilter)
   const selectedRequest = requests.find((request) => request.id === selectedId)
 
   const counts = useMemo(() => {
     return requests.reduce<Record<OrderRequestStatus, number>>((acc, request) => {
       acc[request.status] = (acc[request.status] ?? 0) + 1
       return acc
-    }, { PENDING_REVIEW: 0, MODELING: 0, AWAITING_PAYMENT: 0, IN_PRODUCTION: 0, SHIPPED: 0 })
+    }, { PENDING_REVIEW: 0, MODELING: 0, AWAITING_PAYMENT: 0, IN_PRODUCTION: 0, SHIPPED: 0, B2B_LEAD: 0 })
   }, [requests])
 
   if (query.isLoading) {
@@ -361,9 +381,13 @@ export default function AdminOrderRequestsPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {Object.entries(statusLabels).map(([status, label]) => (
-          <Card key={status}>
+          <Card
+            key={status}
+            className={statusFilter === status ? 'ring-2 ring-primary' : ''}
+            onClick={() => setStatusFilter(status as OrderRequestStatus)}
+          >
             <CardContent className="p-4">
               <p className="text-sm font-medium text-muted-foreground">{label}</p>
               <p className="mt-2 text-3xl font-bold">{counts[status as OrderRequestStatus]}</p>
@@ -375,7 +399,23 @@ export default function AdminOrderRequestsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Pedidos recentes</CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Pedidos recentes</CardTitle>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="status-filter" className="text-xs text-muted-foreground">Filtrar</Label>
+              <select
+                id="status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as OrderRequestStatus | 'ALL')}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="ALL">Todos</option>
+                {Object.entries(statusLabels).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -391,8 +431,9 @@ export default function AdminOrderRequestsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {requests.map((request) => {
+                {visibleRequests.map((request) => {
                   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
+                  const isB2BLead = request.status === 'B2B_LEAD'
                   return (
                     <tr
                       key={request.id}
@@ -400,11 +441,12 @@ export default function AdminOrderRequestsPage() {
                       onClick={() => setSelectedId(request.id)}
                     >
                       <td className="px-4 py-3">
-                        <p className="font-medium text-foreground">{request.customerName}</p>
+                        <p className="font-medium text-foreground">{request.customerName || 'Contacto B2B'}</p>
                         <p className="text-xs text-muted-foreground">{request.customerEmail}</p>
+                        {request.companyName && <p className="text-xs text-muted-foreground">{request.companyName}</p>}
                       </td>
                       <td className="px-4 py-3">
-                        <p>{request.productName || request.productSlug || '-'}</p>
+                        <p>{isB2BLead ? 'Para Empresas' : request.productName || request.productSlug || '-'}</p>
                         <p className="text-xs text-muted-foreground">{request.variantName || '-'}</p>
                       </td>
                       <td className="px-4 py-3">
@@ -412,7 +454,7 @@ export default function AdminOrderRequestsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={request.isPaid === true ? 'default' : 'outline'}>
-                          {request.isPaid === true ? 'Pago' : 'Por confirmar'}
+                          {isB2BLead ? 'N/A' : request.isPaid === true ? 'Pago' : 'Por confirmar'}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -429,7 +471,7 @@ export default function AdminOrderRequestsPage() {
                     </tr>
                   )
                 })}
-                {requests.length === 0 && (
+                {visibleRequests.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
                       Ainda não há pedidos de revisão.

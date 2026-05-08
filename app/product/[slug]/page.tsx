@@ -27,11 +27,11 @@ export async function generateMetadata({
 
   if (!product) {
     return {
-      title: 'Produto não encontrado | GolfPrint.pt',
+      title: 'Produto não encontrado | foto3d.pt',
     }
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://golfprint.pt').replace(/\/$/, '')
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://foto3d.pt').replace(/\/$/, '')
   const productImages = product.images?.length ? product.images : [product.image]
   const absoluteImages = productImages.map(img => {
     if (img.startsWith('http')) return img
@@ -39,10 +39,10 @@ export async function generateMetadata({
   })
 
   return {
-    title: `${product.name} | GolfPrint.pt`,
+    title: `${product.name} | foto3d.pt`,
     description: product.description,
     openGraph: {
-      title: `${product.name} | GolfPrint.pt`,
+      title: `${product.name} | foto3d.pt`,
       description: product.description,
       images: absoluteImages.map(url => ({
         url,
@@ -55,7 +55,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${product.name} | GolfPrint.pt`,
+      title: `${product.name} | foto3d.pt`,
       description: product.description,
       images: absoluteImages,
     },

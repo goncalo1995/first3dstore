@@ -6,7 +6,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'files.golfprint.pt',
+        hostname: 'public.foto3d.pt',
       },
       {
         protocol: 'https',

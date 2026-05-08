@@ -11,7 +11,7 @@ interface WhatsAppButtonProps {
 }
 
 export function WhatsAppButton({ 
-  message = 'Olá! Estou interessado nos vossos produtos de golfe.',
+  message = 'Olá! Estou interessado nos vossos produtos.',
   className = '',
   variant = 'floating',
   label = 'Encomendar via WhatsApp'

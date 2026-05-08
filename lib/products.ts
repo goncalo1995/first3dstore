@@ -114,6 +114,25 @@ export interface ProductMaterialRequirement {
   materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
 }
 
+export interface ProductionJobTemplate {
+  partLabel: string
+  colorSource: 'baseColor' | 'none' | 'lithophane'
+  materialGrams: number
+  materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  requiresLithophaneProcessing?: boolean
+}
+
+export const baseColorToGlobalColorName: Record<string, string> = {
+  black: 'Preto',
+  wood: 'Madeira',
+}
+
+export const colorSourceToGlobalColorName: Record<string, string> = {
+  baseColor: '', // dynamic based on orderRequest.baseColor
+  none: 'Branco',
+  lithophane: 'Branco', // lithophane panels use white/natural
+}
+
 export interface ProductCategoryRecord {
   id?: string
   slug: string
