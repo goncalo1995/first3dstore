@@ -763,6 +763,9 @@ export function ProductEditor({ slug }: { slug: string }) {
           finalPrice: variant.finalPrice.trim() ? Math.max(0, Number(variant.finalPrice) || 0) : undefined,
           stockQuantity: Math.max(0, Number(variant.stockQuantity) || 0),
           estimatedPrintMinutes: variant.estimatedPrintMinutes.trim() ? Math.max(0, Number(variant.estimatedPrintMinutes) || 0) : undefined,
+          aspectRatio: variant.aspectRatio,
+          formatLabel: variant.formatLabel,
+          uploadGuidance: variant.uploadGuidance,
           colors: variant.colors
             .map(color => {
               const globalColor = colors.find(item => item.name === color.colorName)

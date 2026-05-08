@@ -24,9 +24,31 @@ import { cn } from '@/lib/utils'
 type LightMode = 'desligada' | 'quente' | 'fria'
 
 const aspectRatios: Record<string, [number, number]> = {
+  'colecao-lithophane': [1, 1],
   'moldura-quadrada': [10, 10],
   'moldura-retrato': [7.5, 10],
   'moldura-paisagem': [10, 7.5],
+}
+
+const variantAspectRatios: Record<string, [number, number]> = {
+  quadrada: [1, 1],
+  retrato: [4, 5],
+  paisagem: [16, 9],
+}
+
+const variantUploadGuidance: Record<string, { label: string; guidance: string }> = {
+  quadrada: {
+    label: 'Formato Quadrado · crop 1:1',
+    guidance: 'Ideal para fotos de Instagram, retratos centrados e composições simétricas.',
+  },
+  retrato: {
+    label: 'Formato Retrato · crop 4:5',
+    guidance: 'Ideal para pessoas, fotografias verticais e momentos com o rosto em destaque.',
+  },
+  paisagem: {
+    label: 'Formato Paisagem · crop 16:9',
+    guidance: 'Ideal para viagens, casas, horizontes, grupos e fotografias horizontais.',
+  },
 }
 
 const lightModes: { value: LightMode; label: string; description: string; glow: string }[] = [
@@ -76,6 +98,33 @@ function getHeroHeadline(product: Product) {
 
 function getVariantSwatch(variant?: ProductVariantOption) {
   return variant?.colors?.[0]?.colorHex || '#f3efe7'
+}
+
+function getVariantAspectRatio(productSlug: string, variant?: ProductVariantOption): [number, number] {
+  if (variant?.aspectRatio) return variant.aspectRatio
+  if (productSlug === 'colecao-lithophane' && variant?.id && variantAspectRatios[variant.id]) {
+    return variantAspectRatios[variant.id]
+  }
+  return aspectRatios[productSlug] ?? [10, 10]
+}
+
+function getVariantFormatInfo(productSlug: string, variant?: ProductVariantOption) {
+  if (variant?.formatLabel || variant?.uploadGuidance) {
+    return {
+      label: variant.formatLabel ?? `Formato ${variant.name}`,
+      guidance: variant.uploadGuidance ?? 'Ajuste a fotografia ao formato selecionado antes de pedir revisão.',
+    }
+  }
+
+  if (productSlug === 'colecao-lithophane' && variant?.id && variantUploadGuidance[variant.id]) {
+    return variantUploadGuidance[variant.id]
+  }
+
+  const [width, height] = getVariantAspectRatio(productSlug, variant)
+  return {
+    label: `Formato ativo · crop ${width}:${height}`,
+    guidance: 'Ajuste a fotografia ao formato selecionado antes de pedir revisão.',
+  }
 }
 
 function getFrameColor(variant?: ProductVariantOption) {
@@ -148,7 +197,7 @@ function TwoDimensionalFramePreview({
               <img
                 src={image}
                 alt={imageUrl ? 'Pré-visualização da fotografia na moldura' : productName}
-                className="h-full w-full object-cover transition duration-500"
+                className="lithophane-preview  h-full w-full object-cover transition duration-500"
                 style={{
                   filter: isLit
                     ? 'grayscale(1) contrast(1.25) brightness(1.24) sepia(0.18)'
@@ -294,9 +343,22 @@ export function ProductExperience({ product }: { product: Product }) {
   const currentPrice = getVariantPrice(displayProduct, selectedVariant)
   const productImages = displayProduct.images?.length ? displayProduct.images : [displayProduct.image]
   const heroImages = productImages.filter(Boolean).slice(0, 3)
-  const planeSize = aspectRatios[displayProduct.slug] ?? [10, 10]
+  const planeSize = getVariantAspectRatio(displayProduct.slug, selectedVariant)
   const cropAspect = planeSize[0] / planeSize[1]
   const selectedLight = lightModes.find((mode) => mode.value === lightMode) ?? lightModes[1]
+  const activeFormatInfo = getVariantFormatInfo(displayProduct.slug, selectedVariant)
+
+  function handleVariantSelect(variantId: string) {
+    if (variantId === selectedVariantId) return
+    setSelectedVariantId(variantId)
+
+    if (selectedFile || previewUrl) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setSelectedFile(null)
+      setPreviewUrl(null)
+      toast.info('O formato mudou. Carregue novamente a fotografia para aplicar o recorte correto.')
+    }
+  }
 
   useEffect(() => {
     if (!variants.length) return
@@ -616,6 +678,10 @@ export function ProductExperience({ product }: { product: Product }) {
                   <div>
                     <h3 className="font-serif text-2xl font-bold">Carregar Foto</h3>
                     <p className="mt-1 font-sans text-sm text-white/56">JPG ou PNG, máximo 5MB. A imagem aparece no modelo em segundos.</p>
+                    <div className="mt-3 rounded-lg border border-[#ffaa00]/25 bg-[#ffaa00]/10 p-3 font-sans text-sm text-[#ffe0a3]">
+                      <p className="font-semibold text-white">{activeFormatInfo.label}</p>
+                      <p className="mt-1 leading-5 text-[#ffe0a3]/86">{activeFormatInfo.guidance}</p>
+                    </div>
                   </div>
                   <Input ref={fileInputRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} className="border-white/10 text-white file:text-white" />
                   {selectedFile && (
@@ -661,7 +727,7 @@ export function ProductExperience({ product }: { product: Product }) {
                       <button
                         key={variant.id}
                         type="button"
-                        onClick={() => setSelectedVariantId(variant.id)}
+                        onClick={() => handleVariantSelect(variant.id)}
                         className={cn(
                           'flex w-full items-center gap-3 rounded-lg border p-4 text-left font-sans transition',
                           selectedVariant?.id === variant.id ? 'border-[#ffaa00] bg-[#ffaa00]/12' : 'border-white/10 bg-white/5 hover:border-white/24',
@@ -671,6 +737,9 @@ export function ProductExperience({ product }: { product: Product }) {
                         <span className="min-w-0 flex-1">
                           <span className="block font-semibold">{variant.name}</span>
                           <span className="block text-sm text-white/52">{formatPrice(getVariantPrice(displayProduct, variant))}</span>
+                          <span className="mt-1 block text-xs text-white/46">
+                            {getVariantFormatInfo(displayProduct.slug, variant).label}
+                          </span>
                         </span>
                         {selectedVariant?.id === variant.id && <Check className="h-5 w-5 text-[#ffaa00]" />}
                       </button>

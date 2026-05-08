@@ -24,6 +24,9 @@ export interface ProductVariantOption {
   finalPrice?: number
   stockQuantity?: number
   estimatedPrintMinutes?: number // For print scheduling
+  aspectRatio?: [number, number]
+  formatLabel?: string
+  uploadGuidance?: string
   colors: {
     colorName: string
     colorHex?: string

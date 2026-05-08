@@ -11,6 +11,7 @@ import { id, init } from '@instantdb/admin'
 import dotenv from 'dotenv'
 import 'dotenv/config';
 import path from 'path'
+import schema from '../instant.schema.ts'
 
 // Load env from project root
 dotenv.config({ path: path.resolve(process.cwd(), '.env') })
@@ -29,6 +30,7 @@ if (!INSTANT_APP_ID || !INSTANT_APP_ADMIN_TOKEN) {
 const dbAdmin = init({
   appId: INSTANT_APP_ID,
   adminToken: INSTANT_APP_ADMIN_TOKEN,
+  schema,
 })
 
 // Production job template for lithophane frames
@@ -51,22 +53,57 @@ const lithophaneFrameTemplate = [
 // Products to seed
 const productsToSeed = [
   {
-    slug: 'moldura-quadrada',
-    name: 'Moldura Quadrada',
+    slug: 'colecao-lithophane',
+    name: 'Coleção Lithophane',
     priceFrom: 39,
-    priceTo: 39,
+    priceTo: 49,
     description:
-      'Moldura quadrada elegante para fotografias 1:1. Perfeita para Instagram e retratos quadrados. Transforme as suas melhores fotos numa peça única iluminada.',
-    benefit: 'Formato clássico para as suas memórias digitais',
+      'A coleção de abertura da Foto3D.pt: fotografias transformadas em peças luminosas impressas em 3D. Escolha o formato da moldura, envie a fotografia e só paga depois da revisão humana.',
+    benefit: 'Molduras lithophane personalizadas com revisão antes do pagamento',
     image: '/products/moldura-quadrada.jpg',
     featured: true,
     visible: true,
-    colorSelectionMode: 'single' as const,
+    colorSelectionMode: 'preset_options' as const,
     customizable: true,
     multiColor: false,
     multiColorCount: 1,
     category: 'custom',
-    categorySlugs: ['custom', 'gift'],
+    categorySlugs: ['custom', 'gift', 'lithophane'],
+    variants: [
+      {
+        id: 'quadrada',
+        name: 'Moldura Quadrada',
+        kind: 'single_color' as const,
+        image: '/products/moldura-quadrada.jpg',
+        finalPrice: 39,
+        aspectRatio: [1, 1] as [number, number],
+        formatLabel: 'Formato Quadrado · crop 1:1',
+        uploadGuidance: 'Ideal para fotos de Instagram, retratos centrados e composições simétricas.',
+        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+      },
+      {
+        id: 'retrato',
+        name: 'Moldura Retrato',
+        kind: 'single_color' as const,
+        image: '/products/moldura-retrato.jpg',
+        finalPrice: 44,
+        aspectRatio: [4, 5] as [number, number],
+        formatLabel: 'Formato Retrato · crop 4:5',
+        uploadGuidance: 'Ideal para pessoas, fotografias verticais e momentos com o rosto em destaque.',
+        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+      },
+      {
+        id: 'paisagem',
+        name: 'Moldura Paisagem',
+        kind: 'single_color' as const,
+        image: '/products/moldura-paisagem.jpg',
+        finalPrice: 49,
+        aspectRatio: [16, 9] as [number, number],
+        formatLabel: 'Formato Paisagem · crop 16:9',
+        uploadGuidance: 'Ideal para viagens, casas, horizontes, grupos e fotografias horizontais.',
+        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+      },
+    ],
     productionJobTemplates: lithophaneFrameTemplate,
     materialRecipe: [
       { label: 'Moldura', grams: 60, materialType: 'PLA' as const },
@@ -77,6 +114,33 @@ const productsToSeed = [
     sortOrder: 1,
   },
   {
+    slug: 'moldura-quadrada',
+    name: 'Moldura Quadrada',
+    priceFrom: 39,
+    priceTo: 39,
+    description:
+      'Produto legado mantido para compatibilidade. A compra principal passou para a Coleção Lithophane.',
+    benefit: 'Formato clássico para as suas memórias digitais',
+    image: '/products/moldura-quadrada.jpg',
+    featured: false,
+    visible: false,
+    colorSelectionMode: 'single' as const,
+    customizable: true,
+    multiColor: false,
+    multiColorCount: 1,
+    category: 'custom',
+    categorySlugs: ['custom', 'gift'],
+    variants: [],
+    productionJobTemplates: lithophaneFrameTemplate,
+    materialRecipe: [
+      { label: 'Moldura', grams: 60, materialType: 'PLA' as const },
+      { label: 'Painel', grams: 80, materialType: 'PLA' as const },
+    ],
+    materialGrams: 140,
+    featuredRank: 99,
+    sortOrder: 99,
+  },
+  {
     slug: 'moldura-retrato',
     name: 'Moldura Retrato',
     priceFrom: 44,
@@ -85,8 +149,8 @@ const productsToSeed = [
       'Moldura vertical no formato 4:5. Ideal para retratos, selfies e fotografias de pessoa. A moldura perfeita para destacar quem mais ama.',
     benefit: 'Perfeita para retratos e selfies',
     image: '/products/moldura-retrato.jpg',
-    featured: true,
-    visible: true,
+    featured: false,
+    visible: false,
     colorSelectionMode: 'single' as const,
     customizable: true,
     multiColor: false,
@@ -99,8 +163,9 @@ const productsToSeed = [
       { label: 'Painel', grams: 90, materialType: 'PLA' as const },
     ],
     materialGrams: 160,
-    featuredRank: 2,
-    sortOrder: 2,
+    variants: [],
+    featuredRank: 99,
+    sortOrder: 99,
   },
   {
     slug: 'moldura-paisagem',
@@ -111,8 +176,8 @@ const productsToSeed = [
       'Moldura horizontal no formato 16:9. Excelente para paisagens, fotografias de grupo e momentos especiais em família.',
     benefit: 'Ideal para paisagens e fotos de grupo',
     image: '/products/moldura-paisagem.jpg',
-    featured: true,
-    visible: true,
+    featured: false,
+    visible: false,
     colorSelectionMode: 'single' as const,
     customizable: true,
     multiColor: false,
@@ -125,8 +190,9 @@ const productsToSeed = [
       { label: 'Painel', grams: 90, materialType: 'PLA' as const },
     ],
     materialGrams: 160,
-    featuredRank: 3,
-    sortOrder: 3,
+    variants: [],
+    featuredRank: 99,
+    sortOrder: 99,
   },
 ]
 
@@ -217,13 +283,8 @@ async function seedProducts(): Promise<void> {
   let skipped = 0
 
   for (const product of productsToSeed) {
-    if (existingSlugs.has(product.slug)) {
-      console.log(`   ⏭️  Skipping ${product.slug} (already exists)`)
-      skipped++
-      continue
-    }
-
-    const productId = id()
+    const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
+    const productId = existingProduct?.id ?? id()
     const now = new Date()
 
     // Create images array from single image
@@ -250,7 +311,7 @@ async function seedProducts(): Promise<void> {
         multiColor: product.multiColor,
         multiColorCount: product.multiColorCount,
         colorSelectionMode: product.colorSelectionMode,
-        variants: [],
+        variants: product.variants ?? [],
         productionJobTemplates: product.productionJobTemplates,
         materialRecipe: product.materialRecipe,
         materialGrams: product.materialGrams,
@@ -259,8 +320,9 @@ async function seedProducts(): Promise<void> {
         updatedAt: now,
       })
     )
-    console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
-    created++
+    console.log(`   ${existingProduct ? '🔁 Updating' : '✨ Creating'} ${product.slug}: ${product.name} (€${product.priceFrom})`)
+    if (existingProduct) skipped++
+    else created++
   }
 
   if (transactions.length > 0) {

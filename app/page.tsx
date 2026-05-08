@@ -95,13 +95,46 @@ const galleryItems = [
     className: 'md:col-span-2',
   },
   {
-    title: 'Mapa Topográfico 3D',
+    title: 'Mapas Topográficos 3D',
     alt: '3D Topographic Map',
     image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85',
-    occasion: 'Para locais com significado: serra, praia, aldeia, trilho ou paisagem portuguesa.',
-    detail: 'Um teaser para futuras peças topográficas em relevo, pensado para amantes de lugares especiais.',
+    occasion: 'A próxima coleção para locais com significado: serra, praia, aldeia, trilho ou paisagem portuguesa.',
+    detail: 'Brevemente. A coleção de abertura é Lithophane, focada em molduras luminosas e formatos de luz personalizados.',
     badge: 'Brevemente',
     className: 'md:col-span-4'
+  },
+]
+
+const processSteps = [
+  {
+    title: '1. Escolher formato',
+    text: 'Escolha a Coleção Lithophane e selecione quadrado, retrato ou paisagem conforme a fotografia.',
+    icon: ImageIcon,
+  },
+  {
+    title: '2. Enviar e ajustar foto',
+    text: 'Carregue a imagem, ajuste o recorte certo e veja uma pré-visualização antes de pedir revisão.',
+    icon: Upload,
+  },
+  {
+    title: '3. Revisão humana',
+    text: 'Validamos nitidez, contraste e enquadramento para confirmar se a imagem funciona bem em lithophane.',
+    icon: Check,
+  },
+  {
+    title: '4. Confirmar pagamento',
+    text: 'Só avançamos para pagamento depois da imagem estar validada e do formato ficar confirmado consigo.',
+    icon: Send,
+  },
+  {
+    title: '5. Produção 3D',
+    text: 'Imprimimos o painel, preparamos a moldura, montamos a luz e fazemos a verificação final.',
+    icon: PackageCheck,
+  },
+  {
+    title: '6. Envio e tracking',
+    text: 'A peça segue protegida até si, com acompanhamento da encomenda quando aplicável.',
+    icon: Truck,
   },
 ]
 
@@ -353,7 +386,7 @@ export default function HomePage() {
             <div className="hidden items-center gap-5 font-sans text-sm text-white/66 md:flex">
               <Link href="#produtos" className="transition hover:text-[#ffaa00]">Produtos</Link>
               <Link href="#como-funciona" className="transition hover:text-[#ffaa00]">Como funciona</Link>
-              <Link href="#para-empresas" className="transition hover:text-[#ffaa00]">Para Empresas</Link>
+              <Link href="/empresas" className="transition hover:text-[#ffaa00]">Para Empresas</Link>
               <Link href="#perguntas-frequentes" className="transition hover:text-[#ffaa00]">FAQ</Link>
             </div>
             <Button asChild className="hidden border border-white/15 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 sm:inline-flex">
@@ -412,7 +445,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="h-14 border-white/15 bg-white/8 px-8 font-sans text-base text-white backdrop-blur-md hover:bg-white/15 hover:text-white">
-                <Link href="#para-empresas">Para empresas</Link>
+                <Link href="/empresas">Para empresas</Link>
               </Button>
             </motion.div>
           </div>
@@ -423,10 +456,13 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Formatos em destaque</p>
+              <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Coleção Lithophane</p>
               <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight text-white sm:text-5xl">
-                Escolha a moldura da sua memória.
+                A coleção de abertura: molduras agora, candeeiros e outros formatos a seguir.
               </h2>
+              <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-white/62">
+                Começamos com molduras lithophane personalizadas em três proporções. A mesma lógica abre caminho para candeeiros, displays e novos objetos de luz.
+              </p>
             </div>
             {productsQuery.isLoading && (
               <div className="flex items-center gap-2 font-sans text-sm text-white/60">
@@ -495,19 +531,14 @@ export default function HomePage() {
             <h2 className="font-serif text-3xl font-bold tracking-tight text-white sm:text-5xl">Como Funciona</h2>
             <p className="mt-4 font-sans text-lg text-white/62">Um processo simples para uma recordação eterna.</p>
           </div>
-          <div className="relative grid grid-cols-1 gap-12 md:grid-cols-3">
-            <div className="absolute left-[15%] right-[15%] top-10 z-0 hidden h-px bg-gradient-to-r from-transparent via-[#ffaa00]/20 to-transparent md:block" />
-            {[
-              { title: '1. Escolher formato', text: 'Selecione a moldura que melhor se adapta à sua memória fotográfica.', icon: ImageIcon },
-              { title: '2. Enviar foto', text: 'Faça o upload da sua imagem com a melhor resolução possível.', icon: Upload },
-              { title: '3. Receber a encomenda', text: 'Entregamos a sua obra de arte diretamente na sua casa.', icon: Lightbulb },
-            ].map(({ title, text, icon: Icon }) => (
+          <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+            {processSteps.map(({ title, text, icon: Icon }) => (
               <div key={title} className="group relative z-10 flex flex-col items-center text-center">
                 <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[#1f1f1f] transition-all duration-500 group-hover:border-[#ffaa00]/50 group-hover:shadow-[0_0_30px_rgba(255,170,0,0.15)]">
                   <Icon className="h-9 w-9 text-[#ffaa00]" />
                 </div>
                 <h3 className="font-serif text-2xl font-bold text-white">{title}</h3>
-                <p className="mt-3 max-w-[250px] font-sans text-sm leading-6 text-white/62">{text}</p>
+                <p className="mt-3 max-w-[290px] font-sans text-sm leading-6 text-white/62">{text}</p>
               </div>
             ))}
           </div>
@@ -634,9 +665,9 @@ export default function HomePage() {
             <div>
               <h4 className="mb-4 font-sans text-sm font-semibold text-white">Produtos</h4>
               <ul className="space-y-2 font-sans text-sm text-white/60">
-                <li><Link href="/produto/moldura-quadrada" className="hover:text-[#ffaa00]">Moldura Quadrada</Link></li>
-                <li><Link href="/produto/moldura-retrato" className="hover:text-[#ffaa00]">Moldura Retrato</Link></li>
-                <li><Link href="/produto/moldura-paisagem" className="hover:text-[#ffaa00]">Moldura Paisagem</Link></li>
+                <li><Link href="/produto/colecao-lithophane" className="hover:text-[#ffaa00]">Coleção Lithophane</Link></li>
+                <li><Link href="/produto/colecao-lithophane" className="hover:text-[#ffaa00]">Molduras Personalizadas</Link></li>
+                <li><Link href="#galeria" className="hover:text-[#ffaa00]">Mapas 3D Brevemente</Link></li>
               </ul>
             </div>
 
@@ -644,7 +675,7 @@ export default function HomePage() {
               <h4 className="mb-4 font-sans text-sm font-semibold text-white">Ajuda</h4>
               <ul className="space-y-2 font-sans text-sm text-white/60">
                 <li><Link href="#como-funciona" className="hover:text-[#ffaa00]">Como Funciona</Link></li>
-                <li><Link href="#para-empresas" className="hover:text-[#ffaa00]">Para Empresas</Link></li>
+                <li><Link href="/empresas" className="hover:text-[#ffaa00]">Para Empresas</Link></li>
                 <li><Link href="/contact" className="hover:text-[#ffaa00]">Contacto</Link></li>
                 <li><Link href="#perguntas-frequentes" className="hover:text-[#ffaa00]">Perguntas Frequentes</Link></li>
               </ul>

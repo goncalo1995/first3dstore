@@ -110,6 +110,9 @@ const _schema = i.schema({
         priceAdd?: number
         finalPrice?: number
         stockQuantity?: number
+        aspectRatio?: [number, number]
+        formatLabel?: string
+        uploadGuidance?: string
         colors: {
           colorName: string
           colorHex?: string
