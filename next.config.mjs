@@ -10,6 +10,10 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'files.golfprint.pt',
+      },
+      {
+        protocol: 'https',
         hostname: 'files.instantdb.com',
         pathname: '/**',
       },

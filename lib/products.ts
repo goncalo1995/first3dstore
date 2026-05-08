@@ -587,8 +587,8 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     priceFrom: catalogProduct.priceFrom ?? 0,
     priceTo: catalogProduct.priceTo ?? catalogProduct.priceFrom ?? 0,
     salePrice: catalogProduct.salePrice,
-    benefit: catalogProduct.benefit ?? 'Made in small batches for golfers',
-    description: catalogProduct.description ?? 'A GolfPrint product configured from the workshop catalog.',
+    benefit: catalogProduct.benefit ?? 'Made in with love',
+    description: catalogProduct.description ?? 'A product configured from the catalog.',
     image,
     images: catalogProduct.images?.length ? catalogProduct.images : [image],
     colors: deriveProductDisplayColors({

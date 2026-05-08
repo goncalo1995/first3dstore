@@ -1,6 +1,5 @@
 'use client'
 
-import dynamic from 'next/dynamic'
 import NextImage from 'next/image'
 import Link from 'next/link'
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState, useTransition } from 'react'
@@ -23,16 +22,6 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 type LightMode = 'desligada' | 'quente' | 'fria'
-
-const LightboxPreview = dynamic(() => import('@/app/criar/lightbox-preview'), {
-  ssr: false,
-  loading: () => (
-    <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-[#181818] text-white/62">
-      <Loader2 className="mr-2 h-5 w-5 animate-spin text-[#ffaa00]" />
-      A preparar a pré-visualização
-    </div>
-  ),
-})
 
 const aspectRatios: Record<string, [number, number]> = {
   'moldura-quadrada': [10, 10],
@@ -94,6 +83,120 @@ function getFrameColor(variant?: ProductVariantOption) {
   if (colorName.includes('madeira')) return '#9a673d'
   if (colorName.includes('preto')) return '#171412'
   return getVariantSwatch(variant)
+}
+
+function getLightOverlay(lightMode: LightMode) {
+  if (lightMode === 'fria') {
+    return {
+      background: 'radial-gradient(circle at 50% 42%, rgba(230,242,255,0.42), rgba(230,242,255,0.12) 48%, transparent 76%)',
+      boxShadow: '0 0 70px rgba(230,242,255,0.18)',
+    }
+  }
+
+  if (lightMode === 'quente') {
+    return {
+      background: 'radial-gradient(circle at 50% 42%, rgba(255,170,0,0.48), rgba(255,170,0,0.16) 50%, transparent 76%)',
+      boxShadow: '0 0 80px rgba(255,170,0,0.22)',
+    }
+  }
+
+  return {
+    background: 'transparent',
+    boxShadow: '0 0 28px rgba(255,255,255,0.05)',
+  }
+}
+
+function TwoDimensionalFramePreview({
+  imageUrl,
+  fallbackImage,
+  productName,
+  planeSize,
+  frameColor,
+  lightMode,
+  selectedVariant,
+}: {
+  imageUrl: string | null
+  fallbackImage?: string
+  productName: string
+  planeSize: [number, number]
+  frameColor: string
+  lightMode: LightMode
+  selectedVariant?: ProductVariantOption
+}) {
+  const image = imageUrl || selectedVariant?.image || fallbackImage
+  const lightOverlay = getLightOverlay(lightMode)
+  const isLit = lightMode !== 'desligada'
+
+  return (
+    <div className="relative min-h-[520px] overflow-hidden rounded-lg border border-white/10 bg-[#161616] p-5 shadow-2xl shadow-black/40 sm:p-8">
+      <div aria-hidden className="absolute inset-0 opacity-80" style={lightOverlay} />
+      <div className="absolute inset-x-8 bottom-8 h-12 rounded-full bg-black/55 blur-2xl" />
+
+      <div className="relative z-10 flex min-h-[460px] items-center justify-center">
+        <div
+          className="relative w-full max-w-[520px] rounded-[24px] p-5 shadow-2xl transition-all duration-500"
+          style={{
+            aspectRatio: `${planeSize[0]} / ${planeSize[1]}`,
+            background: `linear-gradient(145deg, ${frameColor}, #0d0b0a)`,
+            boxShadow: isLit
+              ? `0 0 56px ${lightMode === 'fria' ? 'rgba(230,242,255,0.24)' : 'rgba(255,170,0,0.28)'}, inset 0 0 0 1px rgba(255,255,255,0.14)`
+              : 'inset 0 0 0 1px rgba(255,255,255,0.12)',
+          }}
+        >
+          <div className="relative h-full overflow-hidden rounded-[14px] bg-[#f5efe2] shadow-[inset_0_0_28px_rgba(0,0,0,0.2)]">
+            {image ? (
+              <img
+                src={image}
+                alt={imageUrl ? 'Pré-visualização da fotografia na moldura' : productName}
+                className="h-full w-full object-cover transition duration-500"
+                style={{
+                  filter: isLit
+                    ? 'grayscale(1) contrast(1.25) brightness(1.24) sepia(0.18)'
+                    : 'grayscale(1) contrast(0.95) brightness(1.05)',
+                  opacity: isLit ? 0.78 : 0.38,
+                  mixBlendMode: isLit ? 'multiply' : 'normal',
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center bg-[radial-gradient(circle,#ffffff,transparent_62%)]">
+                <ImageIcon className="h-14 w-14 text-black/18" />
+              </div>
+            )}
+            <div
+              aria-hidden
+              className="absolute inset-0 transition-opacity duration-500"
+              style={{
+                background: isLit
+                  ? lightMode === 'fria'
+                    ? 'linear-gradient(180deg, rgba(255,255,255,0.62), rgba(230,242,255,0.34))'
+                    : 'linear-gradient(180deg, rgba(255,242,205,0.68), rgba(255,170,0,0.28))'
+                  : 'linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04))',
+                mixBlendMode: isLit ? 'screen' : 'normal',
+              }}
+            />
+            <div className="absolute inset-0 border border-white/30" />
+          </div>
+        </div>
+      </div>
+
+      <div className="relative z-10 mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/24 p-4 font-sans text-sm text-white/68 backdrop-blur-md">
+        <div>
+          <p className="font-semibold text-white">{selectedVariant?.name ?? 'Acabamento selecionado'}</p>
+          <p className="mt-1 text-xs">Preview 2D ao vivo com a proporção final da moldura.</p>
+        </div>
+        <div className="flex -space-x-2">
+          {(selectedVariant?.colors ?? []).slice(0, 5).map((color, index) => (
+            <span
+              key={`${color.colorName}-${index}`}
+              className="h-7 w-7 rounded-full border border-white/20 shadow-md"
+              style={{ backgroundColor: color.colorHex || frameColor }}
+              title={color.colorName}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function validateFile(file: File) {
@@ -496,11 +599,14 @@ export function ProductExperience({ product }: { product: Product }) {
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start">
             <div className="sticky top-3 z-20 -mx-5 border-y border-white/10 bg-[#121212]/94 px-5 py-3 backdrop-blur-md sm:mx-0 sm:rounded-lg sm:border lg:top-6">
-              <LightboxPreview
+              <TwoDimensionalFramePreview
                 imageUrl={previewUrl}
+                fallbackImage={selectedVariant?.image || heroImages[0]}
+                productName={displayProduct.name}
                 lightMode={lightMode}
                 planeSize={planeSize}
                 frameColor={getFrameColor(selectedVariant)}
+                selectedVariant={selectedVariant}
               />
             </div>
 
