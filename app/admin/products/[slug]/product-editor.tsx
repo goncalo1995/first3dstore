@@ -247,6 +247,13 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [priceTo, setPriceTo] = useState(String(product.priceTo))
   const [salePrice, setSalePrice] = useState(product.salePrice ? String(product.salePrice) : '')
   const [aspectRatioText, setAspectRatioText] = useState(product.aspectRatio?.join(':') ?? '')
+  const [variantAspectRatioTexts, setVariantAspectRatioTexts] = useState<Record<string, string>>(() => {
+    const texts: Record<string, string> = {}
+    product.variants?.forEach(variant => {
+      texts[variant.id] = variant.aspectRatio?.join(':') ?? ''
+    })
+    return texts
+  })
   const [benefit, setBenefit] = useState(product.benefit)
   const [description, setDescription] = useState(product.description)
   const [image, setImage] = useState(product.image)
@@ -1426,7 +1433,14 @@ export function ProductEditor({ slug }: { slug: string }) {
                     <p className="text-sm text-muted-foreground">Formato físico, preço, acabamentos, texto e partes de produção por variante.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setVariants(current => [...current, createDraftVariantOption(current.length, colors, 'single_color')])}>+ Variante</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => {
+                      const newVariant = createDraftVariantOption(variants.length, colors, 'single_color')
+                      setVariants(current => [...current, newVariant])
+                      setVariantAspectRatioTexts(current => ({
+                        ...current,
+                        [newVariant.id]: '',
+                      }))
+                    }}>+ Variante</Button>
                   </div>
                 </div>
 
@@ -1462,7 +1476,13 @@ export function ProductEditor({ slug }: { slug: string }) {
                                 <Badge variant="secondary" className="mt-0.5 text-[10px] uppercase tracking-tight">{variant.aspectRatio?.join(':') ?? 'sem ratio'}</Badge>
                               </div>
                             </div>
-                            <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive opacity-0 transition-opacity group-hover:opacity-100" onClick={() => setVariants(current => current.filter(item => item.id !== variant.id))}>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive opacity-0 transition-opacity group-hover:opacity-100" onClick={() => {
+                              setVariants(current => current.filter(item => item.id !== variant.id))
+                              setVariantAspectRatioTexts(current => {
+                                const { [variant.id]: _, ...rest } = current
+                                return rest
+                              })
+                            }}>
                               <Trash2 className="mr-2 h-3.5 w-3.5" /> Remove
                             </Button>
                           </div>
@@ -1522,9 +1542,16 @@ export function ProductEditor({ slug }: { slug: string }) {
                               <div>
                                 <Label className="text-[10px] uppercase text-muted-foreground">Ratio</Label>
                                 <Input
-                                  value={variant.aspectRatio?.join(':') ?? ''}
+                                  value={variantAspectRatioTexts[variant.id] ?? ''}
                                   onChange={event => {
-                                    const [width, height] = event.target.value.split(':').map(value => Number(value.trim()))
+                                    setVariantAspectRatioTexts(current => ({
+                                      ...current,
+                                      [variant.id]: event.target.value,
+                                    }))
+                                  }}
+                                  onBlur={() => {
+                                    const text = variantAspectRatioTexts[variant.id] ?? ''
+                                    const [width, height] = text.split(':').map(value => Number(value.trim()))
                                     updateVariant(variant.id, { aspectRatio: width > 0 && height > 0 ? [width, height] : undefined })
                                   }}
                                   className="mt-1 h-9"

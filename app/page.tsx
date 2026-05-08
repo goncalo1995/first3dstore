@@ -748,12 +748,12 @@ export default function HomePage() {
                 </li>
               </ul>
               <div className="mt-4 flex gap-3">
-                <a href="#" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/60 transition-colors hover:border-[#ffaa00] hover:text-[#ffaa00]" aria-label="Instagram">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/60" aria-label="Instagram">
                   <Instagram className="h-4 w-4" />
-                </a>
-                <a href="#" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/60 transition-colors hover:border-[#ffaa00] hover:text-[#ffaa00]" aria-label="Facebook">
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/60" aria-label="Facebook">
                   <Facebook className="h-4 w-4" />
-                </a>
+                </div>
               </div>
             </div>
           </div>

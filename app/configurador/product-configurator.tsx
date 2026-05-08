@@ -688,8 +688,8 @@ export function ProductConfigurator({
   }
 
   function chooseAnotherFile() {
-    cancelCrop()
     fileInputRef.current?.click()
+    cancelCrop()
   }
 
   async function applyCrop() {

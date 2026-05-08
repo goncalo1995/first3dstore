@@ -619,7 +619,7 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     priceTo: catalogProduct.priceTo ?? catalogProduct.priceFrom ?? 0,
     salePrice: catalogProduct.salePrice,
     aspectRatio: catalogProduct.aspectRatio,
-    benefit: catalogProduct.benefit ?? 'Made in with love',
+    benefit: catalogProduct.benefit ?? 'Made with love',
     description: catalogProduct.description ?? 'A product configured from the catalog.',
     image,
     images: catalogProduct.images?.length ? catalogProduct.images : [image],
