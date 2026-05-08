@@ -2,23 +2,24 @@ import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { CartProvider } from '@/lib/cart-context'
 import { CartDrawer } from '@/components/cart-drawer'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'GolfPrint.pt | Custom 3D-Printed Golf Accessories',
-  description: 'Small-batch 3D-printed golf accessories made in Lisbon. Ready-stock and personalised options for golfers.',
-  keywords: ['golf accessories', 'custom golf gifts', '3D printed', 'Lisbon', 'Portugal', 'personalised golf'],
+  title: 'foto3d.pt | Luz de Memória',
+  description: 'Transforme uma fotografia especial numa luz 3D personalizada, feita à mão em Lisboa.',
+  keywords: ['foto 3D', 'luz personalizada', 'lithophane', 'presente personalizado', 'Lisboa', 'Portugal'],
   openGraph: {
-    title: 'GolfPrint.pt | Custom 3D-Printed Golf Accessories',
-    description: 'Small-batch 3D-printed golf accessories made in Lisbon. Ready-stock and personalised options for golfers.',
+    title: 'foto3d.pt | Luz de Memória',
+    description: 'Transforme uma fotografia especial numa luz 3D personalizada, feita à mão em Lisboa.',
     type: 'website',
-    locale: 'en_GB',
+    locale: 'pt_PT',
   },
-  metadataBase: new URL('https://golfprint.pt'),
+  metadataBase: new URL('https://foto3d.pt'),
 }
 
 export const viewport: Viewport = {
-  themeColor: '#1B6B45',
+  themeColor: '#111111',
   width: 'device-width',
   initialScale: 1,
 }
@@ -29,12 +30,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background" data-scroll-behavior="smooth">
+    <html lang="pt" className="bg-background" data-scroll-behavior="smooth">
       <body className="font-sans antialiased">
         <CartProvider>
           {children}
           <CartDrawer />
         </CartProvider>
+        <Toaster richColors closeButton position="bottom-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

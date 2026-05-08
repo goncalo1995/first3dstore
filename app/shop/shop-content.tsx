@@ -103,7 +103,7 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
   return (
     <>
       {/* Filters */}
-      <section className="border-b border-border sticky top-16 bg-background z-30">
+      <section className="sticky top-16 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
         <div className="container mx-auto px-4">
           <div className="-mx-4 overflow-x-auto px-4 scrollbar-hide">
           <div className="flex w-max min-w-full gap-2 py-4">
@@ -111,10 +111,10 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
               <button
                 key={category}
                 onClick={() => handleCategoryChange(category)}
-                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                className={`rounded-full border px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
                   activeCategory === category
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80'
+                    ? 'border-[#ffaa00] bg-[#121212] text-white'
+                    : 'border-border bg-secondary/60 text-muted-foreground hover:border-foreground/20 hover:text-foreground'
                 }`}
               >
                 {category === 'all' ? 'Todos' : resolvedCategoryLabels[category] ?? category}
@@ -126,13 +126,13 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
       </section>
 
       {/* Product Grid */}
-      <section className="container mx-auto px-4 py-12">
+      <section className="container mx-auto px-4 py-10">
         {/* Trust Badge */}
-        <div className="mb-8 flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="mb-8 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
+            <div className="h-2.5 w-2.5 rounded-full bg-[#ffaa00] animate-pulse" />
             <span>
-              {inventoryQuery.isLoading ? 'A verificar stock atual em Lisboa' : 'Disponibilidade de cores e stock em direto'}
+              {inventoryQuery.isLoading ? 'A verificar catálogo atual' : 'Produção local, acabamentos e variantes atualizados'}
             </span>
           </div>
           <label className="ml-auto flex shrink-0 items-center gap-2">
@@ -140,7 +140,7 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
             <select
               value={sortBy}
               onChange={event => setSortBy(event.target.value as typeof sortBy)}
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
             >
               <option value="recommended">Recomendados</option>
               <option value="price_asc">Preço: baixo a alto</option>
@@ -158,7 +158,7 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
 
         {filteredProducts.length === 0 && (
           <div className="text-center py-16">
-            <p className="text-muted-foreground">No products found in this category.</p>
+            <p className="text-muted-foreground">Não encontrámos produtos nesta categoria.</p>
           </div>
         )}
       </section>

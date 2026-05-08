@@ -25,6 +25,7 @@ import {
   type ProductStlFile,
   type ProductVariantOption,
   type ProductMaterialRequirement,
+  type ProductionJobTemplate,
 } from '@/lib/products'
 import { AIActionType, useAIActions } from '@/hooks/useAIActions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -53,11 +54,15 @@ type DraftMaterialRequirement = Omit<ProductMaterialRequirement, 'grams' | 'colo
 type DraftColorInventory = Omit<ProductColorInventory, 'stockQuantity'> & {
   stockQuantity: string
 }
-type DraftVariantOption = Omit<ProductVariantOption, 'priceAdd' | 'finalPrice' | 'stockQuantity' | 'estimatedPrintMinutes' | 'customizationOptions'> & {
+type DraftVariantPart = Omit<NonNullable<ProductVariantOption['parts']>[number], 'grams'> & {
+  grams: string
+}
+type DraftVariantOption = Omit<ProductVariantOption, 'priceAdd' | 'finalPrice' | 'stockQuantity' | 'estimatedPrintMinutes' | 'customizationOptions' | 'parts'> & {
   priceAdd: string
   finalPrice: string
   stockQuantity: string
   estimatedPrintMinutes: string
+  parts: DraftVariantPart[]
   customizationOptions: DraftCustomizationOption[]
 }
 type DraftStlFile = ProductStlFile
@@ -77,7 +82,8 @@ function createDraftVariantOption(
     finalPrice: '',
     stockQuantity: '0',
     estimatedPrintMinutes: '',
-    colors: color ? [{ colorName: color.name, colorHex: color.hex }] : [],
+    colors: color ? [{ name: color.name, hex: color.hex, globalColorId: color.id }] : [],
+    parts: [],
     customizationOptions: kind === 'custom_text'
       ? [{ type: 'text', label: 'Text', maxChars: '12', priceAdd: '0' }]
       : [],
@@ -92,6 +98,10 @@ function toDraftVariantOption(option: ProductVariantOption): DraftVariantOption 
     finalPrice: option.finalPrice ? String(option.finalPrice) : '',
     stockQuantity: String(option.stockQuantity ?? 0),
     estimatedPrintMinutes: option.estimatedPrintMinutes ? String(option.estimatedPrintMinutes) : '',
+    parts: (option.parts ?? []).map(part => ({
+      ...part,
+      grams: String(part.grams),
+    })),
     customizationOptions: (option.customizationOptions ?? []).map(customization => ({
       ...customization,
       maxChars: String(customization.maxChars),
@@ -236,6 +246,14 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [priceFrom, setPriceFrom] = useState(String(product.priceFrom))
   const [priceTo, setPriceTo] = useState(String(product.priceTo))
   const [salePrice, setSalePrice] = useState(product.salePrice ? String(product.salePrice) : '')
+  const [aspectRatioText, setAspectRatioText] = useState(product.aspectRatio?.join(':') ?? '')
+  const [variantAspectRatioTexts, setVariantAspectRatioTexts] = useState<Record<string, string>>(() => {
+    const texts: Record<string, string> = {}
+    product.variants?.forEach(variant => {
+      texts[variant.id] = variant.aspectRatio?.join(':') ?? ''
+    })
+    return texts
+  })
   const [benefit, setBenefit] = useState(product.benefit)
   const [description, setDescription] = useState(product.description)
   const [image, setImage] = useState(product.image)
@@ -263,13 +281,28 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [featuredRank, setFeaturedRank] = useState(String(product.featuredRank ?? 99))
   const [sortOrder, setSortOrder] = useState(String(product.sortOrder ?? product.featuredRank ?? 99))
   const [visible, setVisible] = useState(product.visible !== false)
+  const [isModular, setIsModular] = useState(Boolean(product.isModular))
   const [leadTimeDays, setLeadTimeDays] = useState(String(inventory?.leadTimeDays ?? product.leadTimeDays ?? 4))
   const [allowCustomColorRequest, setAllowCustomColorRequest] = useState(Boolean(inventory?.allowCustomColorRequest ?? product.allowCustomColorRequest))
   const [materialRecipe, setMaterialRecipe] = useState<DraftMaterialRequirement[]>(
-    getProductMaterialRecipe(product).map(item => ({ label: item.label, grams: String(item.grams) })),
+    getProductMaterialRecipe(product).map(item => ({
+      label: item.label,
+      grams: String(item.grams),
+      materialType: item.materialType,
+      colorSource: item.colorSource,
+      requiresLithophaneProcessing: item.requiresLithophaneProcessing,
+    })),
   )
   const [stlFiles, setStlFiles] = useState<DraftStlFile[]>(product.stlFiles ?? [])
   const [slicerNotes, setSlicerNotes] = useState(product.slicerNotes ?? '')
+  const [productionJobTemplatesJson, setProductionJobTemplatesJson] = useState<string>(() => {
+    const templates = (product as any).productionJobTemplates as ProductionJobTemplate[] | undefined
+    if (templates && templates.length > 0) {
+      return JSON.stringify(templates, null, 2)
+    }
+    // Initialize to empty array when no templates exist
+    return JSON.stringify([], null, 2)
+  })
   const [colorInventory, setColorInventory] = useState<DraftColorInventory[]>(initialInventory)
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -569,6 +602,7 @@ export function ProductEditor({ slug }: { slug: string }) {
     setPriceFrom(String(product.priceFrom))
     setPriceTo(String(product.priceTo))
     setSalePrice(product.salePrice ? String(product.salePrice) : '')
+    setAspectRatioText(product.aspectRatio?.join(':') ?? '')
     setBenefit(product.benefit)
     setDescription(product.description)
     setImage(product.image)
@@ -591,11 +625,20 @@ export function ProductEditor({ slug }: { slug: string }) {
     setFeaturedRank(String(product.featuredRank ?? 99))
     setSortOrder(String(product.sortOrder ?? product.featuredRank ?? 99))
     setVisible(product.visible !== false)
+    setIsModular(Boolean(product.isModular))
     setLeadTimeDays(String(inventory?.leadTimeDays ?? product.leadTimeDays ?? 4))
     setAllowCustomColorRequest(Boolean(inventory?.allowCustomColorRequest ?? product.allowCustomColorRequest))
-    setMaterialRecipe(getProductMaterialRecipe(product).map(item => ({ label: item.label, grams: String(item.grams) })))
+    setMaterialRecipe(getProductMaterialRecipe(product).map(item => ({
+      label: item.label,
+      grams: String(item.grams),
+      materialType: item.materialType,
+      colorSource: item.colorSource,
+      requiresLithophaneProcessing: item.requiresLithophaneProcessing,
+    })))
     setStlFiles(product.stlFiles ?? [])
     setSlicerNotes(product.slicerNotes ?? '')
+    const templates = (product as any).productionJobTemplates as ProductionJobTemplate[] | undefined
+    setProductionJobTemplatesJson(JSON.stringify(templates ?? [], null, 2))
     setColorInventory(initialInventory)
   }, [initialInventory, inventory?.allowCustomColorRequest, inventory?.leadTimeDays, product, query.isLoading])
 
@@ -647,7 +690,19 @@ export function ProductEditor({ slug }: { slug: string }) {
       return {
         ...variant,
         colors: variant.colors.map((color, index) => index === colorIndex
-          ? { colorName, colorHex: globalColor?.hex ?? color.colorHex }
+          ? { ...color, name: colorName, hex: globalColor?.hex ?? color.hex, globalColorId: globalColor?.id }
+          : color),
+      }
+    }))
+  }
+
+  const updateVariantColorImage = (variantId: string, colorIndex: number, imageUrl: string) => {
+    setVariants(current => current.map(variant => {
+      if (variant.id !== variantId) return variant
+      return {
+        ...variant,
+        colors: variant.colors.map((color, index) => index === colorIndex
+          ? { ...color, imageUrl }
           : color),
       }
     }))
@@ -657,7 +712,48 @@ export function ProductEditor({ slug }: { slug: string }) {
     const globalColor = colors[0]
     if (!globalColor) return
     setVariants(current => current.map(variant => variant.id === variantId
-      ? { ...variant, colors: [...variant.colors, { colorName: globalColor.name, colorHex: globalColor.hex }] }
+      ? { ...variant, colors: [...variant.colors, { name: globalColor.name, hex: globalColor.hex, globalColorId: globalColor.id }] }
+      : variant))
+  }
+
+  const updateVariantPart = (variantId: string, partIndex: number, patch: Partial<DraftVariantPart>) => {
+    setVariants(current => current.map(variant => variant.id === variantId
+      ? {
+          ...variant,
+          parts: variant.parts.map((part, index) => index === partIndex ? { ...part, ...patch } : part),
+        }
+      : variant))
+  }
+
+  const addVariantPart = (variantId: string) => {
+    setVariants(current => current.map(variant => variant.id === variantId
+      ? {
+          ...variant,
+          parts: [
+            ...variant.parts,
+            {
+              label: `Parte ${variant.parts.length + 1}`,
+              grams: '10',
+              materialType: 'PLA',
+              colorSource: 'partColor',
+            },
+          ],
+        }
+      : variant))
+  }
+
+  const useDefaultRecipeForVariant = (variantId: string) => {
+    setVariants(current => current.map(variant => variant.id === variantId
+      ? {
+          ...variant,
+          parts: materialRecipe.map(part => ({
+            label: part.label,
+            grams: part.grams,
+            materialType: part.materialType,
+            colorSource: part.colorSource,
+            requiresLithophaneProcessing: part.requiresLithophaneProcessing,
+          })),
+        }
       : variant))
   }
 
@@ -710,10 +806,39 @@ export function ProductEditor({ slug }: { slug: string }) {
       const primaryImage = image.trim() || gallery[0] || '/products/ball-marker.jpg'
       const finalImages = normalizeImageUrls([primaryImage, ...gallery.filter(url => url !== primaryImage)])
       const productCategorySlugs = normalizeCategorySlugs([category, categorySlugsText])
+      const [aspectWidth, aspectHeight] = aspectRatioText.split(':').map(value => Number(value.trim()))
+      const aspectRatio = aspectWidth > 0 && aspectHeight > 0
+        ? [aspectWidth, aspectHeight] as [number, number]
+        : undefined
       const recipe = materialRecipe.map((item, index) => ({
         label: item.label || `Part ${index + 1}`,
         grams: Math.max(1, Number(item.grams) || 1),
+        materialType: item.materialType,
+        colorSource: item.colorSource,
+        requiresLithophaneProcessing: Boolean(item.requiresLithophaneProcessing),
       }))
+      // Parse and validate production job templates
+      let productionJobTemplates: ProductionJobTemplate[] | undefined
+      try {
+        const parsed = JSON.parse(productionJobTemplatesJson)
+        if (!Array.isArray(parsed)) {
+          throw new Error('Production job templates must be an array')
+        }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          productionJobTemplates = parsed.map((t: any) => ({
+            partLabel: String(t.partLabel || 'Part'),
+            colorSource: ['baseColor', 'none', 'lithophane'].includes(t.colorSource) ? t.colorSource : 'baseColor',
+            materialGrams: Math.max(1, Number(t.materialGrams) || 1),
+            materialType: ['PLA', 'PETG', 'ABS', 'TPU'].includes(t.materialType) ? t.materialType : 'PLA',
+            requiresLithophaneProcessing: Boolean(t.requiresLithophaneProcessing),
+          }))
+        }
+      } catch (parseError) {
+        // Invalid JSON, abort save
+        setError('Invalid JSON in production job templates. Please fix the JSON syntax.')
+        setIsSaving(false)
+        return
+      }
       const gramsByColor = new Map(colors.map(color => [color.name, color.gramsAvailable]))
       const normalizedColorInventory = colorInventory.map(color => ({
         ...color,
@@ -731,15 +856,32 @@ export function ProductEditor({ slug }: { slug: string }) {
           finalPrice: variant.finalPrice.trim() ? Math.max(0, Number(variant.finalPrice) || 0) : undefined,
           stockQuantity: Math.max(0, Number(variant.stockQuantity) || 0),
           estimatedPrintMinutes: variant.estimatedPrintMinutes.trim() ? Math.max(0, Number(variant.estimatedPrintMinutes) || 0) : undefined,
+          aspectRatio: variant.aspectRatio,
+          formatLabel: variant.formatLabel,
+          uploadGuidance: variant.uploadGuidance,
+          variantType: variant.variantType,
+          requiresPartColorSelection: variant.requiresPartColorSelection,
+          textOverlay: variant.textOverlay,
+          parts: variant.parts
+            .map((part, partIndex) => ({
+              label: part.label || `Parte ${partIndex + 1}`,
+              grams: Math.max(1, Number(part.grams) || 1),
+              materialType: part.materialType,
+              colorSource: part.colorSource,
+              requiresLithophaneProcessing: Boolean(part.requiresLithophaneProcessing),
+            }))
+            .filter(part => part.label),
           colors: variant.colors
             .map(color => {
-              const globalColor = colors.find(item => item.name === color.colorName)
+              const globalColor = colors.find(item => item.name === color.name)
               return {
-                colorName: color.colorName,
-                colorHex: globalColor?.hex ?? color.colorHex ?? '#d1d5db',
+                name: color.name,
+                hex: globalColor?.hex ?? color.hex ?? '#d1d5db',
+                globalColorId: color.globalColorId ?? globalColor?.id,
+                imageUrl: color.imageUrl?.trim() || undefined,
               }
             })
-            .filter(color => color.colorName),
+            .filter(color => color.name),
           customizationOptions: variant.kind === 'custom_text'
             ? variant.customizationOptions.map(option => ({
                 ...option,
@@ -775,6 +917,7 @@ export function ProductEditor({ slug }: { slug: string }) {
           priceFrom: Number(priceFrom) || 0,
           priceTo: Number(priceTo) || Number(priceFrom) || 0,
           salePrice: salePrice.trim() ? Number(salePrice) || 0 : undefined,
+          aspectRatio,
           benefit: benefit.trim(),
           description: description.trim(),
           image: primaryImage,
@@ -787,18 +930,20 @@ export function ProductEditor({ slug }: { slug: string }) {
                 priceAdd: Math.max(0, Number(option.priceAdd) || 0),
               }))
             : [],
-          multiColor,
-          multiColorCount: Number(multiColorCount) || 1,
-          colorSelectionMode: colorSelectionMode ?? (multiColor ? 'flexible_parts' : 'single'),
-          multiColorPriceAdd: Number(multiColorPriceAdd) || 0,
+          multiColor: false,
+          multiColorCount: 1,
+          colorSelectionMode: normalizedVariants.length ? 'preset_options' : 'single',
+          multiColorPriceAdd: 0,
           variants: normalizedVariants,
           stlFiles: normalizedStlFiles,
           slicerNotes: slicerNotes.trim() || undefined,
           featured,
           featuredRank: Number(featuredRank) || 99,
           sortOrder: Number(sortOrder) || 99,
+          isModular,
           materialGrams: recipe.reduce((sum, item) => sum + item.grams, 0),
           materialRecipe: recipe,
+          productionJobTemplates,
           visible,
           updatedAt: now,
         }), categories, productCategorySlugs, inventoryId, getCatalogCategoryIds(catalogProduct), getCatalogPrimaryCategoryId(catalogProduct)),
@@ -1027,6 +1172,10 @@ export function ProductEditor({ slug }: { slug: string }) {
                     <Input id="sale-price" type="number" min="0" step="0.01" value={salePrice} onChange={event => setSalePrice(event.target.value)} placeholder="Optional" className="mt-1.5" />
                   </div>
                   <div>
+                    <Label htmlFor="aspect-ratio">Crop Aspect Ratio</Label>
+                    <Input id="aspect-ratio" value={aspectRatioText} onChange={event => setAspectRatioText(event.target.value)} placeholder="1:1, 4:5, 16:9" className="mt-1.5" />
+                  </div>
+                  <div>
                     <Label htmlFor="lead-time">Manufacturing Lead Time (Days)</Label>
                     <Input id="lead-time" type="number" min="1" value={leadTimeDays} onChange={event => setLeadTimeDays(event.target.value)} className="mt-1.5" />
                   </div>
@@ -1038,6 +1187,15 @@ export function ProductEditor({ slug }: { slug: string }) {
                     <Label htmlFor="sort-order">Sort Order</Label>
                     <Input id="sort-order" type="number" min="1" value={sortOrder} onChange={event => setSortOrder(event.target.value)} className="mt-1.5" />
                   </div>
+                  <label className="md:col-span-3 flex items-start gap-3 rounded-lg border border-border bg-secondary/40 p-4 text-sm">
+                    <input type="checkbox" checked={isModular} onChange={event => setIsModular(event.target.checked)} className="mt-1 h-4 w-4 rounded border-gray-300 text-primary" />
+                    <span>
+                      <span className="block font-semibold text-foreground">Usar construtor modular</span>
+                      <span className="mt-1 block text-muted-foreground">
+                        Ativa o fluxo mobile-first por peças em /criar para lightboxes modulares.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </section>
             </TabsContent>
@@ -1213,14 +1371,10 @@ export function ProductEditor({ slug }: { slug: string }) {
                   <h2 className="text-lg font-bold text-foreground">Configurable Options</h2>
                   <p className="text-sm text-muted-foreground">Enable custom text fields or multi-color support for the customer.</p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                   <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3 text-sm text-foreground transition-colors hover:bg-secondary/50 cursor-pointer">
                     <input type="checkbox" checked={customizable} onChange={event => setCustomizable(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary" /> 
                     Allow Customization
-                  </label>
-                  <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3 text-sm text-foreground transition-colors hover:bg-secondary/50 cursor-pointer">
-                    <input type="checkbox" checked={multiColor} onChange={event => setMultiColor(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary" /> 
-                    Multi-color (Parts)
                   </label>
                   <label className="flex items-center gap-2 rounded-lg border border-border bg-secondary/30 p-3 text-sm text-foreground transition-colors hover:bg-secondary/50 cursor-pointer">
                     <input type="checkbox" checked={allowCustomColorRequest} onChange={event => setAllowCustomColorRequest(event.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary" /> 
@@ -1275,13 +1429,18 @@ export function ProductEditor({ slug }: { slug: string }) {
               <section className="rounded-xl border border-border bg-background p-6 shadow-sm">
                 <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h2 className="text-lg font-bold text-foreground">Purchase Variants</h2>
-                    <p className="text-sm text-muted-foreground">Directly sellable options (packs, specific colors, etc.).</p>
+                    <h2 className="text-lg font-bold text-foreground">Variantes do Produto</h2>
+                    <p className="text-sm text-muted-foreground">Formato físico, preço, acabamentos, texto e partes de produção por variante.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setVariants(current => [...current, createDraftVariantOption(current.length, colors, 'single_color')])}>+ Single Color</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setVariants(current => [...current, createDraftVariantOption(current.length, colors, 'preset_pack')])}>+ Preset Pack</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setVariants(current => [...current, createDraftVariantOption(current.length, colors, 'custom_text')])}>+ Custom Text</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => {
+                      const newVariant = createDraftVariantOption(variants.length, colors, 'single_color')
+                      setVariants(current => [...current, newVariant])
+                      setVariantAspectRatioTexts(current => ({
+                        ...current,
+                        [newVariant.id]: '',
+                      }))
+                    }}>+ Variante</Button>
                   </div>
                 </div>
 
@@ -1303,38 +1462,34 @@ export function ProductEditor({ slug }: { slug: string }) {
                                   <span
                                     key={`${variant.id}-swatch-${colorIndex}`}
                                     className="h-8 w-8 rounded-full border-2 border-background shadow-md"
-                                    style={{ backgroundColor: color.colorHex ?? colors.find(item => item.name === color.colorName)?.hex ?? '#d1d5db' }}
+                                    style={{
+                                      backgroundColor: color.hex ?? colors.find(item => item.name === color.name)?.hex ?? '#d1d5db',
+                                      backgroundImage: color.imageUrl ? `url(${color.imageUrl})` : undefined,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center',
+                                    }}
                                   />
                                 ))}
                               </div>
                               <div>
-                                <h3 className="font-bold text-foreground">{variant.name || `Option ${variantIndex + 1}`}</h3>
-                                <Badge variant="secondary" className="mt-0.5 text-[10px] uppercase tracking-tight">{variant.kind.replace('_', ' ')}</Badge>
+                                <h3 className="font-bold text-foreground">{variant.name || `Variante ${variantIndex + 1}`}</h3>
+                                <Badge variant="secondary" className="mt-0.5 text-[10px] uppercase tracking-tight">{variant.aspectRatio?.join(':') ?? 'sem ratio'}</Badge>
                               </div>
                             </div>
-                            <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive opacity-0 transition-opacity group-hover:opacity-100" onClick={() => setVariants(current => current.filter(item => item.id !== variant.id))}>
+                            <Button type="button" variant="ghost" size="sm" className="h-8 text-destructive opacity-0 transition-opacity group-hover:opacity-100" onClick={() => {
+                              setVariants(current => current.filter(item => item.id !== variant.id))
+                              setVariantAspectRatioTexts(current => {
+                                const { [variant.id]: _, ...rest } = current
+                                return rest
+                              })
+                            }}>
                               <Trash2 className="mr-2 h-3.5 w-3.5" /> Remove
                             </Button>
                           </div>
 
-+                         <div className="grid gap-4 md:grid-cols-[140px_1fr_1.4fr_90px_90px_90px_90px]">
-                            <div>
-                              <Label className="text-[10px] uppercase text-muted-foreground">Kind</Label>
-                              <select
-                                value={variant.kind}
-                                onChange={event => updateVariant(variant.id, {
-                                  kind: event.target.value as ProductVariantOption['kind'],
-                                  customizationOptions: event.target.value === 'custom_text' && variant.customizationOptions.length === 0
-                                    ? [{ type: 'text', label: 'Text', maxChars: '12', priceAdd: '0' }]
-                                    : variant.customizationOptions,
-                                })}
-                                className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
-                              >
-                                <option value="single_color">Single Color</option>
-                                <option value="preset_pack">Preset Pack</option>
-                                <option value="custom_text">Custom Text</option>
-                              </select>
-                            </div>
+                          <div className="rounded-lg border border-border/60 bg-secondary/15 p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Base</p>
+                            <div className="grid gap-4 md:grid-cols-[1fr_1.4fr_90px_90px_90px]">
                             <div>
                               <Label className="text-[10px] uppercase text-muted-foreground">Label</Label>
                               <Input value={variant.name} onChange={event => updateVariant(variant.id, { name: event.target.value })} className="mt-1 h-9" />
@@ -1378,6 +1533,82 @@ export function ProductEditor({ slug }: { slug: string }) {
                               <Label className="text-[10px] uppercase text-muted-foreground">Print Min</Label>
                               <Input type="number" min="0" value={variant.estimatedPrintMinutes} onChange={event => updateVariant(variant.id, { estimatedPrintMinutes: event.target.value })} className="mt-1 h-9" placeholder="mins" />
                             </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-lg border border-border/60 bg-secondary/15 p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Formato</p>
+                            <div className="grid gap-4 md:grid-cols-[120px_1fr_1.5fr_120px]">
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Ratio</Label>
+                                <Input
+                                  value={variantAspectRatioTexts[variant.id] ?? ''}
+                                  onChange={event => {
+                                    setVariantAspectRatioTexts(current => ({
+                                      ...current,
+                                      [variant.id]: event.target.value,
+                                    }))
+                                  }}
+                                  onBlur={() => {
+                                    const text = variantAspectRatioTexts[variant.id] ?? ''
+                                    const [width, height] = text.split(':').map(value => Number(value.trim()))
+                                    updateVariant(variant.id, { aspectRatio: width > 0 && height > 0 ? [width, height] : undefined })
+                                  }}
+                                  className="mt-1 h-9"
+                                  placeholder="1:1"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Crop Label</Label>
+                                <Input value={variant.formatLabel ?? ''} onChange={event => updateVariant(variant.id, { formatLabel: event.target.value })} className="mt-1 h-9" placeholder="Formato Quadrado · crop 1:1" />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Upload Guidance</Label>
+                                <Input value={variant.uploadGuidance ?? ''} onChange={event => updateVariant(variant.id, { uploadGuidance: event.target.value })} className="mt-1 h-9" placeholder="Ideal para retratos..." />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Tipo</Label>
+                                <Input value={variant.variantType ?? ''} onChange={event => updateVariant(variant.id, { variantType: event.target.value })} className="mt-1 h-9" placeholder="led" />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-lg border border-border/60 bg-secondary/15 p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Texto no Preview</p>
+                            <div className="grid gap-4 md:grid-cols-6">
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Left %</Label>
+                                <Input type="number" value={variant.textOverlay?.left ?? ''} onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), left: event.target.value === '' ? undefined : Number(event.target.value) } })} className="mt-1 h-9" />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Bottom %</Label>
+                                <Input type="number" value={variant.textOverlay?.bottom ?? ''} onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), bottom: event.target.value === '' ? undefined : Number(event.target.value) } })} className="mt-1 h-9" />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Width %</Label>
+                                <Input type="number" value={variant.textOverlay?.width ?? ''} onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), width: event.target.value === '' ? undefined : Number(event.target.value) } })} className="mt-1 h-9" />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Align</Label>
+                                <select
+                                  value={variant.textOverlay?.align ?? 'center'}
+                                  onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), align: event.target.value as 'left' | 'center' | 'right' } })}
+                                  className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                >
+                                  <option value="left">Left</option>
+                                  <option value="center">Center</option>
+                                  <option value="right">Right</option>
+                                </select>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Font px</Label>
+                                <Input type="number" value={variant.textOverlay?.fontSize ?? ''} onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), fontSize: event.target.value === '' ? undefined : Number(event.target.value) } })} className="mt-1 h-9" />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Color</Label>
+                                <Input value={variant.textOverlay?.color ?? ''} onChange={event => updateVariant(variant.id, { textOverlay: { ...(variant.textOverlay ?? {}), color: event.target.value } })} className="mt-1 h-9" placeholder="#ffffff" />
+                              </div>
+                            </div>
                           </div>
 
                           <div className="mt-4 border-t border-border/50 pt-4">
@@ -1389,20 +1620,36 @@ export function ProductEditor({ slug }: { slug: string }) {
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                               {variant.colors.map((color, colorIndex) => (
-                                <div key={`${variant.id}-color-${colorIndex}`} className="flex items-center gap-2 rounded-lg bg-secondary/30 p-1.5 pr-2 border border-border/50">
-                                  <span className="h-6 w-6 rounded-full border border-border shadow-sm" style={{ backgroundColor: color.colorHex ?? colors.find(item => item.name === color.colorName)?.hex ?? '#d1d5db' }} />
-                                  <select
-                                    value={color.colorName}
-                                    onChange={event => updateVariantColor(variant.id, colorIndex, event.target.value)}
-                                    className="h-7 min-w-0 flex-1 bg-transparent text-[11px] font-medium outline-none"
-                                  >
-                                    {colors.map(globalColor => (
-                                      <option key={globalColor.name} value={globalColor.name}>{globalColor.name}</option>
-                                    ))}
-                                  </select>
-                                  <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => updateVariant(variant.id, { colors: variant.colors.filter((_, index) => index !== colorIndex) })}>
-                                    <X className="h-3 w-3" />
-                                  </button>
+                                <div key={`${variant.id}-color-${colorIndex}`} className="space-y-2 rounded-lg bg-secondary/30 p-2 border border-border/50">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="h-6 w-6 rounded-full border border-border shadow-sm"
+                                      style={{
+                                        backgroundColor: color.hex ?? colors.find(item => item.name === color.name)?.hex ?? '#d1d5db',
+                                        backgroundImage: color.imageUrl ? `url(${color.imageUrl})` : undefined,
+                                        backgroundSize: 'cover',
+                                        backgroundPosition: 'center',
+                                      }}
+                                    />
+                                    <select
+                                      value={color.name}
+                                      onChange={event => updateVariantColor(variant.id, colorIndex, event.target.value)}
+                                      className="h-7 min-w-0 flex-1 bg-transparent text-[11px] font-medium outline-none"
+                                    >
+                                      {colors.map(globalColor => (
+                                        <option key={globalColor.name} value={globalColor.name}>{globalColor.name}</option>
+                                      ))}
+                                    </select>
+                                    <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => updateVariant(variant.id, { colors: variant.colors.filter((_, index) => index !== colorIndex) })}>
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                  <Input
+                                    value={color.imageUrl ?? ''}
+                                    onChange={event => updateVariantColorImage(variant.id, colorIndex, event.target.value)}
+                                    className="h-7 text-[11px]"
+                                    placeholder="Texture image URL"
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -1457,6 +1704,68 @@ export function ProductEditor({ slug }: { slug: string }) {
                               )}
                             </div>
                           )}
+
+                          <div className="mt-4 border-t border-border/50 pt-4">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Partes de Produção</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {variant.parts.length ? 'Override desta variante.' : 'Sem override: usa a receita default do produto.'}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => useDefaultRecipeForVariant(variant.id)}>
+                                  Usar default
+                                </Button>
+                                <Button type="button" variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => addVariantPart(variant.id)}>
+                                  + Parte
+                                </Button>
+                              </div>
+                            </div>
+                            {variant.parts.length > 0 && (
+                              <div className="space-y-2">
+                                {variant.parts.map((part, partIndex) => (
+                                  <div key={`${variant.id}-part-${partIndex}`} className="grid gap-2 rounded-lg border border-border bg-secondary/20 p-3 md:grid-cols-[1fr_90px_110px_120px_90px_auto]">
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Label</Label>
+                                      <Input value={part.label} onChange={event => updateVariantPart(variant.id, partIndex, { label: event.target.value })} className="mt-1 h-8" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Grams</Label>
+                                      <Input type="number" min="1" value={part.grams} onChange={event => updateVariantPart(variant.id, partIndex, { grams: event.target.value })} className="mt-1 h-8" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Material</Label>
+                                      <select value={part.materialType ?? 'PLA'} onChange={event => updateVariantPart(variant.id, partIndex, { materialType: event.target.value as DraftVariantPart['materialType'] })} className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
+                                        <option value="PLA">PLA</option>
+                                        <option value="PETG">PETG</option>
+                                        <option value="ABS">ABS</option>
+                                        <option value="TPU">TPU</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Color Source</Label>
+                                      <select value={part.colorSource ?? 'partColor'} onChange={event => updateVariantPart(variant.id, partIndex, { colorSource: event.target.value as DraftVariantPart['colorSource'] })} className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
+                                        <option value="variantColor">Variant</option>
+                                        <option value="partColor">Part</option>
+                                        <option value="lithophane">Lithophane</option>
+                                        <option value="none">None</option>
+                                      </select>
+                                    </div>
+                                    <label className="flex items-end gap-2 pb-2 text-xs text-muted-foreground">
+                                      <input type="checkbox" checked={Boolean(part.requiresLithophaneProcessing)} onChange={event => updateVariantPart(variant.id, partIndex, { requiresLithophaneProcessing: event.target.checked })} />
+                                      Litho
+                                    </label>
+                                    <div className="flex items-end">
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => updateVariant(variant.id, { parts: variant.parts.filter((_, index) => index !== partIndex) })}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </article>
                       ))}
                     </div>
@@ -1472,29 +1781,9 @@ export function ProductEditor({ slug }: { slug: string }) {
                   <h2 className="text-lg font-bold text-foreground">Manufacturing Config</h2>
                   <p className="text-sm text-muted-foreground">Workshop details that don't affect the marketing copy.</p>
                 </div>
-                <div className="grid gap-6 md:grid-cols-3">
-                  <div>
-                    <Label htmlFor="color-selection-mode">Fallback Color Logic</Label>
-                    <select
-                      id="color-selection-mode"
-                      value={colorSelectionMode ?? 'single'}
-                      onChange={event => setColorSelectionMode(event.target.value as Product['colorSelectionMode'])}
-                      className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      <option value="single">Single color swatches</option>
-                      <option value="flexible_parts">Customer selects each recipe part</option>
-                      <option value="preset_options">Forced selection via variants</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="multi-color-count">Production Color Count</Label>
-                    <Input id="multi-color-count" type="number" min="1" value={multiColorCount} onChange={event => setMultiColorCount(event.target.value)} className="mt-1.5" />
-                  </div>
-                  <div>
-                    <Label htmlFor="multi-color-price-add">Flexible Extra Charge (€)</Label>
-                    <Input id="multi-color-price-add" type="number" min="0" step="0.1" value={multiColorPriceAdd} onChange={event => setMultiColorPriceAdd(event.target.value)} className="mt-1.5" />
-                  </div>
-                </div>
+                <p className="rounded-lg border border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+                  As variantes e as respetivas partes são agora configuradas nos cards de variante. Esta tab fica como fallback global de produção.
+                </p>
               </section>
 
               <section className="rounded-xl border border-border bg-background p-6 shadow-sm">
@@ -1626,6 +1915,58 @@ export function ProductEditor({ slug }: { slug: string }) {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-border bg-background p-6 shadow-sm">
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-foreground">Production Job Templates</h3>
+                        <p className="text-xs text-muted-foreground">Define jobs created when order requests are approved.</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">JSON</Badge>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      <span className="font-semibold">colorSource:</span>{' '}
+                      <code className="rounded bg-secondary px-1">baseColor</code> (uses customer's color),{' '}
+                      <code className="rounded bg-secondary px-1">lithophane</code> → Branco,{' '}
+                      <code className="rounded bg-secondary px-1">none</code> → Branco
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <textarea
+                      value={productionJobTemplatesJson}
+                      onChange={event => setProductionJobTemplatesJson(event.target.value)}
+                      rows={12}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono leading-relaxed focus:border-primary outline-none"
+                      placeholder='[{ "partLabel": "Moldura", "colorSource": "baseColor", "materialGrams": 60, "materialType": "PLA" }]'
+                    />
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(productionJobTemplatesJson)
+                        if (!Array.isArray(parsed)) return <p className="text-[11px] text-destructive">Must be an array</p>
+                        return (
+                          <div className="space-y-1">
+                            {parsed.map((t: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-[11px]">
+                                <span className="font-medium">{i + 1}.</span>
+                                <span>{t.partLabel || 'Unnamed'}</span>
+                                <Badge variant="secondary" className="h-4 px-1 text-[9px]">{t.colorSource}</Badge>
+                                <span className="text-muted-foreground">{t.materialGrams}g</span>
+                                {t.requiresLithophaneProcessing && (
+                                  <Badge variant="outline" className="h-4 px-1 text-[9px] border-amber-300 bg-amber-50 text-amber-700" title="Requires manual STL generation (ItsLitho)">
+                                    ⚠️ Lithophane
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      } catch {
+                        return <p className="text-[11px] text-destructive">Invalid JSON</p>
+                      }
+                    })()}
                   </div>
                 </section>
 

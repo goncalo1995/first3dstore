@@ -10,6 +10,12 @@ export default function AdminOrdersPage() {
     orders: {
       productionJobs: {},
     },
+    orderRequests: {
+      $: {
+        order: { createdAt: 'desc' },
+      },
+    },
+    productionJobs: {},
   })
 
   if (dataQuery.isLoading) {
@@ -21,6 +27,8 @@ export default function AdminOrdersPage() {
   }
 
   const orders = (dataQuery.data?.orders ?? []) as OrderRecord[]
+  const orderRequests = (dataQuery.data?.orderRequests ?? []) as any[]
+  const allProductionJobs = (dataQuery.data?.productionJobs ?? []) as any[]
 
-  return <OrdersManager orders={orders} />
+  return <OrdersManager orders={orders} orderRequests={orderRequests} allProductionJobs={allProductionJobs} />
 }

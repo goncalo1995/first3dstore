@@ -43,7 +43,7 @@ export function LoginPanel() {
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-foreground">GolfPrint Admin</h1>
+            <h1 className="text-xl font-semibold text-foreground">Foto3D Admin</h1>
             <p className="text-sm text-muted-foreground">Manage products, colors, and orders.</p>
           </div>
         </div>

@@ -21,8 +21,10 @@ export interface CartItemVariant {
   name: string
   kind: 'single_color' | 'preset_pack' | 'custom_text'
   colors: {
-    colorName: string
-    colorHex: string
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
   }[]
   image?: string
   priceAdd?: number
@@ -56,7 +58,7 @@ interface CartContextType {
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
-const CART_STORAGE_KEY = 'golfprint-cart'
+const CART_STORAGE_KEY = 'foto3d-cart'
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])

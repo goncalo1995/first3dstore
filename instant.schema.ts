@@ -86,6 +86,7 @@ const _schema = i.schema({
       priceFrom: i.number(),
       priceTo: i.number(),
       salePrice: i.number().optional(),
+      aspectRatio: i.json<[number, number]>().optional(),
       benefit: i.string(),
       description: i.string(),
       image: i.string(),
@@ -99,6 +100,7 @@ const _schema = i.schema({
       }[]>(),
       multiColor: i.boolean(),
       multiColorCount: i.number(),
+      isModular: i.boolean().indexed().optional(),
       colorSelectionMode: i.string<'single' | 'flexible_parts' | 'preset_options'>().optional(),
       multiColorPriceAdd: i.number().optional(),
       variants: i.json<{
@@ -109,9 +111,33 @@ const _schema = i.schema({
         priceAdd?: number
         finalPrice?: number
         stockQuantity?: number
+        aspectRatio?: [number, number]
+        formatLabel?: string
+        uploadGuidance?: string
+        variantType?: 'led' | 'candle' | 'bulb' | string
+        requiresPartColorSelection?: boolean
+        textOverlay?: {
+          x?: number
+          y?: number
+          bottom?: number
+          left?: number
+          width?: number
+          align?: 'left' | 'center' | 'right'
+          fontSize?: number
+          color?: string
+        }
         colors: {
-          colorName: string
-          colorHex?: string
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+        }[]
+        parts?: {
+          label: string
+          grams: number
+          materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+          colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+          requiresLithophaneProcessing?: boolean
         }[]
         customizationOptions?: {
           type: 'initials' | 'text' | 'message'
@@ -130,16 +156,25 @@ const _schema = i.schema({
         source?: 'upload' | 'tripo3d'
       }[]>().optional(),
       slicerNotes: i.string().optional(),
-      featured: i.boolean(),
-      featuredRank: i.number(),
+      featured: i.boolean().indexed(),
+      featuredRank: i.number().indexed(),
       sortOrder: i.number().optional(),
       materialGrams: i.number().optional(),
       materialRecipe: i.json<{
         label: string
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+        colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+        requiresLithophaneProcessing?: boolean
       }[]>().optional(),
-      visible: i.boolean(),
+      productionJobTemplates: i.json<{
+        partLabel: string
+        colorSource: 'baseColor' | 'none' | 'lithophane'
+        materialGrams: number
+        materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+        requiresLithophaneProcessing?: boolean
+      }[]>().optional(),
+      visible: i.boolean().indexed(),
       updatedAt: i.date(),
     }),
     marketingPosts: i.entity({
@@ -236,6 +271,32 @@ const _schema = i.schema({
       createdAt: i.date(),
       updatedAt: i.date(),
     }),
+    orderRequests: i.entity({
+      customerName: i.string(),
+      customerEmail: i.string().indexed(),
+      customerPhone: i.string().optional(),
+      imageUrl: i.string().optional(),
+      companyName: i.string().optional(),
+      baseColor: i.string<'black' | 'wood'>().optional(),
+      productSlug: i.string().indexed().optional(),
+      productName: i.string().optional(),
+      variantId: i.string().optional(),
+      variantName: i.string().optional(),
+      selectedPrice: i.number().optional(),
+      lightMode: i.string<'desligada' | 'quente' | 'fria'>().optional(),
+      canvasConfig: i.json<{
+        version: number
+        type: 'simple' | 'modular-list'
+        [key: string]: any
+      }>().optional(),
+      engravingText: i.string().optional(),
+      leadType: i.string<'photo_request' | 'b2b'>().optional(),
+      isPaid: i.boolean().optional(),
+      notes: i.string().optional(),
+      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
+      createdAt: i.date().indexed(),
+      updatedAt: i.date(),
+    }),
     productInventory: i.entity({
       productSlug: i.string().unique().indexed(),
       activeColorNames: i.json<string[]>(),
@@ -267,12 +328,16 @@ const _schema = i.schema({
       userId: i.string().indexed(),
     }),
     productionJobs: i.entity({
-      orderId: i.string().indexed(),
-      orderItemIndex: i.number(),
+      orderId: i.string().indexed().optional(),
+      orderRequestId: i.string().indexed().optional(),
+      orderItemIndex: i.number().optional(),
       productId: i.string().indexed().optional(),
+      productSlug: i.string().indexed().optional(),
       selectedVariantId: i.string().optional(),
       selectedVariantName: i.string().optional(),
       productName: i.string(),
+      imageUrl: i.string().optional(),
+      source: i.string<'order' | 'order_request'>().optional(),
       partLabel: i.string(),
       colorName: i.string().indexed(),
       colorHex: i.string(),

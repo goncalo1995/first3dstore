@@ -4,6 +4,7 @@ export type ProductCategory = string
 export interface ProductColor {
   name: string
   hex: string
+  imageUrl?: string
   stockQuantity?: number
   gramsAvailable?: number
 }
@@ -24,11 +25,37 @@ export interface ProductVariantOption {
   finalPrice?: number
   stockQuantity?: number
   estimatedPrintMinutes?: number // For print scheduling
+  aspectRatio?: [number, number]
+  formatLabel?: string
+  uploadGuidance?: string
+  variantType?: 'led' | 'candle' | 'bulb' | string
+  requiresPartColorSelection?: boolean
+  textOverlay?: {
+    x?: number
+    y?: number
+    bottom?: number
+    left?: number
+    width?: number
+    align?: 'left' | 'center' | 'right'
+    fontSize?: number
+    color?: string
+  }
   colors: {
-    colorName: string
-    colorHex?: string
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
   }[]
+  parts?: ProductVariantPart[]
   customizationOptions?: CustomizationOption[]
+}
+
+export interface ProductVariantPart {
+  label: string
+  grams: number
+  materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  requiresLithophaneProcessing?: boolean
 }
 
 export interface ProductStlFile {
@@ -50,6 +77,7 @@ export interface Product {
   priceFrom: number
   priceTo: number
   salePrice?: number
+  aspectRatio?: [number, number]
   benefit: string
   description: string
   image: string // can be local path or external URL
@@ -67,6 +95,7 @@ export interface Product {
   featured?: boolean
   featuredRank?: number
   sortOrder?: number
+  isModular?: boolean
   inStock?: boolean // non-customizable stock can dispatch faster
   acceptsCustomColor?: boolean // can request any hex color
   allowCustomColorRequest?: boolean
@@ -111,6 +140,27 @@ export interface ProductMaterialRequirement {
   colorName?: string
   grams: number
   materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  requiresLithophaneProcessing?: boolean
+}
+
+export interface ProductionJobTemplate {
+  partLabel: string
+  colorSource: 'baseColor' | 'none' | 'lithophane'
+  materialGrams: number
+  materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  requiresLithophaneProcessing?: boolean
+}
+
+export const baseColorToGlobalColorName: Record<string, string> = {
+  black: 'Preto',
+  wood: 'Madeira',
+}
+
+export const colorSourceToGlobalColorName: Record<string, string> = {
+  baseColor: '', // dynamic based on orderRequest.baseColor
+  none: 'Branco',
+  lithophane: 'Branco', // lithophane panels use white/natural
 }
 
 export interface ProductCategoryRecord {
@@ -197,12 +247,13 @@ export function deriveProductDisplayColors(product: {
 
   product.variants?.forEach(variant => {
     variant.colors?.forEach(color => {
-      const name = color.colorName?.trim()
+      const name = color.name?.trim()
       if (!name || byName.has(name)) return
       const inventoryColor = inventoryColorByName.get(name)
       byName.set(name, {
         name,
-        hex: color.colorHex ?? inventoryColor?.colorHex ?? '#d1d5db',
+        hex: color.hex ?? inventoryColor?.colorHex ?? '#d1d5db',
+        imageUrl: color.imageUrl,
         stockQuantity: inventoryColor?.stockQuantity,
         gramsAvailable: inventoryColor?.gramsAvailable,
       })
@@ -246,31 +297,31 @@ export const defaultGlobalColors: GlobalColor[] = colorPalette.map(color => ({
 }))
 
 export const products: Product[] = [
-  {
-    id: '1',
-    name: 'Golf Ball Planter',
-    slug: 'golf-ball-planter',
-    category: 'gift',
-    priceFrom: 15,
-    priceTo: 15,
-    benefit: 'Never lose your ball marker again',
-    description: 'A distinctive ball planter that can hold a golf ball. Personalise with your initials for a truly unique piece that stands out on any green.',
-    image: 'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
-    images: [
-      'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
-      'https://files.golfprint.pt/products/GolfBallPlanter-2.webp'
-    ],
-    colors: [
-      { name: 'Branco', hex: '#ffffff' },
-    ],
-    customizable: false,
-    featured: true,
-    featuredRank: 1,
-    materialGrams: 12,
-    materialRecipe: [{ label: 'Base', grams: 12 }],
-    acceptsCustomColor: false,
-    inStock: true,
-  },
+  // {
+  //   id: '1',
+  //   name: 'Golf Ball Planter',
+  //   slug: 'golf-ball-planter',
+  //   category: 'gift',
+  //   priceFrom: 15,
+  //   priceTo: 15,
+  //   benefit: 'Never lose your ball marker again',
+  //   description: 'A distinctive ball planter that can hold a golf ball. Personalise with your initials for a truly unique piece that stands out on any green.',
+  //   image: 'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
+  //   images: [
+  //     'https://files.golfprint.pt/products/GolfBallPlanter-1.webp',
+  //     'https://files.golfprint.pt/products/GolfBallPlanter-2.webp'
+  //   ],
+  //   colors: [
+  //     { name: 'Branco', hex: '#ffffff' },
+  //   ],
+  //   customizable: false,
+  //   featured: true,
+  //   featuredRank: 1,
+  //   materialGrams: 12,
+  //   materialRecipe: [{ label: 'Base', grams: 12 }],
+  //   acceptsCustomColor: false,
+  //   inStock: true,
+  // },
   // {
   //   "id": "golf-ball-alignment-stencil",
   //   "name": "Three-Line Golf Ball Alignment Stencil",
@@ -567,8 +618,9 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     priceFrom: catalogProduct.priceFrom ?? 0,
     priceTo: catalogProduct.priceTo ?? catalogProduct.priceFrom ?? 0,
     salePrice: catalogProduct.salePrice,
-    benefit: catalogProduct.benefit ?? 'Made in small batches for golfers',
-    description: catalogProduct.description ?? 'A GolfPrint product configured from the workshop catalog.',
+    aspectRatio: catalogProduct.aspectRatio,
+    benefit: catalogProduct.benefit ?? 'Made with love',
+    description: catalogProduct.description ?? 'A product configured from the catalog.',
     image,
     images: catalogProduct.images?.length ? catalogProduct.images : [image],
     colors: deriveProductDisplayColors({
@@ -588,6 +640,7 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     featured: catalogProduct.featured ?? false,
     featuredRank: catalogProduct.featuredRank ?? 99,
     sortOrder: catalogProduct.sortOrder ?? 99,
+    isModular: catalogProduct.isModular ?? false,
     acceptsCustomColor: catalogProduct.acceptsCustomColor ?? false,
     allowCustomColorRequest: catalogProduct.allowCustomColorRequest ?? false,
     materialGrams: catalogProduct.materialGrams ?? 25,
@@ -645,6 +698,7 @@ export function applyCatalogProduct(product: Product, catalogProduct?: CatalogPr
     customizationOptions: catalogProduct.customizationOptions ?? product.customizationOptions,
     colorSelectionMode: catalogProduct.colorSelectionMode ?? product.colorSelectionMode,
     multiColorPriceAdd: catalogProduct.multiColorPriceAdd ?? product.multiColorPriceAdd,
+    aspectRatio: catalogProduct.aspectRatio ?? product.aspectRatio,
     variants: catalogProduct.variants ?? product.variants,
     stlFiles: catalogProduct.stlFiles ?? product.stlFiles,
     slicerNotes: catalogProduct.slicerNotes ?? product.slicerNotes,
@@ -653,6 +707,7 @@ export function applyCatalogProduct(product: Product, catalogProduct?: CatalogPr
     featured: catalogProduct.featured ?? product.featured,
     featuredRank: catalogProduct.featuredRank ?? product.featuredRank,
     sortOrder: catalogProduct.sortOrder ?? product.sortOrder,
+    isModular: catalogProduct.isModular ?? product.isModular,
   }
   mergedProduct.colors = deriveProductDisplayColors({
     variants: mergedProduct.variants,

@@ -662,7 +662,8 @@ export async function finishPrintingJobs(jobIds: string[], printerId: string, sp
     productionJobs: { $: { where: { id: { $in: jobIds } } } }
   })
   const orderIds = Array.from(new Set(jobsResult.productionJobs.map((j: any) => j.orderId)))
-  await syncOrderStates(orderIds)
+    .filter(id => typeof id === 'string' && !id.startsWith('request-')) // Skip placeholder order IDs from order requests
+  if (orderIds.length > 0) await syncOrderStates(orderIds)
 
   return { success: true }
 }
@@ -770,7 +771,8 @@ export async function updateJobStatuses(
     }
   })
   const orderIds = Array.from(new Set(jobsResult.productionJobs.map((j: any) => j.orderId)))
-  await syncOrderStates(orderIds)
+    .filter(id => typeof id === 'string' && !id.startsWith('request-')) // Skip placeholder order IDs from order requests
+  if (orderIds.length > 0) await syncOrderStates(orderIds)
 
   return { updated: jobIds.length }
 }

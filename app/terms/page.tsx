@@ -3,8 +3,8 @@ import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Termos e Condições | GolfPrint.pt',
-  description: 'Termos e condições para encomendar na GolfPrint.pt.',
+  title: 'Termos e Condições | Foto3D.pt',
+  description: 'Termos e condições genéricos da Foto3D.pt.',
 }
 
 export default function TermsPage() {
@@ -12,67 +12,58 @@ export default function TermsPage() {
     <>
       <Header />
       <main className="min-h-screen">
-        <section className="bg-secondary border-b border-border">
+        <section className="border-b border-border bg-secondary">
           <div className="container mx-auto px-4 py-12 md:py-16">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground">Termos e Condições</h1>
-            <p className="mt-3 max-w-2xl text-muted-foreground">
-              Última atualização: 30 de abril de 2026
-            </p>
+            <h1 className="text-3xl font-bold text-foreground md:text-4xl">Termos e Condições</h1>
+            <p className="mt-3 max-w-2xl text-muted-foreground">Última atualização: 8 de maio de 2026</p>
           </div>
         </section>
 
         <section className="container mx-auto max-w-3xl px-4 py-12">
           <div className="space-y-8 text-sm leading-7 text-muted-foreground">
             <p>
-              A GolfPrint.pt é um pequeno projeto em fase de teste de acessórios de golfe impressos em 3D, fabricados em Portugal. Antes de aceitar encomendas pagas à escala, a identidade do vendedor, dados fiscais, informações do Livro de Reclamações e quaisquer dados de registo comercial obrigatórios devem ser preenchidos aqui.
+              Estes termos são um texto genérico provisório para a Foto3D.pt e devem ser revistos e substituídos por informação legal completa antes de aceitar encomendas públicas pagas.
             </p>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Encomendas</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Encomendas e Orçamentos</h2>
               <p>
-              As encomendas são atualmente confirmadas manualmente, normalmente através do WhatsApp ou e-mail. O envio de um carrinho de compras é um pedido de encomenda, não uma aceitação automática. Confirmaremos a disponibilidade, os detalhes finais de entrega e as instruções de pagamento antes da produção ou expedição.
+                Os pedidos submetidos no site representam uma intenção de encomenda ou pedido de orçamento. A confirmação final de preço, prazo, personalização, pagamento e produção será feita manualmente por email, WhatsApp ou outro canal acordado.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Produtos</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Produtos Personalizados</h2>
               <p>
-              Os produtos são impressos em 3D em pequenas séries. Podem ocorrer pequenas variações de textura, cor, acabamento e dimensões. As fotografias dos produtos são ilustrativas e as cores podem variar consoante o ecrã e o lote de filamento.
+                As molduras luminosas, litofanias, logótipos e peças empresariais são produzidos de acordo com ficheiros, fotografias ou instruções fornecidas pelo cliente. Pequenas variações de textura, acabamento, cor e intensidade luminosa podem ocorrer.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Artigos Personalizados</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Fotografias e Ficheiros</h2>
               <p>
-              Os artigos personalizados são feitos de acordo com as especificações do cliente. Verifique cuidadosamente as iniciais, texto, cores e quantidade antes de confirmar. Uma vez iniciada a produção, podem não ser possíveis alterações.
+                O cliente é responsável por enviar imagens ou ficheiros que tenha direito a utilizar. A Foto3D.pt pode recusar, pedir substituição ou ajustar ficheiros que não tenham qualidade suficiente para produção.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Disponibilidade e Expedição</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Prazos, Pagamento e Envio</h2>
               <p>
-              Os prazos de expedição indicados nas páginas dos produtos são estimativas. Artigos em stock podem ser expedidos mais rapidamente, enquanto pedidos personalizados, feitos sob encomenda, de grande volume ou com cores personalizadas podem demorar mais tempo. Se o prazo for importante, contacte-nos antes de encomendar.
-              </p>
-            </div>
-
-            <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Recolha e Envio</h2>
-              <p>
-              A recolha em Carcavelos pode estar disponível mediante acordo. O envio para Portugal continental é atualmente gratuito acima de 50€, ou 9,99€ abaixo de 50€. As opções de envio, preços e disponibilidade são confirmados antes do pagamento.
+                Prazos de produção e envio são estimativas e podem variar consoante a complexidade, disponibilidade de materiais e volume de pedidos. As condições de pagamento e envio serão confirmadas antes do início da produção.
               </p>
             </div>
 
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Devoluções</h2>
               <p>
-              Para produtos não personalizados, podem aplicar-se os direitos de devolução do consumidor ao abrigo das regras portuguesas e da UE para vendas à distância. Os produtos personalizados feitos sob medida podem ser excluídos dos direitos de cancelamento, exceto se estiverem defeituosos ou não corresponderem à descrição. Esta secção deve ser revista para a sua configuração legal exata antes do lançamento.
+                Produtos personalizados podem estar sujeitos a regras específicas de cancelamento e devolução. Esta secção deve ser adaptada à situação legal final do vendedor antes do lançamento comercial.
               </p>
             </div>
 
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Contacto</h2>
               <p>
-              Para perguntas sobre uma encomenda, contacte hello@golfprint.pt ou envie mensagem no Instagram/WhatsApp. Substitua esta secção pelo nome legal do vendedor, NIF, morada comercial e dados do Livro de Reclamações antes de aceitar encomendas públicas pagas.
+                Para perguntas sobre estes termos, contacte geral@foto3d.pt. Dados legais completos do vendedor, NIF, morada e informação obrigatória serão adicionados numa versão final.
               </p>
             </div>
           </div>

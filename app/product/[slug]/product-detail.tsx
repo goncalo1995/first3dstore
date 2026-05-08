@@ -86,7 +86,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
     return inventoryColor ?? { name: colorName, hex: colorHex ?? '#d1d5db' }
   }
   const selectedOptionColors = useMemo(() => {
-    return selectedVariant?.colors.map(color => getOptionColor(color.colorName, color.colorHex)) ?? []
+    return selectedVariant?.colors.map(color => getOptionColor(color.name, color.hex)) ?? []
   }, [displayProduct.colors, selectedVariant])
   const selectedParts = useMemo(() => {
     if (!usesFlexibleParts) return []
@@ -250,8 +250,10 @@ export function ProductDetail({ product }: ProductDetailProps) {
     }
 
     const selectedOptionCartColors = selectedVariant?.colors.map(color => ({
-      colorName: color.colorName,
-      colorHex: getOptionColor(color.colorName, color.colorHex).hex,
+      name: color.name,
+      hex: getOptionColor(color.name, color.hex).hex,
+      imageUrl: color.imageUrl,
+      globalColorId: color.globalColorId,
     }))
     const primaryOptionColor = selectedOptionColors[0]
 
@@ -324,7 +326,7 @@ Por favor, confirme a disponibilidade!`
   const handleShare = async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : `/product/${product.slug}`
     const shareTitle = displayProduct.name
-    const shareText = `${displayProduct.name} da GolfPrint.pt - ${displayProduct.benefit}`
+    const shareText = `${displayProduct.name} da Foto3d.pt - ${displayProduct.benefit}`
     
     const shareData: ShareData = {
       title: shareTitle,
@@ -551,7 +553,7 @@ Por favor, confirme a disponibilidade!`
                       <div className="grid gap-3 sm:grid-cols-2">
                         {displayProduct.variants?.map(variant => {
                           const selected = selectedVariant?.id === variant.id
-                          const variantColors = variant.colors.map(color => getOptionColor(color.colorName, color.colorHex))
+                          const variantColors = variant.colors.map(color => getOptionColor(color.name, color.hex))
                           const variantPriceLabel = variant.finalPrice
                             ? `€${variant.finalPrice.toFixed(2)}`
                             : (variant.priceAdd ?? 0) > 0

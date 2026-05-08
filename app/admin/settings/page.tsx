@@ -16,6 +16,7 @@ import {
   X,
   Eye,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +52,7 @@ import {
 const ENTITIES: {
   key: ExportableEntity
   label: string
-  icon: React.ElementType
+  icon: LucideIcon
   description: string
 }[] = [
   { key: 'catalogProducts', label: 'Products', icon: Package, description: 'All catalog products and variants' },
@@ -101,7 +102,7 @@ export default function SettingsPage() {
     try {
       const result = await exportData(entity)
       const date = new Date().toISOString().split('T')[0]
-      downloadJson(result.data, `golfprint-${entity}-backup-${date}.json`)
+      downloadJson(result.data, `foto3d.pt-${entity}-backup-${date}.json`)
       toast.success(`Exported ${result.count} ${entity} records`)
     } catch (err: any) {
       toast.error(`Export failed: ${err.message}`)

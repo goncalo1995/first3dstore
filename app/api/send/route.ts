@@ -12,7 +12,7 @@ function getRecipients() {
 }
 
 function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'GolfPrint <onboarding@resend.dev>'
+  return process.env.RESEND_FROM_EMAIL || 'Foto3D <onboarding@resend.dev>'
 }
 
 async function getMarketingPosts() {

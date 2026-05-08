@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import { Instagram, Mail } from 'lucide-react'
 
 export function Footer() {
@@ -9,21 +8,16 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           {/* Marca */}
           <div className="md:col-span-2">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <Image
-                src="/logo_horizontal.png"
-                alt="GolfPrint.pt Logótipo"
-                width={150}
-                height={30}
-              />
+            <Link href="/" className="mb-4 block text-xl font-bold tracking-tight text-foreground">
+              Foto3D.pt
             </Link>
             <p className="text-muted-foreground text-sm max-w-md leading-relaxed">
-              Acessórios de golfe impressos em 3D em pequenas séries, feitos com cuidado em Lisboa.
-              Artigos em stock e personalização opcional para golfistas que apreciam os detalhes.
+              Molduras luminosas, litofanias e peças 3D personalizadas feitas com cuidado em Lisboa.
+              Transformamos fotografias, marcas e espaços em objetos que brilham.
             </p>
             <div className="flex items-center gap-4 mt-6">
               <a
-                href="https://instagram.com/golfprint.pt"
+                href="#"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground transition-colors"
@@ -32,7 +26,7 @@ export function Footer() {
                 <Instagram className="w-5 h-5" />
               </a>
               <a
-                href="mailto:hello@golfprint.pt"
+                href="mailto:geral@foto3d.pt"
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 aria-label="Email"
               >
@@ -43,21 +37,21 @@ export function Footer() {
 
           {/* Links Rápidos */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Loja</h4>
+            <h4 className="font-semibold text-foreground mb-4">Produtos</h4>
             <ul className="space-y-3">
               <li>
-                <Link href="/shop?category=on-course" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  No Campo
+                <Link href="/#produtos" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Molduras luminosas
                 </Link>
               </li>
               <li>
-                <Link href="/shop?category=gift" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Presentes
+                <Link href="/#para-empresas" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Para Empresas
                 </Link>
               </li>
               <li>
-                <Link href="/shop?category=practice" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Treino
+                <Link href="/#galeria" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Galeria
                 </Link>
               </li>
             </ul>
@@ -83,8 +77,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/contact#b2b" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Parcerias B2B
+                <Link href="/#perguntas-frequentes" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Perguntas Frequentes
                 </Link>
               </li>
             </ul>
@@ -115,7 +109,7 @@ export function Footer() {
             Feito com cuidado em Lisboa, Portugal
           </p>
           <p className="text-sm text-muted-foreground">
-            {new Date().getFullYear()} GolfPrint.pt. Todos os direitos reservados.
+            {new Date().getFullYear()} Foto3D.pt. Todos os direitos reservados.
           </p>
         </div>
       </div>

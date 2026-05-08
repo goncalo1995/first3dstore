@@ -41,6 +41,7 @@ export function AdminSidebar({ email }: AdminSidebarProps) {
   const navItems = [
     { href: '/admin/products', label: 'Products', icon: Package },
     // { href: '/admin/colors', label: 'Colors', icon: Palette },
+    { href: '/admin/order-requests', label: 'Pre-Orders', icon: ClipboardList },
     { href: '/admin/orders', label: 'Orders', icon: ClipboardList },
     { href: '/admin/production', label: 'Production', icon: Hammer },
     { href: '/admin/marketing', label: 'Marketing', icon: Megaphone },

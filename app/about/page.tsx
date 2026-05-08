@@ -29,7 +29,7 @@ export default function AboutPage() {
               <div className="aspect-[4/3] relative rounded-lg overflow-hidden bg-secondary">
                 <Image
                   src="/about/workshop.jpg"
-                  alt="Oficina da GolfPrint em Lisboa"
+                  alt="Oficina da Foto3D em Lisboa"
                   fill
                   className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 50vw"
@@ -125,7 +125,7 @@ export default function AboutPage() {
             <div className="aspect-square relative rounded-lg overflow-hidden bg-secondary">
               <Image
                 src="/about/products.jpg"
-                alt="Acessórios de golfe acabados"
+                alt="Productos acabados de ser fabricados"
                 fill
                 className="object-cover"
                 sizes="(max-width: 768px) 100vw, 50vw"
