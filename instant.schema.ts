@@ -86,6 +86,7 @@ const _schema = i.schema({
       priceFrom: i.number(),
       priceTo: i.number(),
       salePrice: i.number().optional(),
+      aspectRatio: i.json<[number, number]>().optional(),
       benefit: i.string(),
       description: i.string(),
       image: i.string(),
@@ -113,9 +114,30 @@ const _schema = i.schema({
         aspectRatio?: [number, number]
         formatLabel?: string
         uploadGuidance?: string
+        variantType?: 'led' | 'candle' | 'bulb' | string
+        requiresPartColorSelection?: boolean
+        textOverlay?: {
+          x?: number
+          y?: number
+          bottom?: number
+          left?: number
+          width?: number
+          align?: 'left' | 'center' | 'right'
+          fontSize?: number
+          color?: string
+        }
         colors: {
-          colorName: string
-          colorHex?: string
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+        }[]
+        parts?: {
+          label: string
+          grams: number
+          materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+          colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+          requiresLithophaneProcessing?: boolean
         }[]
         customizationOptions?: {
           type: 'initials' | 'text' | 'message'
@@ -142,6 +164,8 @@ const _schema = i.schema({
         label: string
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+        colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+        requiresLithophaneProcessing?: boolean
       }[]>().optional(),
       productionJobTemplates: i.json<{
         partLabel: string

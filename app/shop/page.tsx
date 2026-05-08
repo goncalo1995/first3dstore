@@ -18,16 +18,21 @@ export default async function ShopPage() {
   return (
     <>
       <Header />
-      <main className="min-h-screen">
-        {/* Page Header */}
-        <section className="bg-secondary border-b border-border">
-          <div className="container mx-auto px-4 py-12 md:py-16">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-              Loja
+      <main className="min-h-screen bg-background">
+        <section className="border-b border-border bg-[#121212] text-white">
+          <div className="container mx-auto px-4 py-10 md:py-14">
+            <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-[#ffaa00]">Impressão 3D local</p>
+            <h1 className="mt-3 font-serif text-4xl font-bold tracking-tight md:text-5xl">
+              Loja foto3d
             </h1>
-            <p className="mt-3 text-muted-foreground max-w-2xl">
-              Mais que uma prenda, ofereça uma memória viva
+            <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-white/68">
+              Presentes personalizados, lithophanes e pequenas séries produzidas em Portugal, com revisão humana antes da produção.
             </p>
+            <div className="mt-6 flex flex-wrap gap-2 font-sans text-xs text-white/58">
+              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Lithophanes</span>
+              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Brindes</span>
+              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Peças por encomenda</span>
+            </div>
           </div>
         </section>
 

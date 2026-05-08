@@ -162,7 +162,7 @@ export default function EmpresasContent() {
                   </a>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="h-14 border-white/15 bg-white/8 px-8 font-sans text-base text-white backdrop-blur-md hover:bg-white/15 hover:text-white">
-                  <Link href="/produto/colecao-lithophane">Ver coleção base</Link>
+                  <Link href="/produto/moldura">Ver coleção base</Link>
                 </Button>
               </div>
               <div className="mt-9 grid gap-3 sm:grid-cols-2">

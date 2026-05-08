@@ -4,6 +4,7 @@ export type ProductCategory = string
 export interface ProductColor {
   name: string
   hex: string
+  imageUrl?: string
   stockQuantity?: number
   gramsAvailable?: number
 }
@@ -27,11 +28,34 @@ export interface ProductVariantOption {
   aspectRatio?: [number, number]
   formatLabel?: string
   uploadGuidance?: string
+  variantType?: 'led' | 'candle' | 'bulb' | string
+  requiresPartColorSelection?: boolean
+  textOverlay?: {
+    x?: number
+    y?: number
+    bottom?: number
+    left?: number
+    width?: number
+    align?: 'left' | 'center' | 'right'
+    fontSize?: number
+    color?: string
+  }
   colors: {
-    colorName: string
-    colorHex?: string
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
   }[]
+  parts?: ProductVariantPart[]
   customizationOptions?: CustomizationOption[]
+}
+
+export interface ProductVariantPart {
+  label: string
+  grams: number
+  materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  requiresLithophaneProcessing?: boolean
 }
 
 export interface ProductStlFile {
@@ -53,6 +77,7 @@ export interface Product {
   priceFrom: number
   priceTo: number
   salePrice?: number
+  aspectRatio?: [number, number]
   benefit: string
   description: string
   image: string // can be local path or external URL
@@ -115,6 +140,8 @@ export interface ProductMaterialRequirement {
   colorName?: string
   grams: number
   materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  requiresLithophaneProcessing?: boolean
 }
 
 export interface ProductionJobTemplate {
@@ -220,12 +247,13 @@ export function deriveProductDisplayColors(product: {
 
   product.variants?.forEach(variant => {
     variant.colors?.forEach(color => {
-      const name = color.colorName?.trim()
+      const name = color.name?.trim()
       if (!name || byName.has(name)) return
       const inventoryColor = inventoryColorByName.get(name)
       byName.set(name, {
         name,
-        hex: color.colorHex ?? inventoryColor?.colorHex ?? '#d1d5db',
+        hex: color.hex ?? inventoryColor?.colorHex ?? '#d1d5db',
+        imageUrl: color.imageUrl,
         stockQuantity: inventoryColor?.stockQuantity,
         gramsAvailable: inventoryColor?.gramsAvailable,
       })
@@ -590,6 +618,7 @@ export function createCatalogProductFallback(catalogProduct: CatalogProductRecor
     priceFrom: catalogProduct.priceFrom ?? 0,
     priceTo: catalogProduct.priceTo ?? catalogProduct.priceFrom ?? 0,
     salePrice: catalogProduct.salePrice,
+    aspectRatio: catalogProduct.aspectRatio,
     benefit: catalogProduct.benefit ?? 'Made in with love',
     description: catalogProduct.description ?? 'A product configured from the catalog.',
     image,
@@ -669,6 +698,7 @@ export function applyCatalogProduct(product: Product, catalogProduct?: CatalogPr
     customizationOptions: catalogProduct.customizationOptions ?? product.customizationOptions,
     colorSelectionMode: catalogProduct.colorSelectionMode ?? product.colorSelectionMode,
     multiColorPriceAdd: catalogProduct.multiColorPriceAdd ?? product.multiColorPriceAdd,
+    aspectRatio: catalogProduct.aspectRatio ?? product.aspectRatio,
     variants: catalogProduct.variants ?? product.variants,
     stlFiles: catalogProduct.stlFiles ?? product.stlFiles,
     slicerNotes: catalogProduct.slicerNotes ?? product.slicerNotes,

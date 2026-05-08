@@ -211,7 +211,7 @@ async function main() {
     dbAdmin.query({
       catalogProducts: {
         $: {
-          where: { slug: 'colecao-lithophane' },
+          where: { slug: 'moldura' },
         },
       },
     }),

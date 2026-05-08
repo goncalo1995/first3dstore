@@ -719,8 +719,8 @@ export default function HomePage() {
             <div>
               <h4 className="mb-4 font-sans text-sm font-semibold text-white">Produtos</h4>
               <ul className="space-y-2 font-sans text-sm text-white/60">
-                <li><Link href="/produto/colecao-lithophane" className="hover:text-[#ffaa00]">Coleção Lithophane</Link></li>
-                <li><Link href="/produto/colecao-lithophane" className="hover:text-[#ffaa00]">Molduras Personalizadas</Link></li>
+                <li><Link href="/produto/moldura" className="hover:text-[#ffaa00]">Moldura Lithophane</Link></li>
+                <li><Link href="/configurador?produto=moldura" className="hover:text-[#ffaa00]">Personalizar Moldura</Link></li>
                 <li><Link href="#galeria" className="hover:text-[#ffaa00]">Mapas 3D Brevemente</Link></li>
               </ul>
             </div>

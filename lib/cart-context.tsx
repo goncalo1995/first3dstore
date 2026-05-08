@@ -21,8 +21,10 @@ export interface CartItemVariant {
   name: string
   kind: 'single_color' | 'preset_pack' | 'custom_text'
   colors: {
-    colorName: string
-    colorHex: string
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
   }[]
   image?: string
   priceAdd?: number

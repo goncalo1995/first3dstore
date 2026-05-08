@@ -59,7 +59,7 @@ export function CartDrawer() {
       ? `\n  Personalizações: ${item.customizations.map(c => `${c.label}: "${c.value}"`).join(', ')}`
       : ''
     const colorText = item.selectedVariant
-      ? `Opção: ${item.selectedVariant.name} (${item.selectedVariant.colors.map(color => color.colorName).join(', ')})`
+      ? `Opção: ${item.selectedVariant.name} (${item.selectedVariant.colors.map(color => color.name).join(', ')})`
       : item.selectedParts?.length
       ? `Peças: ${item.selectedParts.map(part => `${part.label}: ${part.colorName}`).join(', ')}`
       : item.selectedColors && item.selectedColors.length > 1
@@ -136,7 +136,7 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
             productName: item.product.name,
             quantity: item.quantity,
             colors: item.selectedVariant
-              ? item.selectedVariant.colors.map(color => color.colorName)
+              ? item.selectedVariant.colors.map(color => color.name)
               : item.selectedParts?.length
               ? item.selectedParts.map(part => `${part.label}: ${part.colorName}`)
               : item.selectedColors?.map(color => color.name) ?? [item.selectedColor.name],
@@ -145,7 +145,7 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
                   id: item.selectedVariant.id,
                   name: item.selectedVariant.name,
                   kind: item.selectedVariant.kind,
-                  colors: item.selectedVariant.colors.map(color => color.colorName),
+                  colors: item.selectedVariant.colors.map(color => color.name),
                 }
               : undefined,
             customText: item.customizations.map(customization => `${customization.label}: ${customization.value}`).join(', '),
@@ -288,9 +288,14 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
                           <div className="flex -space-x-1">
                             {item.selectedVariant.colors.map((color, i) => (
                               <span
-                                key={`${color.colorName}-${i}`}
+                                key={`${color.name}-${i}`}
                                 className="w-3 h-3 rounded-full border border-border"
-                                style={{ backgroundColor: color.colorHex }}
+                                style={{
+                                  backgroundColor: color.hex,
+                                  backgroundImage: color.imageUrl ? `url(${color.imageUrl})` : undefined,
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
+                                }}
                                 aria-hidden="true"
                               />
                             ))}

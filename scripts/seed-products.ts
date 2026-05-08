@@ -7,7 +7,7 @@
  * Or: node --loader ts-node/esm scripts/seed-products.ts
  */
 
-import { id, init } from '@instantdb/admin'
+import { id, init, InstantAPIError } from '@instantdb/admin'
 import dotenv from 'dotenv'
 import 'dotenv/config';
 import path from 'path'
@@ -50,19 +50,55 @@ const lithophaneFrameTemplate = [
   },
 ]
 
+const defaultMolduraParts = [
+  { label: 'Moldura', grams: 60, materialType: 'PLA' as const, colorSource: 'variantColor' as const },
+  { label: 'Painel Litofânico', grams: 80, materialType: 'PLA' as const, colorSource: 'lithophane' as const, requiresLithophaneProcessing: true },
+]
+
+const woodTextureDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Crect width='160' height='160' fill='%2380522f'/%3E%3Cpath d='M0 26c38 16 76-17 160 3M0 72c42-20 88 23 160-2M0 118c54 22 98-18 160 6' fill='none' stroke='%23b9824b' stroke-width='9' stroke-opacity='.38'/%3E%3Cpath d='M0 45c60 8 94-11 160 4M0 96c56-12 93 12 160-1M0 139c42-8 86 9 160-3' fill='none' stroke='%23452316' stroke-width='4' stroke-opacity='.28'/%3E%3C/svg%3E"
+
+const frameFinishes = [
+  { name: 'Preto', hex: '#000000' },
+  { name: 'Madeira', hex: '#8B4513', imageUrl: woodTextureDataUrl },
+]
+
+const createFrameFinishVariants = (
+  finalPrice: number,
+  textOverlay: { bottom: number; left: number; width: number; align: 'center'; fontSize: number },
+) => [
+  {
+    id: 'preto',
+    name: 'Preto',
+    kind: 'single_color' as const,
+    finalPrice,
+    variantType: 'led',
+    textOverlay,
+    colors: [frameFinishes[0]],
+  },
+  {
+    id: 'madeira',
+    name: 'Madeira',
+    kind: 'single_color' as const,
+    finalPrice,
+    variantType: 'led',
+    textOverlay,
+    colors: [frameFinishes[1]],
+  },
+]
+
 // Products to seed
 const productsToSeed = [
   {
-    slug: 'colecao-lithophane',
-    name: 'Coleção Lithophane',
+    slug: 'moldura',
+    name: 'Moldura Lithophane',
     priceFrom: 39,
     priceTo: 49,
     description:
-      'A coleção de abertura da Foto3D.pt: fotografias transformadas em peças luminosas impressas em 3D. Escolha o formato da moldura, envie a fotografia e só paga depois da revisão humana.',
-    benefit: 'Molduras lithophane personalizadas com revisão antes do pagamento',
+      'Molduras lithophane personalizadas: escolha o formato físico, carregue a fotografia e só paga depois da revisão humana.',
+    benefit: 'A sua fotografia transformada numa moldura luminosa feita em Portugal',
     image: '/products/moldura-quadrada.jpg',
-    featured: true,
-    visible: true,
+    featured: false,
+    visible: false,
     colorSelectionMode: 'preset_options' as const,
     customizable: true,
     multiColor: false,
@@ -79,7 +115,10 @@ const productsToSeed = [
         aspectRatio: [1, 1] as [number, number],
         formatLabel: 'Formato Quadrado · crop 1:1',
         uploadGuidance: 'Ideal para fotos de Instagram, retratos centrados e composições simétricas.',
-        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+        variantType: 'led',
+        textOverlay: { bottom: 5, left: 50, width: 72, align: 'center' as const, fontSize: 14 },
+        parts: defaultMolduraParts,
+        colors: frameFinishes,
       },
       {
         id: 'retrato',
@@ -90,7 +129,13 @@ const productsToSeed = [
         aspectRatio: [4, 5] as [number, number],
         formatLabel: 'Formato Retrato · crop 4:5',
         uploadGuidance: 'Ideal para pessoas, fotografias verticais e momentos com o rosto em destaque.',
-        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+        variantType: 'led',
+        textOverlay: { bottom: 5, left: 50, width: 72, align: 'center' as const, fontSize: 14 },
+        parts: [
+          { label: 'Moldura', grams: 70, materialType: 'PLA' as const, colorSource: 'variantColor' as const },
+          { label: 'Painel Litofânico', grams: 90, materialType: 'PLA' as const, colorSource: 'lithophane' as const, requiresLithophaneProcessing: true },
+        ],
+        colors: frameFinishes,
       },
       {
         id: 'paisagem',
@@ -101,35 +146,67 @@ const productsToSeed = [
         aspectRatio: [16, 9] as [number, number],
         formatLabel: 'Formato Paisagem · crop 16:9',
         uploadGuidance: 'Ideal para viagens, casas, horizontes, grupos e fotografias horizontais.',
-        colors: [{ colorName: 'Preto', colorHex: '#000000' }],
+        variantType: 'led',
+        textOverlay: { bottom: 6, left: 50, width: 64, align: 'center' as const, fontSize: 14 },
+        parts: [
+          { label: 'Moldura', grams: 75, materialType: 'PLA' as const, colorSource: 'variantColor' as const },
+          { label: 'Painel Litofânico', grams: 95, materialType: 'PLA' as const, colorSource: 'lithophane' as const, requiresLithophaneProcessing: true },
+        ],
+        colors: frameFinishes,
       },
     ],
     productionJobTemplates: lithophaneFrameTemplate,
     materialRecipe: [
-      { label: 'Moldura', grams: 60, materialType: 'PLA' as const },
-      { label: 'Painel', grams: 80, materialType: 'PLA' as const },
+      ...defaultMolduraParts,
     ],
     materialGrams: 140,
-    featuredRank: 1,
-    sortOrder: 1,
+    featuredRank: 99,
+    sortOrder: 99,
   },
   {
-    slug: 'moldura-quadrada',
-    name: 'Moldura Quadrada',
-    priceFrom: 39,
-    priceTo: 39,
+    slug: 'candeeiros',
+    name: 'Candeeiros Lithophane',
+    priceFrom: 59,
+    priceTo: 89,
     description:
-      'Produto legado mantido para compatibilidade. A compra principal passou para a Coleção Lithophane.',
-    benefit: 'Formato clássico para as suas memórias digitais',
+      'Candeeiros lithophane personalizados para fotografias com luz ambiente. Coleção em preparação.',
+    benefit: 'Candeeiros personalizados em breve',
+    image: '/products/moldura-retrato.jpg',
+    featured: false,
+    visible: true,
+    colorSelectionMode: 'single' as const,
+    customizable: false,
+    multiColor: false,
+    multiColorCount: 1,
+    category: 'custom',
+    categorySlugs: ['custom', 'gift', 'lithophane'],
+    variants: [],
+    productionJobTemplates: lithophaneFrameTemplate,
+    materialRecipe: [
+      { label: 'Base', grams: 90, materialType: 'PLA' as const },
+      { label: 'Painel Litofânico', grams: 100, materialType: 'PLA' as const },
+    ],
+    materialGrams: 190,
+    featuredRank: 99,
+    sortOrder: 2,
+  },
+  {
+    slug: 'colecao-lithophane',
+    name: 'Coleção Lithophane',
+    priceFrom: 39,
+    priceTo: 49,
+    description:
+      'Produto legado mantido para compatibilidade. A compra principal passou para Moldura Lithophane.',
+    benefit: 'Molduras lithophane personalizadas com revisão antes do pagamento',
     image: '/products/moldura-quadrada.jpg',
     featured: false,
     visible: false,
-    colorSelectionMode: 'single' as const,
+    colorSelectionMode: 'preset_options' as const,
     customizable: true,
     multiColor: false,
     multiColorCount: 1,
     category: 'custom',
-    categorySlugs: ['custom', 'gift'],
+    categorySlugs: ['custom', 'gift', 'lithophane'],
     variants: [],
     productionJobTemplates: lithophaneFrameTemplate,
     materialRecipe: [
@@ -139,6 +216,33 @@ const productsToSeed = [
     materialGrams: 140,
     featuredRank: 99,
     sortOrder: 99,
+  },
+  {
+    slug: 'moldura-quadrada',
+    name: 'Moldura Quadrada',
+    priceFrom: 39,
+    priceTo: 39,
+    description:
+      'Moldura lithophane quadrada com luz LED, perfeita para fotografias centradas, retratos simétricos e memórias em formato 1:1.',
+    benefit: 'Formato quadrado para fotos centradas e memórias especiais',
+    image: '/products/moldura-quadrada.jpg',
+    featured: true,
+    visible: true,
+    aspectRatio: [1, 1] as [number, number],
+    colorSelectionMode: 'preset_options' as const,
+    customizable: true,
+    multiColor: false,
+    multiColorCount: 1,
+    category: 'custom',
+    categorySlugs: ['custom', 'gift', 'lithophane'],
+    variants: createFrameFinishVariants(39, { bottom: 5, left: 50, width: 72, align: 'center', fontSize: 14 }),
+    productionJobTemplates: lithophaneFrameTemplate,
+    materialRecipe: [
+      ...defaultMolduraParts,
+    ],
+    materialGrams: 140,
+    featuredRank: 1,
+    sortOrder: 1,
   },
   {
     slug: 'moldura-retrato',
@@ -149,50 +253,52 @@ const productsToSeed = [
       'Moldura vertical no formato 4:5. Ideal para retratos, selfies e fotografias de pessoa. A moldura perfeita para destacar quem mais ama.',
     benefit: 'Perfeita para retratos e selfies',
     image: '/products/moldura-retrato.jpg',
-    featured: false,
-    visible: false,
-    colorSelectionMode: 'single' as const,
+    featured: true,
+    visible: true,
+    aspectRatio: [4, 5] as [number, number],
+    colorSelectionMode: 'preset_options' as const,
     customizable: true,
     multiColor: false,
     multiColorCount: 1,
     category: 'custom',
-    categorySlugs: ['custom', 'gift'],
+    categorySlugs: ['custom', 'gift', 'lithophane'],
     productionJobTemplates: lithophaneFrameTemplate,
     materialRecipe: [
-      { label: 'Moldura', grams: 70, materialType: 'PLA' as const },
-      { label: 'Painel', grams: 90, materialType: 'PLA' as const },
+      { label: 'Moldura', grams: 70, materialType: 'PLA' as const, colorSource: 'variantColor' as const },
+      { label: 'Painel Litofânico', grams: 90, materialType: 'PLA' as const, colorSource: 'lithophane' as const, requiresLithophaneProcessing: true },
     ],
     materialGrams: 160,
-    variants: [],
-    featuredRank: 99,
-    sortOrder: 99,
+    variants: createFrameFinishVariants(44, { bottom: 5, left: 50, width: 72, align: 'center', fontSize: 14 }),
+    featuredRank: 2,
+    sortOrder: 2,
   },
   {
     slug: 'moldura-paisagem',
     name: 'Moldura Paisagem',
-    priceFrom: 44,
-    priceTo: 44,
+    priceFrom: 49,
+    priceTo: 49,
     description:
       'Moldura horizontal no formato 16:9. Excelente para paisagens, fotografias de grupo e momentos especiais em família.',
     benefit: 'Ideal para paisagens e fotos de grupo',
     image: '/products/moldura-paisagem.jpg',
-    featured: false,
-    visible: false,
-    colorSelectionMode: 'single' as const,
+    featured: true,
+    visible: true,
+    aspectRatio: [16, 9] as [number, number],
+    colorSelectionMode: 'preset_options' as const,
     customizable: true,
     multiColor: false,
     multiColorCount: 1,
     category: 'custom',
-    categorySlugs: ['custom', 'gift'],
+    categorySlugs: ['custom', 'gift', 'lithophane'],
     productionJobTemplates: lithophaneFrameTemplate,
     materialRecipe: [
-      { label: 'Moldura', grams: 70, materialType: 'PLA' as const },
-      { label: 'Painel', grams: 90, materialType: 'PLA' as const },
+      { label: 'Moldura', grams: 75, materialType: 'PLA' as const, colorSource: 'variantColor' as const },
+      { label: 'Painel Litofânico', grams: 95, materialType: 'PLA' as const, colorSource: 'lithophane' as const, requiresLithophaneProcessing: true },
     ],
     materialGrams: 160,
-    variants: [],
-    featuredRank: 99,
-    sortOrder: 99,
+    variants: createFrameFinishVariants(49, { bottom: 6, left: 50, width: 64, align: 'center', fontSize: 14 }),
+    featuredRank: 3,
+    sortOrder: 3,
   },
 ]
 
@@ -274,23 +380,12 @@ async function seedProducts(): Promise<void> {
     },
   })
 
-  const existingSlugs = new Set(
-    (existingProducts.catalogProducts || []).map((p: any) => p.slug)
-  )
-
   const transactions = []
   let created = 0
-  let skipped = 0
-  const forceUpdate = process.argv.includes('--force')
+  let updated = 0
 
   for (const product of productsToSeed) {
     const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
-
-    if (existingProduct && !forceUpdate) {
-      console.log(`   ⏭️  Skipping ${product.slug}: already exists (use --force to update)`)
-      skipped++
-      continue
-    }
 
     const productId = existingProduct?.id ?? id()
     const now = new Date()
@@ -306,6 +401,7 @@ async function seedProducts(): Promise<void> {
         categorySlugs: product.categorySlugs,
         priceFrom: product.priceFrom,
         priceTo: product.priceTo,
+        aspectRatio: product.aspectRatio,
         description: product.description,
         benefit: product.benefit,
         image: product.image,
@@ -328,8 +424,9 @@ async function seedProducts(): Promise<void> {
         updatedAt: now,
       })
     )
-    if (existingProduct && forceUpdate) {
-      console.log(`   🔁 Force updating ${product.slug}: ${product.name} (€${product.priceFrom})`)
+    if (existingProduct) {
+      console.log(`   🔁 Updating ${product.slug}: ${product.name} (€${product.priceFrom})`)
+      updated++
     } else {
       console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
       created++
@@ -340,7 +437,7 @@ async function seedProducts(): Promise<void> {
     await dbAdmin.transact(transactions)
   }
 
-  console.log(`   ✅ Products: ${created} created, ${skipped} skipped`)
+  console.log(`   ✅ Products: ${created} created, ${updated} updated`)
 }
 
 async function main(): Promise<void> {
@@ -358,7 +455,11 @@ async function main(): Promise<void> {
     console.log('   2. Visit /admin to manage products')
     console.log('   3. Test order flow on the landing page')
   } catch (error) {
-    console.error('\n❌ Seed failed:', error)
+    if (error instanceof InstantAPIError) {
+      console.error('\n❌ Seed failed:', error.message, error.hint)
+    } else {
+      console.error('\n❌ Seed failed:', error)
+    }
     process.exit(1)
   }
 }
