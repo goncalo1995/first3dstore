@@ -1,6 +1,6 @@
 // HexaMemória frame generator.
 // Example:
-// openscad -o hexa_s.stl -D 'width=160' -D 'height=138.6' -D 'engrave_text="Familia 2026"' scripts/openscad/hexa_frame.scad
+// openscad -o hexa_s.stl -D 'width=160' -D 'height=138.6' -D 'color_name="Preto"' scripts/openscad/hexa_frame.scad
 //
 // Print orientation: visible face down on the build plate, with the front face at Z=0.
 
@@ -9,11 +9,9 @@ height = 138.6;
 border_thickness = 12;
 depth_thickness = 5;
 color_name = "Preto";
-engrave_text = "";
 
 inner_lip = 1.5;
 lip_depth = 1.2;
-engrave_depth = 0.55;
 
 $fn = 48;
 
@@ -63,26 +61,8 @@ module photo_lip() {
     }
 }
 
-module mirrored_engraving() {
-  if (len(engrave_text) > 0) {
-    translate([0, -height * 0.32, -0.05])
-      mirror([1, 0, 0])
-        linear_extrude(height = engrave_depth)
-          text(
-            engrave_text,
-            size = min(border_thickness * 0.5, 7),
-            halign = "center",
-            valign = "center",
-            font = "Liberation Sans:style=Bold"
-          );
-  }
-}
-
 color(color_name)
-  difference() {
-    union() {
-      frame_shell();
-      photo_lip();
-    }
-    mirrored_engraving();
+  union() {
+    frame_shell();
+    photo_lip();
   }

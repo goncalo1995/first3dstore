@@ -4,7 +4,7 @@ import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
   title: 'Política de Privacidade | Foto3D.pt',
-  description: 'Política de privacidade genérica da Foto3D.pt.',
+  description: 'Política de privacidade provisória da Foto3D.pt – substituir pela definitiva antes do lançamento.',
 }
 
 export default function PrivacyPage() {
@@ -15,55 +15,62 @@ export default function PrivacyPage() {
         <section className="border-b border-border bg-secondary">
           <div className="container mx-auto px-4 py-12 md:py-16">
             <h1 className="text-3xl font-bold text-foreground md:text-4xl">Política de Privacidade</h1>
-            <p className="mt-3 max-w-2xl text-muted-foreground">Última atualização: 8 de maio de 2026</p>
+            <p className="mt-3 max-w-2xl text-muted-foreground">Última atualização: 10 de maio de 2026</p>
           </div>
         </section>
 
         <section className="container mx-auto max-w-3xl px-4 py-12">
           <div className="space-y-8 text-sm leading-7 text-muted-foreground">
-            <p>
-              Esta política é um texto genérico provisório para a Foto3D.pt. Deve ser revista e completada antes de aceitar encomendas públicas pagas.
-            </p>
-
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Dados Recolhidos</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Responsável pelo Tratamento</h2>
               <p>
-                Podemos recolher nome, email, telefone, empresa, morada de entrega, descrição do pedido, fotografias, ficheiros enviados, preferências de produto, histórico de comunicações e estado da encomenda.
+                <strong>Foto3D.pt</strong><br />
+                Travessa do Girassol, Bairro da Torre, n61 3D<br />
+                2775-811 Carcavelos<br />
+                NIF: 518493385<br />
+                geral@foto3d.pt
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Finalidade</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Que dados recolhemos</h2>
               <p>
-                Usamos estes dados para responder a pedidos, validar fotografias, preparar orçamentos, produzir peças personalizadas, gerir pagamentos, entregar encomendas e prestar apoio ao cliente.
+                Nome, email, telefone, morada de entrega, empresa (opcional), fotografias ou ficheiros enviados, detalhes da encomenda, histórico de comunicações e estado do pedido.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Armazenamento e Serviços</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Finalidade do tratamento</h2>
               <p>
-                A aplicação pode usar serviços como InstantDB, armazenamento de ficheiros, email transacional, alojamento web e ferramentas de análise técnica. Fotografias e ficheiros enviados são tratados apenas para preparar e gerir o pedido.
+                Os dados são utilizados exclusivamente para: processar o pedido, validar a qualidade das imagens, produzir as peças personalizadas, gerir o pagamento, enviar a encomenda e prestar apoio ao cliente. Não utilizamos os dados para marketing automatizado sem consentimento explícito.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Retenção</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Subcontratantes (serviços terceiros)</h2>
               <p>
-                Mantemos dados durante o período necessário para responder ao pedido, cumprir obrigações administrativas e resolver questões relacionadas com encomendas. Ficheiros podem ser apagados mediante pedido quando já não forem necessários.
+                Recorremos a serviços de alojamento (Vercel), base de dados (InstantDB), armazenamento de ficheiros (Cloudflare R2), processamento de pagamentos (Stripe) e envio de emails transaccionais. Estes serviços podem aceder aos dados estritamente necessários para as respectivas funções, estando sujeitos a contratos de confidencialidade.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Direitos</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Conservação dos dados</h2>
               <p>
-                Pode pedir acesso, correção ou eliminação dos seus dados através de geral@foto3d.pt. A resposta dependerá das obrigações legais aplicáveis e da necessidade de manter registos administrativos mínimos.
+                Os dados são conservados pelo tempo necessário à gestão do pedido, cumprimento de obrigações legais (ex: fiscal) e eventual resolução de litígios. Os ficheiros de impressão podem ser conservados para futuras reimpressões, mediante consentimento do cliente.
               </p>
             </div>
 
             <div>
-              <h2 className="mb-2 text-lg font-semibold text-foreground">Contacto</h2>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Direitos do Titular</h2>
               <p>
-                Responsável pelos dados: Foto3D.pt, dados legais completos a preencher. Contacto provisório: geral@foto3d.pt.
+                Pode solicitar o acesso, rectificação, eliminação ou portabilidade dos seus dados, bem como limitar ou opor-se ao tratamento, através do email geral@foto3d.pt. Responderemos no prazo máximo de 30 dias. O cliente tem ainda direito a apresentar reclamação à CNPD (Comissão Nacional de Protecção de Dados).
+              </p>
+            </div>
+
+            <div>
+              <h2 className="mb-2 text-lg font-semibold text-foreground">Alterações a esta política</h2>
+              <p>
+                Qualquer alteração será publicada nesta página com a data de revisão. Recomenda-se a consulta periódica.
               </p>
             </div>
           </div>

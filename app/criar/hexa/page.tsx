@@ -2,11 +2,11 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
-import { Copy, GripVertical, ImagePlus, Plus, Send, Trash2 } from 'lucide-react'
+import { Copy, CreditCard, GripVertical, ImagePlus, Plus, Trash2 } from 'lucide-react'
 import { motion, Reorder } from 'framer-motion'
 import { toast } from 'sonner'
+import { db } from '@/lib/db'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -28,16 +28,15 @@ import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 import {
   HEXA_COLORS,
-  HEXA_ENGRAVING_FEE,
   HEXA_SIZES,
   type HexaColor,
-  type HexaRequest,
+  type HexaPhotoAdjustments,
   type HexaSize,
   type HexaSpaceType,
   type HexaTile,
 } from '@/types/hexa'
 
-const MAX_TILES = 20
+const MAX_TILES = 30
 const GAP_MM = 0
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
@@ -50,17 +49,35 @@ type PositionedTile = HexaTile & {
   y: number
 }
 
-const defaultAdjustments = { zoom: 1, offsetX: 0, offsetY: 0 }
+type CatalogProduct = {
+  id: string
+  slug: string
+  name: string
+  priceFrom: number
+  priceTo?: number
+  variants?: {
+    id: string
+    name: string
+    finalPrice?: number
+    colors: { name: string; hex: string; imageUrl?: string }[]
+  }[]
+}
 
-function createTile(): HexaTile {
+const sizeToSlug: Record<HexaSize, string> = {
+  XS: 'hexa-xs',
+  S: 'hexa-s',
+  M: 'hexa-m',
+}
+
+const defaultAdjustments: HexaPhotoAdjustments = { zoom: 1, offsetX: 0, offsetY: 0 }
+
+function createTile(color: HexaColor = 'Preto'): HexaTile {
   return {
     id: crypto.randomUUID(),
-    color: 'Preto',
+    color,
     photoPreviewUrl: null,
     photoName: null,
     photoAdjustments: defaultAdjustments,
-    engravingEnabled: false,
-    engravingText: '',
   }
 }
 
@@ -111,6 +128,7 @@ function computeHoneycomb(tiles: HexaTile[], size: HexaSize): PositionedTile[] {
     const cell = positions[index] ?? { q: 0, r: 0 }
     const centerX = (dimensions.width + GAP_MM) * (cell.q + cell.r / 2)
     const centerY = (dimensions.height * 0.75 + GAP_MM) * cell.r
+
     return {
       ...tile,
       q: cell.q,
@@ -144,31 +162,45 @@ function layoutBounds(tiles: ReturnType<typeof normalizeHoneycomb>, size: HexaSi
   }
 }
 
-function priceTiles(tiles: HexaTile[], size: HexaSize) {
-  const tilePrice = HEXA_SIZES[size].price
-  const subtotal = tiles.reduce((sum, tile) => {
-    const engraving = tile.engravingEnabled && tile.engravingText.trim() ? HEXA_ENGRAVING_FEE : 0
-    return sum + tilePrice + engraving
-  }, 0)
-  const discountRate = tiles.length >= 10 ? 0.1 : 0
-  const discountAmount = subtotal * discountRate
+function pricePreview(tileCount: number, unitPrice: number) {
+  const subtotal = tileCount * unitPrice
+  const discountAmount = tileCount >= 10 ? subtotal * 0.1 : 0
   return {
     subtotal,
     discountAmount,
     total: subtotal - discountAmount,
-    discountApplied: discountRate ? '10%' as const : null,
+    discountApplied: tileCount >= 10 ? '10%' : null,
   }
+}
+
+function productColors(product?: CatalogProduct) {
+  const fromProduct = (product?.variants ?? [])
+    .flatMap((variant) => variant.colors ?? [])
+    .filter((color, index, list) => color.name && list.findIndex((item) => item.name === color.name) === index)
+
+  if (fromProduct.length > 0) return fromProduct
+
+  return (['Preto', 'Branco', 'Madeira'] as HexaColor[]).map((name) => ({
+    name,
+    hex: HEXA_COLORS[name].hex,
+  }))
+}
+
+function colorHex(name: string, availableColors: { name: string; hex: string }[]) {
+  return availableColors.find((color) => color.name === name)?.hex || HEXA_COLORS.Preto.hex
 }
 
 function HexaCanvas({
   tiles,
   selectedId,
   mosaicSize,
+  availableColors,
   onSelect,
 }: {
   tiles: HexaTile[]
   selectedId: string
   mosaicSize: HexaSize
+  availableColors: { name: string; hex: string }[]
   onSelect: (id: string) => void
 }) {
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -187,11 +219,6 @@ function HexaCanvas({
   const offsetX = (canvasSize.width - groupWidth) / 2
   const offsetY = (canvasSize.height - groupHeight) / 2
 
-  function resetView() {
-    setPan({ x: 0, y: 0 })
-    setUserZoom(1)
-  }
-
   useEffect(() => {
     const element = canvasRef.current
     if (!element) return
@@ -201,6 +228,11 @@ function HexaCanvas({
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
+
+  function resetView() {
+    setPan({ x: 0, y: 0 })
+    setUserZoom(1)
+  }
 
   return (
     <div
@@ -212,7 +244,7 @@ function HexaCanvas({
         backgroundSize: '30px 30px',
       }}
     >
-      <div className="absolute right-3 top-3 z-20 flex w-44 flex-col gap-2 rounded-md border border-[#e2d4bf] bg-white/90 p-3 shadow-sm backdrop-blur">
+      <div className="absolute right-3 top-3 z-20 flex w-44 flex-col gap-2 rounded-md border border-border bg-white/90 p-3 shadow-sm backdrop-blur">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold text-[#6e5b43]">Zoom {Math.round(userZoom * 100)}%</span>
           <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={resetView}>
@@ -237,8 +269,7 @@ function HexaCanvas({
         onDragEnd={(_, info) => setPan((current) => ({ x: current.x + info.offset.x, y: current.y + info.offset.y }))}
       >
         {positioned.map((tile) => {
-          const color = HEXA_COLORS[tile.color]
-          const photo = tile.photoPreviewUrl
+          const frameColor = colorHex(tile.color, availableColors)
           const width = HEXA_SIZES[mosaicSize].width * scale
           const height = HEXA_SIZES[mosaicSize].height * scale
           return (
@@ -248,7 +279,7 @@ function HexaCanvas({
               onClick={() => onSelect(tile.id)}
               className={cn(
                 'absolute overflow-hidden border-[5px] shadow-lg transition-all duration-300 ease-out',
-                selectedId === tile.id ? 'ring-4 ring-[#d7a84f] ring-offset-2 ring-offset-[#f5ead9]' : 'ring-0',
+                selectedId === tile.id ? 'ring-4 ring-primary ring-offset-2 ring-offset-[#f5ead9]' : 'ring-0',
               )}
               style={{
                 left: tile.x * scale,
@@ -256,14 +287,14 @@ function HexaCanvas({
                 width,
                 height,
                 clipPath: HEX_CLIP,
-                borderColor: color.hex,
-                backgroundColor: color.hex,
+                borderColor: frameColor,
+                backgroundColor: frameColor,
               }}
               aria-label="Selecionar peça hexagonal"
             >
-              {photo ? (
+              {tile.photoPreviewUrl ? (
                 <img
-                  src={photo}
+                  src={tile.photoPreviewUrl}
                   alt=""
                   className="h-full w-full object-cover"
                   draggable={false}
@@ -296,15 +327,33 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function HexaConfiguratorPage() {
   const [mosaicSize, setMosaicSize] = useState<HexaSize>('S')
-  const [tiles, setTiles] = useState<HexaTile[]>(() => [createTile(), createTile(), createTile(), createTile(), createTile(), createTile(), createTile()])
+  const [tiles, setTiles] = useState<HexaTile[]>(() => [createTile(), createTile(), createTile()])
   const [selectedId, setSelectedId] = useState(() => tiles[0]?.id ?? '')
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [quoteOpen, setQuoteOpen] = useState(false)
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customer, setCustomer] = useState({ name: '', email: '', phone: '', spaceType: 'Casa' as HexaSpaceType })
+  const productsQuery = db.useQuery({
+    catalogProducts: {
+      $: {
+        where: { slug: { $in: Object.values(sizeToSlug) } },
+      },
+    },
+  })
 
+  const products = (productsQuery.data?.catalogProducts ?? []) as CatalogProduct[]
+  const selectedSlug = sizeToSlug[mosaicSize]
+  const selectedProduct = products.find((product) => product.slug === selectedSlug)
+  const availableColors = useMemo(() => productColors(selectedProduct), [selectedProduct])
+  const unitPrice = selectedProduct?.priceFrom ?? HEXA_SIZES[mosaicSize].price
   const selectedTile = tiles.find((tile) => tile.id === selectedId) ?? tiles[0]
-  const pricing = useMemo(() => priceTiles(tiles, mosaicSize), [tiles, mosaicSize])
+  const pricing = useMemo(() => pricePreview(tiles.length, unitPrice), [tiles.length, unitPrice])
+
+  useEffect(() => {
+    const allowed = new Set(availableColors.map((color) => color.name))
+    const fallback = (availableColors[0]?.name || 'Preto') as HexaColor
+    setTiles((current) => current.map((tile) => allowed.has(tile.color) ? tile : { ...tile, color: fallback }))
+  }, [availableColors])
 
   function updateSelected(patch: Partial<HexaTile>) {
     if (!selectedTile) return
@@ -318,12 +367,13 @@ export default function HexaConfiguratorPage() {
 
   function addTile(source?: HexaTile) {
     if (tiles.length >= MAX_TILES) {
-      toast.info('Máximo de 20 peças por mosaico.')
+      toast.info('Máximo de 30 peças. Para encomendas maiores, por favor contacte-nos.')
       return
     }
+    const fallback = (availableColors[0]?.name || 'Preto') as HexaColor
     const next = source
       ? { ...source, id: crypto.randomUUID(), photoPreviewUrl: source.photoPreviewUrl ?? null }
-      : createTile()
+      : createTile(fallback)
     setTiles((current) => [...current, next])
     setSelectedId(next.id)
   }
@@ -352,31 +402,16 @@ export default function HexaConfiguratorPage() {
       return
     }
 
-    const previewUrl = URL.createObjectURL(file)
-    updateSelected({ photoPreviewUrl: previewUrl, photoName: file.name })
+    updateSelected({ photoPreviewUrl: URL.createObjectURL(file), photoName: file.name })
     toast.success('Fotografia adicionada à pré-visualização.')
   }
 
-  function buildRequest(): HexaRequest {
-    const size = HEXA_SIZES[mosaicSize]
-    return {
-      customer,
-      mosaicSize,
-      tiles: tiles.map((tile) => ({
-        id: tile.id,
-        color: tile.color,
-        photoAdjustments: tile.photoAdjustments,
-        engravingText: tile.engravingEnabled && tile.engravingText.trim() ? tile.engravingText.trim() : null,
-        price: size.price,
-      })),
-      totalPrice: Math.round(pricing.total * 100) / 100,
-      discountApplied: pricing.discountApplied,
-      layout: { type: 'honeycomb', gapMm: GAP_MM },
-    }
-  }
-
-  async function submitQuote(event: FormEvent<HTMLFormElement>) {
+  async function submitCheckout(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!selectedProduct) {
+      toast.error('Não foi possível carregar o produto selecionado.')
+      return
+    }
     if (customer.name.trim().length < 2) {
       toast.error('Indique o seu nome.')
       return
@@ -389,46 +424,59 @@ export default function HexaConfiguratorPage() {
       toast.error('Indique um telemóvel válido.')
       return
     }
+
     setIsSubmitting(true)
     try {
-      const response = await fetch('/api/hexa/request', {
+      const response = await fetch('/api/checkout/hexa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildRequest()),
+        body: JSON.stringify({
+          customer,
+          mosaicSize,
+          productSlug: selectedProduct.slug,
+          tiles: tiles.map((tile) => ({
+            id: tile.id,
+            color: tile.color,
+            photoAdjustments: tile.photoAdjustments,
+          })),
+          layout: { type: 'honeycomb', gapMm: GAP_MM },
+        }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Não foi possível enviar o pedido.')
-      toast.success('Pedido enviado. Vamos rever o seu mosaico e responder por email.')
-      setQuoteOpen(false)
+      if (!response.ok) throw new Error(data.error || 'Não foi possível iniciar o pagamento.')
+      window.location.href = data.checkoutUrl
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível enviar o pedido.')
-    } finally {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar o pagamento.')
       setIsSubmitting(false)
     }
   }
 
   const controls = (
     <div className="space-y-5">
-      <div className="rounded-lg border border-[#e2d4bf] bg-white p-4">
+      <div className="rounded-lg border border-border bg-white p-4">
         <Field label="Tamanho do Mosaico">
           <Select value={mosaicSize} onValueChange={(value) => setMosaicSize(value as HexaSize)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {Object.values(HEXA_SIZES).map((size) => (
-                <SelectItem key={size.label} value={size.label}>
-                  {size.label} - {size.width} x {size.height}mm - {formatCurrency(size.price)}
-                </SelectItem>
-              ))}
+              {(Object.keys(sizeToSlug) as HexaSize[]).map((size) => {
+                const product = products.find((item) => item.slug === sizeToSlug[size])
+                const dimensions = HEXA_SIZES[size]
+                return (
+                  <SelectItem key={size} value={size}>
+                    {size} - {dimensions.width} x {dimensions.height}mm - {formatCurrency(product?.priceFrom ?? dimensions.price)}
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
         </Field>
-        <p className="mt-3 text-sm leading-6 text-[#6c5f50]">Todas as peças usam o mesmo tamanho para garantir uma colmeia perfeitamente alinhada.</p>
+        <p className="mt-3 text-sm leading-6 text-[#6c5f50]">As cores disponíveis vêm do produto selecionado no catálogo.</p>
       </div>
 
-      <div className="rounded-lg border border-[#e2d4bf] bg-white p-4">
+      <div className="rounded-lg border border-border bg-white p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold">Preço total</p>
+            <p className="text-sm font-semibold">Total estimado</p>
             <p className="text-3xl font-bold">{formatCurrency(pricing.total)}</p>
           </div>
           <div className="rounded-md bg-[#fff3d7] px-3 py-2 text-right text-sm text-[#7b5420]">
@@ -436,12 +484,13 @@ export default function HexaConfiguratorPage() {
           </div>
         </div>
         <div className="space-y-1 text-sm text-[#62574d]">
+          <div className="flex justify-between"><span>Preço unitário</span><span>{formatCurrency(unitPrice)}</span></div>
           <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(pricing.subtotal)}</span></div>
           <div className="flex justify-between"><span>Desconto</span><span>{pricing.discountApplied ?? 'Sem desconto'} ({formatCurrency(pricing.discountAmount)})</span></div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-[#e2d4bf] bg-white p-4">
+      <div className="rounded-lg border border-border bg-white p-4">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Peças</h2>
           <Button size="sm" variant="outline" onClick={() => addTile()}>
@@ -451,22 +500,22 @@ export default function HexaConfiguratorPage() {
         </div>
         <Reorder.Group axis="y" values={tiles} onReorder={setTiles} className="space-y-2">
           {tiles.map((tile, index) => {
-            const color = HEXA_COLORS[tile.color]
+            const frameColor = colorHex(tile.color, availableColors)
             return (
               <Reorder.Item key={tile.id} value={tile} as="div">
                 <div
                   className={cn(
-                    'flex items-center gap-2 rounded-md border bg-[#fbf7ef] p-2 shadow-sm',
-                    selectedTile?.id === tile.id ? 'border-[#d7a84f] ring-2 ring-[#d7a84f]/25' : 'border-[#e7dac6]',
+                    'flex items-center gap-2 rounded-md border bg-card p-2 shadow-sm',
+                    selectedTile?.id === tile.id ? 'border-primary ring-2 ring-primary/25' : '',
                   )}
                 >
-                  <button type="button" className="cursor-grab px-1 text-[#9b6b42]" aria-label="Reordenar peça">
+                  <button type="button" className="cursor-grab px-1 text-primary" aria-label="Reordenar peça">
                     <GripVertical className="size-4" />
                   </button>
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setSelectedId(tile.id)}>
                     <span
                       className="size-9 shrink-0 overflow-hidden border"
-                      style={{ clipPath: HEX_CLIP, borderColor: color.hex, backgroundColor: color.hex }}
+                      style={{ clipPath: HEX_CLIP, borderColor: frameColor, backgroundColor: frameColor }}
                     >
                       {tile.photoPreviewUrl ? <img src={tile.photoPreviewUrl} alt="" className="h-full w-full object-cover" /> : null}
                     </span>
@@ -489,11 +538,11 @@ export default function HexaConfiguratorPage() {
       </div>
 
       {selectedTile && (
-        <div className="rounded-lg border border-[#e2d4bf] bg-white p-4">
+        <div className="rounded-lg border border-border bg-white p-4">
           <h2 className="mb-4 text-lg font-semibold">Peça selecionada</h2>
           <div className="space-y-4">
             <Field label="Fotografia">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-[#cdbb9e] bg-[#fbf7ef] px-3 py-4 text-sm font-semibold text-[#6c5f50] hover:border-[#d7a84f]">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-[#cdbb9e] bg-card px-3 py-4 text-sm font-semibold text-[#6c5f50] hover:border-primary">
                 <ImagePlus className="size-4" />
                 {selectedTile.photoName || 'Carregar JPG/PNG até 5MB'}
                 <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={handlePhotoUpload} />
@@ -514,36 +563,19 @@ export default function HexaConfiguratorPage() {
               <Select value={selectedTile.color} onValueChange={(value) => updateSelected({ color: value as HexaColor })}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {Object.values(HEXA_COLORS).map((color) => (
-                    <SelectItem key={color.label} value={color.label}>{color.label}</SelectItem>
+                  {availableColors.map((color) => (
+                    <SelectItem key={color.name} value={color.name}>{color.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={selectedTile.engravingEnabled}
-                onCheckedChange={(checked) => updateSelected({ engravingEnabled: checked === true })}
-                id="engraving"
-              />
-              <Label htmlFor="engraving">Gravação opcional (+{formatCurrency(HEXA_ENGRAVING_FEE)})</Label>
-            </div>
-            {selectedTile.engravingEnabled && (
-              <Input
-                maxLength={30}
-                value={selectedTile.engravingText}
-                onChange={(event) => updateSelected({ engravingText: event.target.value.slice(0, 30) })}
-                placeholder="Família 2026"
-              />
-            )}
           </div>
         </div>
       )}
 
-      <Button className="h-12 w-full bg-[#d7a84f] text-base text-[#231f19] hover:bg-[#e8bd64]" onClick={() => setQuoteOpen(true)}>
-        Pedir Orçamento
-        <Send className="size-4" />
+      <Button className="h-12 w-full bg-primary text-base text-primary-foreground hover:bg-primary/90" onClick={() => setCheckoutOpen(true)}>
+        Finalizar Encomenda
+        <CreditCard className="size-4" />
       </Button>
     </div>
   )
@@ -551,18 +583,18 @@ export default function HexaConfiguratorPage() {
   return (
     <main className="min-h-screen bg-[#f7f2ea] text-[#231f19]">
       <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col lg:grid lg:grid-cols-[30%_70%]">
-        <aside className="hidden overflow-y-auto border-r border-[#e2d4bf] bg-[#fbf7ef] p-5 lg:block">
+        <aside className="hidden overflow-y-auto border-r border-border bg-card p-5 lg:block">
           <div className="mb-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9b6b42]">HexaMemória</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">HexaMemória</p>
             <h1 className="mt-2 text-3xl font-bold">Construa o seu mosaico</h1>
           </div>
           {controls}
         </aside>
 
         <section className="flex min-h-screen flex-col">
-          <header className="flex items-center justify-between border-b border-[#e2d4bf] bg-white/78 px-4 py-3 backdrop-blur lg:px-6">
+          <header className="flex items-center justify-between border-b border-border bg-white/78 px-4 py-3 backdrop-blur lg:px-6">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9b6b42]">Colmeia 2D</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Colmeia 2D</p>
               <p className="text-sm text-[#62574d]">Reordene a lista para reorganizar automaticamente as peças.</p>
             </div>
             <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -578,18 +610,18 @@ export default function HexaConfiguratorPage() {
             </Drawer>
           </header>
           <div className="sticky top-0 z-10 h-[60vh] bg-[#ede0cb] p-3 lg:static lg:h-auto lg:flex-1 lg:p-6">
-            <HexaCanvas tiles={tiles} selectedId={selectedTile?.id ?? ''} mosaicSize={mosaicSize} onSelect={setSelectedId} />
+            <HexaCanvas tiles={tiles} selectedId={selectedTile?.id ?? ''} mosaicSize={mosaicSize} availableColors={availableColors} onSelect={setSelectedId} />
           </div>
         </section>
       </div>
 
-      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pedir Orçamento</DialogTitle>
-            <DialogDescription>Enviamos uma revisão do mosaico e confirmamos a produção por email.</DialogDescription>
+            <DialogTitle>Finalizar Encomenda</DialogTitle>
+            <DialogDescription>Vamos abrir o pagamento seguro Stripe. Depois do pagamento, preparamos a sua produção.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={submitQuote}>
+          <form className="space-y-4" onSubmit={submitCheckout}>
             <Field label="Nome">
               <Input value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} />
             </Field>
@@ -610,8 +642,8 @@ export default function HexaConfiguratorPage() {
                 </SelectContent>
               </Select>
             </Field>
-            <Button className="h-11 w-full bg-[#d7a84f] text-[#231f19] hover:bg-[#e8bd64]" disabled={isSubmitting}>
-              {isSubmitting ? 'A enviar...' : 'Enviar pedido'}
+            <Button className="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={isSubmitting}>
+              {isSubmitting ? 'A preparar pagamento...' : 'Pagar com Stripe'}
             </Button>
           </form>
         </DialogContent>

@@ -72,7 +72,7 @@ export function ProductExperience({ product }: { product: Product }) {
 
           <div className="grid flex-1 items-center gap-10 py-14 lg:grid-cols-[minmax(0,0.92fr)_minmax(420px,1fr)]">
             <div>
-              <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-[#ffaa00]">
+              <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-primary">
                 {product.name}
               </p>
               <h1 className="mt-5 max-w-4xl font-serif text-5xl font-bold leading-[0.98] tracking-tight text-white sm:text-7xl lg:text-8xl">
@@ -82,7 +82,7 @@ export function ProductExperience({ product }: { product: Product }) {
                 {product.description || 'Uma fotografia especial transformada numa luz feita à mão em Portugal.'}
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className="h-14 bg-[#ffaa00] px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+                <Button asChild size="lg" className="h-14 bg-primary px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
                   <Link href={configuratorHref}>
                     Personalizar
                     <ArrowRight className="ml-2 h-5 w-5" />
@@ -131,7 +131,7 @@ export function ProductExperience({ product }: { product: Product }) {
                       />
                     ) : (
                       <div className="flex h-full min-h-44 items-center justify-center bg-[radial-gradient(circle,#ffffff1f,transparent_62%)]">
-                        <Lamp className="h-10 w-10 text-[#ffaa00]/70" />
+                        <Lamp className="h-10 w-10 text-primary/70" />
                       </div>
                     )}
                   </div>
@@ -145,21 +145,21 @@ export function ProductExperience({ product }: { product: Product }) {
       <section className="px-5 py-16 sm:px-8 lg:py-24">
         <div className="mx-auto max-w-7xl">
           <div className="mb-10 max-w-3xl">
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-[#ffaa00]">Como funciona</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-primary">Como funciona</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Escolhe, envia a foto e nós validamos antes do pagamento.</h2>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {trustItems.map((item) => (
               <Card key={item.title} className="rounded-lg border-white/10 bg-white/8 text-white shadow-2xl shadow-black/20 backdrop-blur-md">
                 <CardContent className="p-6">
-                  <item.icon className="h-8 w-8 text-[#ffaa00]" />
+                  <item.icon className="h-8 w-8 text-primary" />
                   <h2 className="mt-5 font-serif text-2xl font-bold">{item.title}</h2>
                   <p className="mt-3 font-sans text-sm leading-6 text-white/62">{item.text}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
-          <Button asChild size="lg" className="mt-10 h-14 bg-[#ffaa00] px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+          <Button asChild size="lg" className="mt-10 h-14 bg-primary px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
             <Link href={configuratorHref}>
               Personalizar
               <ArrowRight className="ml-2 h-5 w-5" />

@@ -146,6 +146,17 @@ const rules = {
       isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
     },
   },
+  stripeWebhookEvents: {
+    allow: {
+      view: "isAdmin",
+      create: "isAdmin",
+      update: "isAdmin",
+      delete: "isAdmin",
+    },
+    bind: {
+      isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
+    },
+  },
   productionJobs: {
     allow: {
       view: "isAdmin",

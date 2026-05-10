@@ -1,40 +1,27 @@
-# Design Request: foto3d.pt Premium Landing Page
+# Design System – HexaMemória / Foto3D.pt
 
-I need a **complete static design** (HTML/CSS/JS) and a `DESIGN.md` file. This will be used on Google Sites or a similar static hosting service – no Next.js, no database, no backend logic. Just a beautiful, responsive, high‑conversion landing page that showcases the product and brand.
+## Colour Palette
+- **Primary (`#9b6b42`)** – warm earthy brown, used for buttons, links, icons and section titles. Conveys craftsmanship and natural materials.
+- **Accent (`#1B6B45`)** – deep green, used for success messages, checkmarks, and subtle highlights. Evokes growth, trust and nature.
+- **Background (`#FFFFFF`)** – clean white for main content.
+- **Secondary background (`#F5F0EB`)** – soft warm off‑white, used for cards and subtle separations.
+- **Foreground (`#2A2A2A`)** – dark grey for body text, high readability.
+- **Muted foreground (`#666666`)** – for secondary text and labels.
 
-## Product & Brand Context
-- **Product:** Custom, 3D‑printed illuminated lightboxes (lithophanes). User uploads a photo; we turn it into a glowing personalised lamp.
-- **Brand name:** `foto3d.pt`
-- **Tagline:** “A memória que se acende.” (The memory that lights up.)
-- **Value props:** Handmade in Lisbon, magical reveal, unique gift for families, pets, anniversaries.
-- **Target audience:** Women 25‑55, gift buyers.
+## Typography
+- **Headings:** Playfair Display (serif) – adds elegance and emotional appeal.
+- **Body:** Inter (sans‑serif) – clean, modern, highly legible.
 
-## Visual Direction
-- **Dark & premium aesthetic:** Dark charcoal background (`#121212`), warm amber glow accents (`#ffaa00`).
-- **Typography:** Playfair Display for headings, Inter for body text.
-- **Subtle glass‑morphism** for cards, glowing buttons on hover.
-- **Mood:** Elegant, emotional, trustworthy.
+## Layout Approach
+- **Mobile‑first** grid and flexbox.
+- **Whitespace** generous – creates a premium, airy feel.
+- **Cards** have light borders, subtle shadows, and rounded corners.
 
-## Page Sections (flexible, but must include these)
-1. **Hero** – headline, subheadline, primary CTA (“Criar a minha luz”).
-2. **Product grid** – at least three mock products (square, portrait, landscape) with names, prices (€39–€44), placeholder image, and a “Personalizar” button.
-3. **How it works** – three step explanation (choose shape > send photo > receive lamp).
-4. **Testimonials** – two or three placeholder quotes.
-5. **Footer** – simple links (about, contact, privacy).
+## Conversion Focus
+- Primary CTA buttons use the `primary` colour with high contrast.
+- Secondary actions use `outline` buttons with `primary` text.
+- Social proof (testimonials, trust badges) placed strategically near purchase actions.
 
-All buttons can be dead links or simply `#` (no real functionality required). Use placeholder images (Unsplash or simple SVG icons). Ensure the design is fully responsive (mobile, tablet, desktop).
-
-## Deliverables
-1. **`index.html`** – a single, self‑contained HTML file with inline styles (or `<style>` block) and minimal JavaScript (only for hover animations if desired). Use Tailwind CSS via CDN if you prefer, or custom CSS.
-2. **`DESIGN.md`** – a short markdown file explaining:
-   - Chosen colour palette and why.
-   - Typography decisions.
-   - Layout approach (grid, flex).
-   - How the design supports conversion and brand trust.
-
-No external dependencies except Google Fonts and maybe Tailwind/vanilla CSS. No form submissions, no API calls.
-
-## Output
-Provide the code for both files in a clear, copy‑paste format. The design must feel **premium, emotional, and trustworthy** – it should make the visitor want to order a custom lightbox.
-
-Go ahead and design the best static landing page for my business.
+## Implementation Notes
+- All colours are driven by CSS variables, making them easy to adjust globally.
+- No hardcoded hex values in components – use Tailwind classes like `bg-primary`, `text-accent`, `border-border`.

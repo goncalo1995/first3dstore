@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Indique um email válido.' }, { status: 400 })
     }
 
-    if (customerPhone.length < 6) {
+    if (customerPhone.length && customerPhone.length < 9) {
       return NextResponse.json({ error: 'Indique um telemóvel válido.' }, { status: 400 })
     }
 

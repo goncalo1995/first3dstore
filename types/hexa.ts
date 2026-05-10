@@ -16,16 +16,12 @@ export type HexaTile = {
   photoPreviewUrl?: string | null
   photoName?: string | null
   photoAdjustments: HexaPhotoAdjustments
-  engravingEnabled: boolean
-  engravingText: string
 }
 
 export type HexaRequestTile = {
   id: string
   color: HexaColor
   photoAdjustments: HexaPhotoAdjustments
-  engravingText: string | null
-  price: number
 }
 
 export type HexaRequest = {
@@ -36,9 +32,8 @@ export type HexaRequest = {
     spaceType: HexaSpaceType
   }
   mosaicSize: HexaSize
+  productSlug: string
   tiles: HexaRequestTile[]
-  totalPrice: number
-  discountApplied: '10%' | null
   layout: {
     type: 'honeycomb'
     gapMm: number
@@ -46,9 +41,9 @@ export type HexaRequest = {
 }
 
 export const HEXA_SIZES: Record<HexaSize, { label: HexaSize; width: number; height: number; price: number; note: string }> = {
-  XS: { label: 'XS', width: 120, height: 104, price: 19.99, note: 'Cabe 2x2 na placa' },
-  S: { label: 'S', width: 160, height: 138.6, price: 29.99, note: 'Uma peça por placa' },
-  M: { label: 'M', width: 200, height: 173.2, price: 44.99, note: 'Impressão separada' },
+  XS: { label: 'XS', width: 120, height: 104, price: 14.99, note: 'Cabe 2x2 na placa' },
+  S: { label: 'S', width: 160, height: 138.6, price: 19.99, note: 'Uma peça por placa' },
+  M: { label: 'M', width: 200, height: 173.2, price: 29.99, note: 'Impressão separada' },
 }
 
 export const HEXA_COLORS: Record<HexaColor, { label: HexaColor; hex: string; text: string }> = {
@@ -58,5 +53,3 @@ export const HEXA_COLORS: Record<HexaColor, { label: HexaColor; hex: string; tex
   Cinza: { label: 'Cinza', hex: '#8b8a84', text: '#fffaf0' },
   'Verde sálvia': { label: 'Verde sálvia', hex: '#77856c', text: '#fffaf0' },
 }
-
-export const HEXA_ENGRAVING_FEE = 3

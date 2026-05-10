@@ -539,7 +539,7 @@ export default function WallConfigurator({
                     'min-h-10 rounded-md border px-2 text-xs font-semibold transition',
                     layoutMode === option.value
                       ? 'border-[#1b6b45] bg-[#1b6b45] text-white'
-                      : 'border-[#e1d7ca] bg-[#fbf8f2] text-[#5d5147] hover:border-[#9b6b42]',
+                      : 'border-[#e1d7ca] bg-[#fbf8f2] text-[#5d5147] hover:border-primary',
                   )}
                 >
                   {option.label}
@@ -590,7 +590,7 @@ export default function WallConfigurator({
                     selectedFrame?.id === frame.id ? 'border-[#1b6b45] ring-2 ring-[#1b6b45]/15' : 'border-[#e5dbce]',
                   )}
                 >
-                  <GripVertical className="size-4 shrink-0 text-[#9b6b42]" />
+                  <GripVertical className="size-4 shrink-0 text-primary" />
                   <span className="size-8 shrink-0 rounded-sm border" style={{ backgroundColor: palette.hex }} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">Moldura {index + 1}</span>
@@ -668,7 +668,7 @@ export default function WallConfigurator({
       <div className="mx-auto flex min-h-screen max-w-[1500px] flex-col lg:grid lg:grid-cols-[410px_1fr]">
         <aside className="hidden overflow-y-auto border-r border-[#e1d7ca] bg-[#fbf8f2] p-5 lg:block">
           <div className="mb-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#9b6b42]">Wall-Forge</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Wall-Forge</p>
             <h1 className="mt-2 text-3xl font-bold">Configure a sua parede</h1>
           </div>
           {controls}
@@ -677,7 +677,7 @@ export default function WallConfigurator({
         <section className="flex min-h-screen flex-col">
           <header className="flex items-center justify-between border-b border-[#e1d7ca] bg-white/78 px-4 py-3 backdrop-blur lg:px-6">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9b6b42]">Estúdio de parede</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Estúdio de parede</p>
               <p className="text-sm text-[#62574d]">Reordene as molduras e o layout recalcula a parede sem sobreposições.</p>
             </div>
             <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>

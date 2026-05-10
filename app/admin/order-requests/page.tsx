@@ -15,7 +15,7 @@ import { buildPuzzleGridPath } from '@/lib/puzzle/preview'
 import type { SvgPuzzleConfig } from '@/lib/puzzle/types'
 import { approveOrderRequestForProduction, approveOrderRequestPhoto, sendPuzzlePaymentApproval, updateOrderRequestPaymentReceived, updateOrderRequestStatus } from './actions'
 
-type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
 
 type OrderRequest = {
   id: string
@@ -36,6 +36,7 @@ type OrderRequest = {
   selectedPrice?: number
   lightMode?: 'desligada' | 'quente' | 'fria'
   canvasConfig?: any
+  productType?: 'hexa-memoria'
   engravingText?: string
   isPaid?: boolean
   notes?: string
@@ -55,6 +56,7 @@ const statusLabels: Record<OrderRequestStatus, string> = {
   PENDING_REVIEW: 'Pendente',
   MODELING: 'Modelação',
   AWAITING_PAYMENT: 'Aguarda pagamento',
+  READY_FOR_PRODUCTION: 'Pronto para produção',
   IN_PRODUCTION: 'Em produção',
   SHIPPED: 'Enviado',
   B2B_LEAD: 'Lead B2B',
@@ -64,6 +66,7 @@ const statusDescriptions: Record<OrderRequestStatus, string> = {
   PENDING_REVIEW: 'recebido para análise',
   MODELING: 'ficheiros/modelação em preparação',
   AWAITING_PAYMENT: 'aprovado, pagamento pendente',
+  READY_FOR_PRODUCTION: 'pagamento confirmado, pronto para criar produção',
   IN_PRODUCTION: 'em impressão/montagem',
   SHIPPED: 'enviado ao cliente',
   B2B_LEAD: 'pedido empresarial por qualificar',
@@ -73,6 +76,7 @@ const statusTone: Record<OrderRequestStatus, string> = {
   PENDING_REVIEW: 'bg-sky-100 text-sky-900',
   MODELING: 'bg-violet-100 text-violet-900',
   AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
+  READY_FOR_PRODUCTION: 'bg-lime-100 text-lime-900',
   IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
   SHIPPED: 'bg-indigo-100 text-indigo-900',
   B2B_LEAD: 'bg-orange-100 text-orange-900',
@@ -91,6 +95,29 @@ function formatPrice(value?: number) {
     style: 'currency',
     currency: 'EUR',
   }).format(value)
+}
+
+function getHexaProductionSummary(request: OrderRequest) {
+  if (request.canvasConfig?.type !== 'hexa-memoria') return null
+
+  const hexaRequest = request.canvasConfig.request ?? request.canvasConfig.hexaRequest ?? {}
+  const tiles = (Array.isArray(hexaRequest.tiles) ? hexaRequest.tiles : []) as any[]
+  const size = hexaRequest.mosaicSize ?? request.productSlug?.replace('hexa-', '').toUpperCase() ?? '-'
+  const colorCounts = tiles.reduce<Record<string, number>>((acc, tile: any) => {
+    const color = typeof tile.color === 'string' ? tile.color : 'Preto'
+    acc[color] = (acc[color] ?? 0) + 1
+    return acc
+  }, {})
+  const colorSummary = Object.entries(colorCounts)
+    .map(([color, quantity]) => `${quantity}x ${color}`)
+    .join(', ')
+
+  return {
+    size,
+    total: tiles.length,
+    colorSummary,
+    label: `Total Parts to Print: ${tiles.length}x Size ${size}${colorSummary ? ` (${colorSummary})` : ''}`,
+  }
 }
 
 function downloadTextFile(filename: string, content: string, mimeType = 'text/plain') {
@@ -169,6 +196,11 @@ function RequestDrawer({
   const [quotedPrice, setQuotedPrice] = useState(String(request.quotedPrice ?? request.selectedPrice ?? request.estimatedPrice ?? puzzleConfig?.estimatedPrice ?? ''))
   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
   const isB2BLead = request.status === 'B2B_LEAD'
+  const isHexaRequest = request.canvasConfig?.type === 'hexa-memoria'
+  const hexaProductionSummary = getHexaProductionSummary(request)
+  const canApproveProduction = isHexaRequest
+    ? request.status === 'READY_FOR_PRODUCTION' && request.isPaid === true
+    : request.status === 'AWAITING_PAYMENT' && request.isPaid === true
 
   const runStatusUpdate = (status: OrderRequestStatus) => {
     startTransition(async () => {
@@ -274,6 +306,7 @@ function RequestDrawer({
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <p><span className="font-semibold">Produto:</span> {isB2BLead ? 'Pedido empresarial' : request.productName || request.productSlug || '-'}</p>
+                {request.productType && <p><span className="font-semibold">Tipo:</span> {request.productType === 'hexa-memoria' ? 'HexaMemória' : request.productType}</p>}
                 <p><span className="font-semibold">Variante:</span> {request.variantName || request.variantId || '-'}</p>
                 <p><span className="font-semibold">Preço:</span> {formatPrice(request.quotedPrice ?? request.selectedPrice)}</p>
                 {request.estimatedPrice !== undefined && <p><span className="font-semibold">Estimativa:</span> {formatPrice(request.estimatedPrice)}</p>}
@@ -281,8 +314,8 @@ function RequestDrawer({
                   <p><span className="font-semibold">Pagamento:</span> <a href={request.paymentUrl} target="_blank" rel="noreferrer" className="text-primary underline">abrir link</a></p>
                 )}
                 <p><span className="font-semibold">Pagamento:</span> {request.isPaid === true ? 'Pago' : 'Pagamento por confirmar'}</p>
-                <p><span className="font-semibold">Luz:</span> {request.lightMode || '-'}</p>
-                <p><span className="font-semibold">Gravação:</span> {request.engravingText || '-'}</p>
+                {!isHexaRequest && <p><span className="font-semibold">Luz:</span> {request.lightMode || '-'}</p>}
+                {!isHexaRequest && <p><span className="font-semibold">Gravação:</span> {request.engravingText || '-'}</p>}
               </CardContent>
             </Card>
 
@@ -312,8 +345,14 @@ function RequestDrawer({
                 <CardTitle>Configuração</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <p><span className="font-semibold">Tipo:</span> {request.canvasConfig?.type === 'svg-puzzle' ? 'Puzzle SVG' : request.canvasConfig?.type === 'modular-list' ? 'Modular' : 'Simples'}</p>
+                <p><span className="font-semibold">Tipo:</span> {request.canvasConfig?.type === 'svg-puzzle' ? 'Puzzle SVG' : request.canvasConfig?.type === 'modular-list' ? 'Modular' : request.canvasConfig?.type === 'hexa-memoria' ? 'HexaMemória' : 'Simples'}</p>
                 <p><span className="font-semibold">Versão:</span> {request.canvasConfig?.version ?? '-'}</p>
+                {hexaProductionSummary && (
+                  <div className="rounded-lg border border-lime-200 bg-lime-50 p-3 text-lime-950">
+                    <p className="font-semibold">Resumo de produção</p>
+                    <p className="mt-1">{hexaProductionSummary.label}</p>
+                  </div>
+                )}
                 {puzzleConfig && (
                   <>
                     <p><span className="font-semibold">Dimensão física:</span> {puzzleConfig.widthMm} x {puzzleConfig.heightMm}mm</p>
@@ -366,7 +405,7 @@ function RequestDrawer({
           <section className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>{puzzleConfig ? 'Pré-visualização do puzzle' : 'Fotografia'}</CardTitle>
+                <CardTitle>{puzzleConfig ? 'Pré-visualização do puzzle' : isHexaRequest ? 'Mosaico HexaMemória' : 'Fotografia'}</CardTitle>
               </CardHeader>
               <CardContent>
                 {puzzleConfig ? (
@@ -380,6 +419,11 @@ function RequestDrawer({
                         </a>
                       </Button>
                     )}
+                  </div>
+                ) : isHexaRequest ? (
+                  <div className="flex h-48 flex-col items-center justify-center rounded-lg bg-secondary px-6 text-center text-sm text-muted-foreground">
+                    <PackageCheck className="mb-3 h-8 w-8" />
+                    As fotografias são pré-visualizações locais do cliente e não são guardadas. Produzir apenas as molduras físicas.
                   </div>
                 ) : request.imageUrl ? (
                   <div className="space-y-3">
@@ -455,6 +499,15 @@ function RequestDrawer({
                     </p>
                   </div>
                 )}
+                {hexaProductionSummary && (
+                  <div className="rounded-lg border border-border bg-secondary/40 p-3 text-sm">
+                    <p className="font-semibold text-foreground">Resumo agregado</p>
+                    <p className="mt-1 text-muted-foreground">{hexaProductionSummary.label}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      O botão cria jobs agrupados por cor para imprimir STLs físicos iguais por tamanho.
+                    </p>
+                  </div>
+                )}
                 {relatedJobs.length > 0 ? (
                   relatedJobs.map((job) => (
                     <div key={job.id} className="flex items-center justify-between rounded-lg border border-border p-3 text-sm">
@@ -465,7 +518,7 @@ function RequestDrawer({
                 ) : (
                   <p className="text-sm text-muted-foreground">Ainda não existe job de produção.</p>
                 )}
-                {request.status === 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
+                {!isHexaRequest && request.status === 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
                   <label className="flex items-start gap-3 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
                     <input
                       type="checkbox"
@@ -480,11 +533,13 @@ function RequestDrawer({
                     </span>
                   </label>
                 )}
-                <Button onClick={approvePhoto} disabled={isPending || isB2BLead || request.status === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
-                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                  Aprovar Foto
-                </Button>
-                <Button onClick={approve} disabled={isPending || isB2BLead || request.status !== 'AWAITING_PAYMENT' || request.isPaid !== true || relatedJobs.length > 0} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                {!isHexaRequest && (
+                  <Button onClick={approvePhoto} disabled={isPending || isB2BLead || request.status === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
+                    {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                    Aprovar Foto
+                  </Button>
+                )}
+                <Button onClick={approve} disabled={isPending || isB2BLead || !canApproveProduction || relatedJobs.length > 0} className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                   {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-2 h-4 w-4" />}
                   Aprovar para Produção
                 </Button>
@@ -493,12 +548,17 @@ function RequestDrawer({
                     Este pedido é um lead empresarial. Qualifique o contacto antes de criar um orçamento ou produção.
                   </p>
                 )}
-                {!isB2BLead && request.status !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
+                {!isB2BLead && !isHexaRequest && request.status !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     A produção só fica disponível depois de aprovar a fotografia e confirmar o pagamento.
                   </p>
                 )}
-                {request.status === 'AWAITING_PAYMENT' && request.isPaid !== true && relatedJobs.length === 0 && (
+                {isHexaRequest && !canApproveProduction && relatedJobs.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    A produção HexaMemória fica disponível automaticamente depois do pagamento Stripe ser confirmado.
+                  </p>
+                )}
+                {!isHexaRequest && request.status === 'AWAITING_PAYMENT' && request.isPaid !== true && relatedJobs.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     Marque “Pagamento Recebido?” para desbloquear a produção.
                   </p>
@@ -535,7 +595,7 @@ export default function AdminOrderRequestsPage() {
     return requests.reduce<Record<OrderRequestStatus, number>>((acc, request) => {
       acc[request.status] = (acc[request.status] ?? 0) + 1
       return acc
-    }, { PENDING_REVIEW: 0, MODELING: 0, AWAITING_PAYMENT: 0, IN_PRODUCTION: 0, SHIPPED: 0, B2B_LEAD: 0 })
+    }, { PENDING_REVIEW: 0, MODELING: 0, AWAITING_PAYMENT: 0, READY_FOR_PRODUCTION: 0, IN_PRODUCTION: 0, SHIPPED: 0, B2B_LEAD: 0 })
   }, [requests])
 
   if (query.isLoading) {
@@ -555,7 +615,7 @@ export default function AdminOrderRequestsPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
         {Object.entries(statusLabels).map(([status, label]) => (
           <Card
             key={status}

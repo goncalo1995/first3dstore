@@ -21,7 +21,7 @@ export default async function ShopPage() {
       <main className="min-h-screen bg-background">
         <section className="border-b border-border bg-[#121212] text-white">
           <div className="container mx-auto px-4 py-10 md:py-14">
-            <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-[#ffaa00]">Impressão 3D local</p>
+            <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-primary">Impressão 3D local</p>
             <h1 className="mt-3 font-serif text-4xl font-bold tracking-tight md:text-5xl">
               Loja foto3d
             </h1>

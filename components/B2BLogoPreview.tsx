@@ -47,7 +47,7 @@ export default function B2BLogoPreview({
       <div className="flex h-64 w-full items-center justify-center rounded-lg border border-border bg-secondary/20">
         <div className="text-center">
           <div className="mb-2 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">A gerar pré‑visualização 3D…</p>
+          <p className="text-sm text-muted-foreground">A gerar pré-visualização 3D…</p>
         </div>
       </div>
     )
@@ -57,7 +57,7 @@ export default function B2BLogoPreview({
     return (
       <div className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-secondary/20">
         <p className="text-sm text-muted-foreground">
-          Carregue o seu logótipo para ver uma pré‑visualização 3D
+          Carregue o seu logótipo para ver uma pré-visualização 3D
         </p>
       </div>
     )

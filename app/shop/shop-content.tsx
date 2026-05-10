@@ -130,7 +130,7 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
         {/* Trust Badge */}
         <div className="mb-8 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="h-2.5 w-2.5 rounded-full bg-[#ffaa00] animate-pulse" />
+            <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
             <span>
               {inventoryQuery.isLoading ? 'A verificar catálogo atual' : 'Produção local, acabamentos e variantes atualizados'}
             </span>
