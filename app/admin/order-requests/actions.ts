@@ -2,7 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { id } from '@instantdb/admin'
+import { Resend } from 'resend'
 import { dbAdmin } from '@/lib/db-admin'
+import { getPuzzleApprovedEmail } from '@/lib/email-templates'
 import {
   baseColorToGlobalColorName,
   colorSourceToGlobalColorName,
@@ -19,6 +21,19 @@ const validStatuses = new Set<OrderRequestStatus>([
   'SHIPPED',
   'B2B_LEAD',
 ])
+
+function getSender() {
+  return process.env.RESEND_FROM_EMAIL || 'foto3d.pt <onboarding@resend.dev>'
+}
+
+function isValidUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
 
 export async function updateOrderRequestStatus(requestId: string, status: OrderRequestStatus) {
   if (!requestId) throw new Error('Pedido inválido.')
@@ -45,6 +60,67 @@ export async function approveOrderRequestPhoto(requestId: string) {
       updatedAt: new Date(),
     }),
   )
+
+  revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/production')
+}
+
+export async function sendPuzzlePaymentApproval(params: {
+  requestId: string
+  paymentUrl: string
+  quotedPrice: number
+}) {
+  if (!params.requestId) throw new Error('Pedido inválido.')
+  if (!isValidUrl(params.paymentUrl)) throw new Error('Link de pagamento inválido.')
+  if (!Number.isFinite(params.quotedPrice) || params.quotedPrice <= 0 || params.quotedPrice > 1000) {
+    throw new Error('Preço final inválido.')
+  }
+
+  const requestResult = await dbAdmin.query({
+    orderRequests: {
+      $: { where: { id: params.requestId } },
+    },
+  })
+
+  const request = requestResult.orderRequests?.[0] as any
+  if (!request) throw new Error('Pedido não encontrado.')
+  if (request.canvasConfig?.type !== 'svg-puzzle') throw new Error('Esta ação só está disponível para puzzles SVG.')
+
+  await dbAdmin.transact(
+    dbAdmin.tx.orderRequests[params.requestId].update({
+      paymentUrl: params.paymentUrl,
+      quotedPrice: params.quotedPrice,
+      selectedPrice: params.quotedPrice,
+      status: 'AWAITING_PAYMENT',
+      isPaid: false,
+      updatedAt: new Date(),
+    }),
+  )
+
+  if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const { error } = await resend.emails.send({
+      from: getSender(),
+      to: request.customerEmail,
+      subject: 'O seu puzzle Foto3D.pt está pronto para confirmação',
+      text: getPuzzleApprovedEmail({
+        name: request.customerName,
+        paymentLink: params.paymentUrl,
+        price: params.quotedPrice,
+        previewUrl: request.previewUrl || request.svgUrl || request.imageUrl,
+      }),
+    })
+
+    if (error) {
+      console.error('Puzzle approval email failed:', error)
+      throw new Error('Pedido atualizado, mas o email não foi enviado.')
+    }
+  } else {
+    console.info('Puzzle approval email skipped because RESEND_API_KEY is missing.', {
+      requestId: params.requestId,
+      paymentUrl: params.paymentUrl,
+    })
+  }
 
   revalidatePath('/admin/order-requests')
   revalidatePath('/admin/production')

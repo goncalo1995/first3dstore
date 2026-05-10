@@ -1,0 +1,9 @@
+{
+  "rows": 7,
+  "columns": 8,
+  "widthMm": 150,
+  "heightMm": 120,
+  "pieceGapMm": 0.18,
+  "connectorType": "redondo",
+  "cutHeightMm": 2
+}

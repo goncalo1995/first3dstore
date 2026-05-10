@@ -280,13 +280,19 @@ const _schema = i.schema({
       baseColor: i.string<'black' | 'wood'>().optional(),
       productSlug: i.string().indexed().optional(),
       productName: i.string().optional(),
+      stlUrl: i.string().optional(),
+      svgUrl: i.string().optional(),
+      previewUrl: i.string().optional(),
+      paymentUrl: i.string().optional(),
+      estimatedPrice: i.number().optional(),
+      quotedPrice: i.number().optional(),
       variantId: i.string().optional(),
       variantName: i.string().optional(),
       selectedPrice: i.number().optional(),
       lightMode: i.string<'desligada' | 'quente' | 'fria'>().optional(),
       canvasConfig: i.json<{
         version: number
-        type: 'simple' | 'modular-list'
+        type: 'simple' | 'modular-list' | 'photo-puzzle' | 'svg-puzzle'
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),

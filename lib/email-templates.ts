@@ -23,6 +23,34 @@ Obrigado,
 Foto3D.pt`
 }
 
+export function getPuzzleApprovedEmail(params: {
+  name: string
+  paymentLink: string
+  price: number
+  previewUrl?: string
+}) {
+  const price = new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(params.price)
+
+  return `Olá ${params.name},
+
+O seu puzzle personalizado foi revisto e está pronto para avançar.
+
+Resumo:
+- Preço final: ${price}
+- Pré-visualização: ${params.previewUrl || 'disponível no pedido'}
+
+Para confirmar a produção, use este link de pagamento:
+${params.paymentLink}
+
+Depois de confirmarmos o pagamento, preparamos o ficheiro de produção e avançamos para impressão.
+
+Obrigado,
+Foto3D.pt`
+}
+
 export function getPaymentReceivedEmail(name: string) {
   return `Olá ${name},
 
