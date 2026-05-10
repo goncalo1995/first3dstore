@@ -292,7 +292,7 @@ const _schema = i.schema({
       lightMode: i.string<'desligada' | 'quente' | 'fria'>().optional(),
       canvasConfig: i.json<{
         version: number
-        type: 'simple' | 'modular-list' | 'photo-puzzle' | 'svg-puzzle'
+        type: 'simple' | 'modular-list' | 'photo-puzzle' | 'svg-puzzle' | 'wall-forge' | 'hexa-memoria'
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),
