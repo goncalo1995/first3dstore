@@ -100,23 +100,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const existing = await dbAdmin.query({
-      stripeWebhookEvents: {
-        $: { where: { eventId: event.id } },
-      },
-    })
-    if ((existing.stripeWebhookEvents ?? []).length > 0) {
-      return NextResponse.json({ received: true, duplicate: true })
-    }
-
     const now = new Date()
     const transactions: any[] = []
     let orderRequestId: string | undefined
+    let productType: string | undefined
+    let shouldSendEmails = false
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
       orderRequestId = session.metadata?.orderRequestId || undefined
-      const productType = session.metadata?.productType
+      productType = session.metadata?.productType
 
       if (orderRequestId) {
         transactions.push(
@@ -128,23 +121,18 @@ export async function POST(req: NextRequest) {
           }),
         )
 
-        // Send confirmation emails for hexa-memoria orders
+        // Mark for email sending after transaction
         if (productType === 'hexa-memoria') {
-          const orderData = await dbAdmin.query({
-            orderRequests: {
-              $: { where: { id: orderRequestId } },
-            },
-          })
-          const orderRequest = (orderData.orderRequests?.[0] as any) || null
-          if (orderRequest) {
-            await sendHexaOrderEmails(orderRequest, orderRequestId)
-          }
+          shouldSendEmails = true
         }
       }
     }
 
+    // Atomic dedupe: attempt to insert the event record with a unique eventId
+    // If this fails due to duplicate eventId constraint, we know it's a duplicate
+    const webhookEventId = id()
     transactions.push(
-      dbAdmin.tx.stripeWebhookEvents[id()].update({
+      dbAdmin.tx.stripeWebhookEvents[webhookEventId].update({
         eventId: event.id,
         type: event.type,
         orderRequestId,
@@ -152,7 +140,35 @@ export async function POST(req: NextRequest) {
       }),
     )
 
-    await dbAdmin.transact(transactions)
+    try {
+      await dbAdmin.transact(transactions)
+    } catch (txError: any) {
+      // Check if this is a duplicate constraint violation
+      // If eventId already exists, treat as duplicate
+      const isDuplicate = txError?.message?.includes('eventId') ||
+                          txError?.message?.includes('unique') ||
+                          txError?.message?.includes('duplicate')
+
+      if (isDuplicate) {
+        return NextResponse.json({ received: true, duplicate: true })
+      }
+      // Re-throw if it's a different error
+      throw txError
+    }
+
+    // Send emails only after successful transaction
+    if (shouldSendEmails && orderRequestId) {
+      const orderData = await dbAdmin.query({
+        orderRequests: {
+          $: { where: { id: orderRequestId } },
+        },
+      })
+      const orderRequest = (orderData.orderRequests?.[0] as any) || null
+      if (orderRequest) {
+        await sendHexaOrderEmails(orderRequest, orderRequestId)
+      }
+    }
+
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error('Stripe webhook failed:', error)

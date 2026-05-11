@@ -217,7 +217,8 @@ export function sanitizeSvg(input: string, mappings?: Record<string, string>): S
   if (/<image[\s>]/i.test(source)) errors.push('Use vetores puros; imagens raster embebidas não são suportadas.')
   if (/\son[a-z]+\s*=/i.test(source)) errors.push('Remova handlers JavaScript do SVG.')
   if (/\s(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i.test(source)) errors.push('Remova links externos ou data URLs do SVG.')
-  if (/url\(/i.test(source) || /@import/i.test(source)) errors.push('Remova referências CSS externas, gradients por URL ou imports.')
+  // Allow internal fragment references like url(#id) but block external URLs
+  if (/url\(\s*["']?(?!#)[^)]*["']?\)/i.test(source) || /@import/i.test(source)) errors.push('Remova referências CSS externas, gradients por URL ou imports.')
 
   const rootMatch = source.match(/<svg\b([^>]*)>/i)
   if (!rootMatch) {
