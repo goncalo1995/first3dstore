@@ -1,4 +1,8 @@
-import DOMPurify from 'dompurify'
+import { JSDOM } from 'jsdom'
+import createDOMPurify from 'dompurify'
+
+const window = new JSDOM('').window
+const DOMPurify = createDOMPurify(window as unknown as Window)
 
 const printableTags = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'text', 'line'])
 const namedColors: Record<string, string> = {
@@ -31,7 +35,7 @@ export type SvgAnalysis = {
 
 function parseDimension(value?: string | null) {
   if (!value) return undefined
-  const match = value.trim().match(/^([0-9]*\.?[0-9]+)/)
+  const match = value.trim().match(/^([0-9]*\.?[0-9]+)$/)
   if (!match) return undefined
   const parsed = Number(match[1])
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
@@ -201,6 +205,23 @@ export function sanitizeSvg(input: string, mappings?: Record<string, string>): S
   const errors: string[] = []
   const warnings: string[] = []
 
+  // Validate raw input BEFORE sanitization to detect attacks
+  const rawSource = input
+    .replace(/<\?xml[\s\S]*?\?>/gi, '')
+    .replace(/<!doctype[\s\S]*?>/gi, '')
+    .trim()
+
+  if (!/<svg[\s>]/i.test(rawSource)) errors.push('O ficheiro não parece ser um SVG válido.')
+  if (/<script[\s>]/i.test(rawSource)) errors.push('Remova scripts do SVG.')
+  if (/<foreignObject[\s>]/i.test(rawSource)) errors.push('Remova foreignObject do SVG.')
+  if (/<image[\s>]/i.test(rawSource)) errors.push('Use vetores puros; imagens raster embebidas não são suportadas.')
+  if (/\son[a-z]+\s*=/i.test(rawSource)) errors.push('Remova handlers JavaScript do SVG.')
+  // Reject hrefs that are not fragment references (allow only #id)
+  if (/\s(?:href|xlink:href)\s*=\s*["'](?!#)/i.test(rawSource)) errors.push('Remova links externos ou data URLs do SVG.')
+  if (/<!--[\s\S]*?-->/g.test(rawSource)) errors.push('Remova comentários do SVG.')
+  // Allow internal fragment references like url(#id) but block external URLs
+  if (/url\(\s*["']?(?!#)[^)]*["']?\)/i.test(rawSource) || /@import/i.test(rawSource)) errors.push('Remova referências CSS externas, gradients por URL ou imports.')
+
   // First pass: DOMPurify sanitization to remove dangerous content
   let source = purifySvg(input)
 
@@ -210,15 +231,6 @@ export function sanitizeSvg(input: string, mappings?: Record<string, string>): S
     .replace(/<!doctype[\s\S]*?>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .trim()
-
-  if (!/<svg[\s>]/i.test(source)) errors.push('O ficheiro não parece ser um SVG válido.')
-  if (/<script[\s>]/i.test(source)) errors.push('Remova scripts do SVG.')
-  if (/<foreignObject[\s>]/i.test(source)) errors.push('Remova foreignObject do SVG.')
-  if (/<image[\s>]/i.test(source)) errors.push('Use vetores puros; imagens raster embebidas não são suportadas.')
-  if (/\son[a-z]+\s*=/i.test(source)) errors.push('Remova handlers JavaScript do SVG.')
-  if (/\s(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i.test(source)) errors.push('Remova links externos ou data URLs do SVG.')
-  // Allow internal fragment references like url(#id) but block external URLs
-  if (/url\(\s*["']?(?!#)[^)]*["']?\)/i.test(source) || /@import/i.test(source)) errors.push('Remova referências CSS externas, gradients por URL ou imports.')
 
   const rootMatch = source.match(/<svg\b([^>]*)>/i)
   if (!rootMatch) {

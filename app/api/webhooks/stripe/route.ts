@@ -145,9 +145,7 @@ export async function POST(req: NextRequest) {
     } catch (txError: any) {
       // Check if this is a duplicate constraint violation
       // If eventId already exists, treat as duplicate
-      const isDuplicate = txError?.message?.includes('eventId') ||
-                          txError?.message?.includes('unique') ||
-                          txError?.message?.includes('duplicate')
+      const isDuplicate = txError?.body?.type === 'record-not-unique'
 
       if (isDuplicate) {
         return NextResponse.json({ received: true, duplicate: true })
