@@ -12,10 +12,10 @@ export function Footer() {
               Mosaicos hexagonais 3D para fotos personalizadas. Peças impressas em Lisboa, montagem sem ferramentas.
             </p>
             <div className="flex gap-4 mt-4">
-              <a href="https://instagram.com/foto3d.pt" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
+              <a href="https://instagram.com/foto3d.pt" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80" aria-label="Instagram — Foto3D">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="mailto:geral@foto3d.pt" className="text-primary hover:text-primary/80">
+              <a href="mailto:geral@foto3d.pt" className="text-primary hover:text-primary/80" aria-label="Email — Foto3D">
                 <Mail className="w-5 h-5" />
               </a>
             </div>

@@ -463,7 +463,7 @@ export default function PuzzlePage() {
 
           <div className="flex min-h-[52vh] items-center justify-center rounded-lg bg-[#d8ddd4] p-3">
             <div className="relative w-full max-w-4xl overflow-hidden rounded-md bg-white shadow-2xl shadow-slate-950/25" style={{ aspectRatio: previewAspect }}>
-              {previewSvg ? (
+              {previewSvg && mappedAnalysis?.ok ? (
                 <div
                   className="absolute left-1/2 top-1/2 h-full w-full"
                   style={{

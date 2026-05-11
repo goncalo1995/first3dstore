@@ -89,6 +89,15 @@ export async function sendPuzzlePaymentApproval(params: {
   if (!request) throw new Error('Pedido não encontrado.')
   if (request.canvasConfig?.type !== 'svg-puzzle') throw new Error('Esta ação só está disponível para puzzles SVG.')
 
+  // State guard: prevent regression of paid/fulfilled orders
+  if (request.isPaid === true) {
+    throw new Error('Operação inválida para pedidos pagos/fulfillados.')
+  }
+  const laterStates = new Set(['AWAITING_PRODUCTION', 'READY_FOR_PRODUCTION', 'IN_PRODUCTION', 'SHIPPED', 'FULFILLED', 'PAID'])
+  if (laterStates.has(request.status)) {
+    throw new Error('Operação inválida para pedidos pagos/fulfillados.')
+  }
+
   await dbAdmin.transact(
     dbAdmin.tx.orderRequests[params.requestId].update({
       paymentUrl: params.paymentUrl,
@@ -119,9 +128,16 @@ export async function sendPuzzlePaymentApproval(params: {
       throw new Error('Pedido atualizado, mas o email não foi enviado.')
     }
   } else {
+    const urlHost = (() => {
+      try {
+        return new URL(params.paymentUrl).host
+      } catch {
+        return 'invalid-url'
+      }
+    })()
     console.info('Puzzle approval email skipped because RESEND_API_KEY is missing.', {
       requestId: params.requestId,
-      paymentUrl: params.paymentUrl,
+      paymentUrlHost: urlHost,
     })
   }
 
@@ -253,8 +269,14 @@ export async function approveOrderRequestForProduction(requestId: string) {
   const transactions: any[] = []
 
   if (isHexa) {
-    const hexaRequest = request.canvasConfig?.request
+    const hexaRequest = request.canvasConfig?.request ?? request.canvasConfig?.hexaRequest
     const tiles = (Array.isArray(hexaRequest?.tiles) ? hexaRequest.tiles : []) as any[]
+
+    // Fail fast: prevent mutation if no tiles
+    if (tiles.length === 0) {
+      throw new Error('Cannot create production jobs: no tiles found in hexaRequest.')
+    }
+
     const size = hexaRequest?.mosaicSize || '-'
     const materialGrams = Number(catalogProduct?.materialGrams) || (size === 'XS' ? 42 : size === 'M' ? 112 : 72)
     const groups = tiles.reduce<Record<string, number>>((acc, tile: any) => {

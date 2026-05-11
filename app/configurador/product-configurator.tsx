@@ -734,7 +734,8 @@ export function ProductConfigurator({
     if (!selectedFile) return 'Carregue uma fotografia antes de pedir a revisão.'
     if (customerName.trim().length < 2) return 'Indique o seu nome.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())) return 'Indique um email válido.'
-    if (customerPhone?.trim().length && customerPhone.trim().length < 9) return 'Indique um telemóvel válido.'
+    const phoneValue = customerPhone?.trim() ?? ''
+    if (phoneValue.length > 0 && phoneValue.length < 9) return 'Indique um telemóvel válido.'
     return null
   }
 
@@ -1267,7 +1268,7 @@ export function ProductConfigurator({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="customerPhone">Telemóvel</Label>
-                  <Input id="customerPhone" type="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required />
+                  <Input id="customerPhone" type="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required={customerPhone?.trim()?.length > 0} />
                 </div>
                 <Button type="submit" disabled={isSubmitting} className="h-11 w-full bg-[#121212] text-white hover:bg-[#2a2a2a]">
                   {isSubmitting ? (

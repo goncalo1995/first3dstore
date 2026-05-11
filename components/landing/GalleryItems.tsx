@@ -75,7 +75,7 @@ export default function GalleryItems() {
             <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="font-serif text-2xl font-bold text-white">{item.title}</p>
                 <p className="mt-2 max-w-xl font-sans text-sm leading-6 text-white/78">{item.occasion}</p>
-                <p className="mt-3 hidden max-w-xl font-sans text-xs leading-5 text-white/56 md:block">{item.detail}</p>
+                {item.detail && <p className="mt-3 hidden max-w-xl font-sans text-xs leading-5 text-white/56 md:block">{item.detail}</p>}
             </div>
             </article>
         ))}
