@@ -75,3 +75,79 @@ Esperamos que esta memória iluminada chegue com muita emoção.
 Obrigado,
 Foto3D.pt`
 }
+
+export function getHexaOrderConfirmationEmail(params: {
+  name: string
+  email: string
+  tileCount: number
+  mosaicSize: string
+  colors: string[]
+  total: number
+  discountApplied: string | null
+}) {
+  const priceFormatted = new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(params.total)
+
+  const colorsList = params.colors.join(', ')
+  const discountText = params.discountApplied ? ` (desconto de ${params.discountApplied} aplicado)` : ''
+
+  return `Olá ${params.name},
+
+Obrigado pela sua encomenda na Foto3D.pt! Estamos entusiasmados por criar as suas peças HexaMemória personalizadas.
+
+Resumo da sua encomenda:
+- Peças: ${params.tileCount} hexágonos tamanho ${params.mosaicSize}
+- Cores: ${colorsList}
+- Total: ${priceFormatted}${discountText}
+
+O que acontece agora?
+1. Vamos preparar o ficheiro de produção com as suas fotografias
+2. Iniciamos a impressão 3D das suas peças com cuidado e precisão
+3. Assim que estiverem prontas, enviamos para ${params.email}
+
+Se tiver alguma dúvida, responda a este email ou contacte-nos através do site.
+
+Com os melhores cumprimentos,
+A equipa Foto3D.pt`
+}
+
+export function getHexaOrderAdminNotificationEmail(params: {
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  customerSpaceType: string
+  tileCount: number
+  mosaicSize: string
+  colors: string[]
+  total: number
+  discountApplied: string | null
+  orderRequestId: string
+}) {
+  const priceFormatted = new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(params.total)
+
+  const colorsList = params.colors.join(', ')
+  const discountText = params.discountApplied ? ` (desconto ${params.discountApplied})` : ' (sem desconto)'
+
+  return `Nova venda HexaMemória!
+
+Dados do cliente:
+- Nome: ${params.customerName}
+- Email: ${params.customerEmail}
+- Telefone: ${params.customerPhone || 'N/A'}
+- Tipo de espaço: ${params.customerSpaceType}
+
+Detalhes da encomenda:
+- ID: ${params.orderRequestId}
+- Peças: ${params.tileCount} hexágonos tamanho ${params.mosaicSize}
+- Cores: ${colorsList}
+- Total: ${priceFormatted}${discountText}
+
+A encomenda foi paga via Stripe e está pronta para produção.
+
+Foto3D.pt`
+}

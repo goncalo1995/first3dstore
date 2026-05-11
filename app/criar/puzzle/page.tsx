@@ -160,6 +160,8 @@ export default function PuzzlePage() {
     columns: config.columns,
     colorCount: Math.max(1, finalColors.length),
   })
+  // previewSvg comes from DOMPurify-sanitized output (see lib/puzzle/svg.ts)
+  // It is safe to use with dangerouslySetInnerHTML only after validation passes (mappedAnalysis?.ok)
   const previewSvg = mappedAnalysis?.sanitizedSvg ?? ''
   const previewAspect = `${config.widthMm} / ${config.heightMm}`
   const gridPath = buildPuzzleGridPath({

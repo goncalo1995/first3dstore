@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify'
+
 const printableTags = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'text', 'line'])
 const namedColors: Record<string, string> = {
   black: '#000000',
@@ -144,10 +146,66 @@ function mapTagColors(attrs: string, tagName: string, mappings?: Record<string, 
   return nextAttrs
 }
 
+function purifySvg(input: string): string {
+  // DOMPurify configuration for SVG - aggressive sanitization
+  const config = {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ALLOWED_TAGS: [
+      'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line',
+      'defs', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask',
+      'pattern', 'symbol', 'use', 'text', 'tspan', 'textPath',
+      'title', 'desc', 'metadata', 'filter', 'feBlend', 'feColorMatrix',
+      'feComponentTransfer', 'feComposite', 'feConvolveMatrix', 'feDiffuseLighting',
+      'feDisplacementMap', 'feDistantLight', 'feFlood', 'feGaussianBlur', 'feImage',
+      'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight',
+      'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'animate',
+      'animateTransform', 'animateMotion', 'set', 'switch', 'foreignObject'
+    ],
+    ALLOWED_ATTR: [
+      'id', 'class', 'style', 'transform', 'd', 'x', 'y', 'width', 'height',
+      'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2', 'points',
+      'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+      'stroke-dasharray', 'stroke-dashoffset', 'opacity', 'fill-opacity',
+      'stroke-opacity', 'fill-rule', 'clip-rule', 'viewBox', 'preserveAspectRatio',
+      'xmlns', 'xmlns:xlink', 'xlink:href', 'gradientUnits', 'gradientTransform',
+      'offset', 'stop-color', 'stop-opacity', 'spreadMethod', 'fx', 'fy',
+      'dx', 'dy', 'stdDeviation', 'in', 'in2', 'result', 'mode', 'type',
+      'values', 'tableValues', 'slope', 'intercept', 'amplitude', 'exponent',
+      'k1', 'k2', 'k3', 'k4', 'order', 'kernelMatrix', 'divisor', 'bias',
+      'targetX', 'targetY', 'surfaceScale', 'diffuseConstant', 'specularConstant',
+      'specularExponent', 'lighting-color', 'azimuth', 'elevation', 'text-anchor',
+      'font-family', 'font-size', 'font-weight', 'letter-spacing', 'word-spacing',
+      'startOffset', 'method', 'spacing', 'href', 'to', 'from', 'by', 'dur',
+      'begin', 'end', 'repeatCount', 'repeatDur', 'keyTimes', 'keySplines',
+      'calcMode', 'additive', 'accumulate', 'path', 'rotate', 'origin',
+      'textLength', 'lengthAdjust', 'mask', 'clip-path', 'filter', 'maskUnits',
+      'maskContentUnits', 'clipPathUnits', 'patternUnits', 'patternTransform',
+      'symbol', 'refX', 'refY', 'marker', 'markerWidth', 'markerHeight',
+      'markerUnits', 'orient', 'overflow', 'display', 'visibility'
+    ],
+    // Explicitly forbid dangerous elements and attributes
+    FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'embed', 'object', 'form', 'input', 'textarea', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onfocus', 'onblur', 'onchange', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress', 'oncontextmenu', 'ondblclick', 'onmousedown', 'onmouseup', 'onmousemove', 'onmouseenter', 'onmouseleave', 'onwheel', 'onscroll', 'onresize', 'onpageshow', 'onpagehide', 'onhashchange', 'onbeforeunload', 'ononline', 'onoffline', 'onpopstate', 'onstorage', 'onmessage', 'onerror', 'onloadstart', 'onprogress', 'onloadend', 'onabort', 'oncanplay', 'oncanplaythrough', 'ondurationchange', 'onemptied', 'onended', 'onloadeddata', 'onloadedmetadata', 'onpause', 'onplay', 'onplaying', 'onratechange', 'onseeked', 'onseeking', 'onstalled', 'onsuspend', 'ontimeupdate', 'onvolumechange', 'onwaiting', 'oncopy', 'oncut', 'onpaste', 'onbeforecopy', 'onbeforecut', 'onbeforepaste', 'onbeforeprint', 'onafterprint', 'onpropertychange', 'onreadystatechange', 'onselectionchange', 'onstart', 'onfinish', 'onbounce', 'onbegin', 'onend', 'onrepeat', 'onzoom', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondragstart', 'ondrop'],
+    ALLOW_DATA_ATTR: false,
+    SANITIZE_DOM: true,
+    KEEP_CONTENT: true,
+    RETURN_DOM: false,
+    RETURN_DOM_FRAGMENT: false,
+    RETURN_TRUSTED_TYPE: false,
+  }
+
+  return DOMPurify.sanitize(input, config)
+}
+
 export function sanitizeSvg(input: string, mappings?: Record<string, string>): SvgAnalysis {
   const errors: string[] = []
   const warnings: string[] = []
-  const source = input
+
+  // First pass: DOMPurify sanitization to remove dangerous content
+  let source = purifySvg(input)
+
+  // Remove XML declaration, DOCTYPE, and comments for cleaner processing
+  source = source
     .replace(/<\?xml[\s\S]*?\?>/gi, '')
     .replace(/<!doctype[\s\S]*?>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
