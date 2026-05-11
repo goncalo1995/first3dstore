@@ -1,8 +1,4 @@
-import { JSDOM } from 'jsdom'
-import createDOMPurify from 'dompurify'
-
-const window = new JSDOM('').window
-const DOMPurify = createDOMPurify(window as unknown as Window)
+import DOMPurify from 'dompurify';
 
 const printableTags = new Set(['path', 'rect', 'circle', 'ellipse', 'polygon', 'polyline', 'text', 'line'])
 const namedColors: Record<string, string> = {
@@ -163,7 +159,7 @@ function purifySvg(input: string): string {
       'feDisplacementMap', 'feDistantLight', 'feFlood', 'feGaussianBlur', 'feImage',
       'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight',
       'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'animate',
-      'animateTransform', 'animateMotion', 'set', 'switch', 'foreignObject'
+      'animateTransform', 'animateMotion', 'set', 'switch'
     ],
     ALLOWED_ATTR: [
       'id', 'class', 'style', 'transform', 'd', 'x', 'y', 'width', 'height',
