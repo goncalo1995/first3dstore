@@ -59,6 +59,7 @@ const woodTextureDataUrl = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2
 
 const frameFinishes = [
   { name: 'Preto', hex: '#000000' },
+  { name: 'Branco', hex: '#FFFFFF' },
   { name: 'Madeira', hex: '#8B4513', imageUrl: woodTextureDataUrl },
 ]
 
@@ -82,12 +83,117 @@ const createFrameFinishVariants = (
     finalPrice,
     variantType: 'led',
     textOverlay,
-    colors: [frameFinishes[1]],
+    colors: [frameFinishes[2]],
   },
 ]
 
+const hexaFinishes = [
+  { name: 'Preto', hex: '#1f1f1d' },
+  { name: 'Branco', hex: '#f7f3ea' },
+  { name: 'Madeira', hex: '#b88452', imageUrl: woodTextureDataUrl },
+]
+
+function createHexaProduct(params: {
+  slug: string
+  name: string
+  size: 'XS' | 'S' | 'M'
+  width: number
+  height: number
+  price: number
+  grams: number
+  featuredRank: number
+  sortOrder: number
+}) {
+  return {
+    slug: params.slug,
+    name: params.name,
+    priceFrom: params.price,
+    priceTo: params.price,
+    description: `Azulejo hexagonal HexaMemória ${params.size}, ${params.width} x ${params.height}mm, para mosaicos fotográficos modulares.`,
+    benefit: `Mosaico hexagonal ${params.size} para fotografias impressas em casa`,
+    image: '/placeholder.svg',
+    featured: true,
+    visible: true,
+    aspectRatio: [params.width, params.height] as [number, number],
+    colorSelectionMode: 'preset_options' as const,
+    customizable: true,
+    multiColor: false,
+    multiColorCount: 1,
+    category: 'custom',
+    categorySlugs: ['custom', 'gift', 'hexa-memoria'],
+    variants: hexaFinishes.map((finish) => ({
+      id: finish.name.toLowerCase().replace(/\s+/g, '-'),
+      name: finish.name,
+      kind: 'single_color' as const,
+      finalPrice: params.price,
+      formatLabel: `${params.size} · ${params.width} x ${params.height}mm`,
+      colors: [finish],
+      parts: [
+        {
+          label: `Moldura HexaMemória ${params.size}`,
+          grams: params.grams,
+          materialType: 'PLA' as const,
+          colorSource: 'variantColor' as const,
+        },
+      ],
+    })),
+    productionJobTemplates: [
+      {
+        partLabel: `Moldura HexaMemória ${params.size}`,
+        colorSource: 'baseColor' as const,
+        materialGrams: params.grams,
+        materialType: 'PLA' as const,
+      },
+    ],
+    materialRecipe: [
+      {
+        label: `Moldura HexaMemória ${params.size}`,
+        grams: params.grams,
+        materialType: 'PLA' as const,
+        colorSource: 'variantColor' as const,
+      },
+    ],
+    materialGrams: params.grams,
+    featuredRank: params.featuredRank,
+    sortOrder: params.sortOrder,
+  }
+}
+
 // Products to seed
 const productsToSeed = [
+  createHexaProduct({
+    slug: 'hexa-xs',
+    name: 'HexaMemória XS',
+    size: 'XS',
+    width: 120,
+    height: 104,
+    price: 14.99,
+    grams: 42,
+    featuredRank: 1,
+    sortOrder: 1,
+  }),
+  createHexaProduct({
+    slug: 'hexa-s',
+    name: 'HexaMemória S',
+    size: 'S',
+    width: 160,
+    height: 138.6,
+    price: 19.99,
+    grams: 72,
+    featuredRank: 2,
+    sortOrder: 2,
+  }),
+  createHexaProduct({
+    slug: 'hexa-m',
+    name: 'HexaMemória M',
+    size: 'M',
+    width: 200,
+    height: 173.2,
+    price: 29.99,
+    grams: 112,
+    featuredRank: 3,
+    sortOrder: 3,
+  }),
   {
     slug: 'moldura',
     name: 'Moldura Lithophane',

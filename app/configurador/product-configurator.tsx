@@ -375,7 +375,7 @@ function LightModeControl({
             onClick={() => onChange(mode.value)}
             className={cn(
               'flex min-h-12 items-center justify-center gap-2 rounded-md border px-2 text-xs font-semibold transition sm:text-sm',
-              lightMode === mode.value ? 'border-[#ffaa00] bg-[#ffaa00]/15 text-white' : 'border-white/10 bg-white/5 text-white/62 hover:border-white/24 hover:text-white',
+              lightMode === mode.value ? 'border-[#ffaa00] bg-primary/15 text-white' : 'border-white/10 bg-white/5 text-white/62 hover:border-white/24 hover:text-white',
             )}
             aria-pressed={lightMode === mode.value}
             title={mode.description}
@@ -734,7 +734,8 @@ export function ProductConfigurator({
     if (!selectedFile) return 'Carregue uma fotografia antes de pedir a revisão.'
     if (customerName.trim().length < 2) return 'Indique o seu nome.'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())) return 'Indique um email válido.'
-    if (customerPhone.trim().length < 6) return 'Indique um telemóvel válido.'
+    const phoneValue = customerPhone?.trim() ?? ''
+    if (phoneValue.length > 0 && phoneValue.length < 9) return 'Indique um telemóvel válido.'
     return null
   }
 
@@ -877,7 +878,7 @@ export function ProductConfigurator({
 
         <section className="py-10 lg:py-14">
           <div className="mb-8">
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-[#ffaa00]">Configurador</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.24em] text-primary">Configurador</p>
             <h1 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Personalize a sua luz.</h1>
             <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-white/62">
               Escolha a variante, carregue a fotografia, ajuste o recorte e peça a revisão gratuita antes do pagamento.
@@ -900,7 +901,7 @@ export function ProductConfigurator({
                   }}
                   className={cn(
                     'rounded-lg border px-4 py-3 text-left font-sans transition',
-                    isActive ? 'border-[#ffaa00] bg-[#ffaa00]/12 text-white' : 'border-white/10 bg-white/8 text-white/72 hover:border-white/25',
+                    isActive ? 'border-[#ffaa00] bg-primary/12 text-white' : 'border-white/10 bg-white/8 text-white/72 hover:border-white/25',
                     !isConfigurable && 'cursor-not-allowed opacity-55 hover:border-white/10',
                   )}
                 >
@@ -933,7 +934,7 @@ export function ProductConfigurator({
                   <div>
                     <h3 className="font-serif text-2xl font-bold">Carregar Foto</h3>
                     <p className="mt-1 font-sans text-sm text-white/56">JPG ou PNG, máximo 5MB. A imagem aparece no modelo em segundos.</p>
-                    <div className="mt-3 rounded-lg border border-[#ffaa00]/25 bg-[#ffaa00]/10 p-3 font-sans text-sm text-[#ffe0a3]">
+                    <div className="mt-3 rounded-lg border border-[#ffaa00]/25 bg-primary/10 p-3 font-sans text-sm text-[#ffe0a3]">
                       <p className="font-semibold text-white">{activeFormatInfo.label}</p>
                       <p className="mt-1 leading-5 text-[#ffe0a3]/86">{activeFormatInfo.guidance}</p>
                     </div>
@@ -981,7 +982,7 @@ export function ProductConfigurator({
                                   onClick={() => setSelectedPartColors(current => ({ ...current, [part.key]: color }))}
                                   className={cn(
                                     'flex items-center gap-2 rounded-md border px-2.5 py-2 font-sans text-xs transition',
-                                    isSelected ? 'border-[#ffaa00] bg-[#ffaa00]/12 text-white' : 'border-white/10 bg-black/10 text-white/62 hover:border-white/24',
+                                    isSelected ? 'border-[#ffaa00] bg-primary/12 text-white' : 'border-white/10 bg-black/10 text-white/62 hover:border-white/24',
                                   )}
                                   aria-pressed={isSelected}
                                 >
@@ -1010,7 +1011,7 @@ export function ProductConfigurator({
                       onClick={() => setPrintMode('grayscale')}
                       className={cn(
                         'rounded-lg border p-3 text-left font-sans transition',
-                        printMode === 'grayscale' ? 'border-[#ffaa00] bg-[#ffaa00]/12 text-white' : 'border-white/10 bg-white/5 text-white/68',
+                        printMode === 'grayscale' ? 'border-[#ffaa00] bg-primary/12 text-white' : 'border-white/10 bg-white/5 text-white/68',
                       )}
                     >
                       <span className="block font-semibold">Grayscale</span>
@@ -1039,7 +1040,7 @@ export function ProductConfigurator({
                         onClick={() => handleVariantSelect(variant.id)}
                         className={cn(
                           'flex w-full items-center gap-3 rounded-lg border p-4 text-left font-sans transition',
-                          selectedVariant?.id === variant.id ? 'border-[#ffaa00] bg-[#ffaa00]/12' : 'border-white/10 bg-white/5 hover:border-white/24',
+                          selectedVariant?.id === variant.id ? 'border-[#ffaa00] bg-primary/12' : 'border-white/10 bg-white/5 hover:border-white/24',
                         )}
                       >
                         <span className="h-8 w-8 rounded-full border border-white/15" style={{ backgroundColor: getVariantSwatch(variant) }} />
@@ -1061,7 +1062,7 @@ export function ProductConfigurator({
                             )
                           })()}
                         </span>
-                        {selectedVariant?.id === variant.id && <Check className="h-5 w-5 text-[#ffaa00]" />}
+                        {selectedVariant?.id === variant.id && <Check className="h-5 w-5 text-primary" />}
                       </button>
                     ))
                   ) : (
@@ -1089,7 +1090,7 @@ export function ProductConfigurator({
                           onClick={() => setSelectedVariantColor(color)}
                           className={cn(
                             'flex items-center gap-3 rounded-lg border px-3 py-2 font-sans text-sm transition',
-                            isSelected ? 'border-[#ffaa00] bg-[#ffaa00]/12 text-white' : 'border-white/10 bg-white/5 text-white/68 hover:border-white/24',
+                            isSelected ? 'border-[#ffaa00] bg-primary/12 text-white' : 'border-white/10 bg-white/5 text-white/68 hover:border-white/24',
                           )}
                           aria-pressed={isSelected}
                         >
@@ -1104,7 +1105,7 @@ export function ProductConfigurator({
                             aria-hidden="true"
                           />
                           <span>{color.name}</span>
-                          {isSelected && <Check className="h-4 w-4 text-[#ffaa00]" />}
+                          {isSelected && <Check className="h-4 w-4 text-primary" />}
                         </button>
                       )
                     })}
@@ -1150,7 +1151,7 @@ export function ProductConfigurator({
                     <p>{selectedLight.label}</p>
                   </div>
                 </div>
-                <Button type="button" onClick={openReviewModal} className="h-12 w-full bg-[#ffaa00] font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+                <Button type="button" onClick={openReviewModal} className="h-12 w-full bg-primary font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
                   <Send className="mr-2 h-4 w-4" />
                   Pedir Revisão Gratuita
                 </Button>
@@ -1222,7 +1223,7 @@ export function ProductConfigurator({
               <Button type="button" variant="outline" onClick={chooseAnotherFile} className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
                 Escolher Outra Foto
               </Button>
-              <Button type="button" onClick={applyCrop} disabled={isCropping} className="bg-[#ffaa00] font-sans text-[#121212] hover:bg-[#ffc14a]">
+              <Button type="button" onClick={applyCrop} disabled={isCropping} className="bg-primary font-sans text-[#121212] hover:bg-[#ffc14a]">
                 {isCropping ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                 Aplicar Recorte
               </Button>
@@ -1267,7 +1268,7 @@ export function ProductConfigurator({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="customerPhone">Telemóvel</Label>
-                  <Input id="customerPhone" type="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required />
+                  <Input id="customerPhone" type="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required={customerPhone?.trim()?.length > 0} />
                 </div>
                 <Button type="submit" disabled={isSubmitting} className="h-11 w-full bg-[#121212] text-white hover:bg-[#2a2a2a]">
                   {isSubmitting ? (

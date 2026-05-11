@@ -8,4 +8,4 @@ const dbAdmin = init({
   useDateObjects: true, // Ensure dates are returned as Date objects
 });
 
-export { dbAdmin };
+export { dbAdmin, id };

@@ -135,16 +135,16 @@ export default function EmpresasContent() {
               Foto3D.pt
             </Link>
             <div className="hidden items-center gap-5 font-sans text-sm text-white/66 md:flex">
-              <a href="#cenarios" className="transition hover:text-[#ffaa00]">Cenários</a>
-              <a href="#qr" className="transition hover:text-[#ffaa00]">QR teaser</a>
-              <a href="#produtos-b2b" className="transition hover:text-[#ffaa00]">Produtos MVP</a>
-              <a href="#contacto" className="transition hover:text-[#ffaa00]">Contacto</a>
+              <a href="#cenarios" className="transition hover:text-primary">Cenários</a>
+              <a href="#qr" className="transition hover:text-primary">QR teaser</a>
+              <a href="#produtos-b2b" className="transition hover:text-primary">Produtos MVP</a>
+              <a href="#contacto" className="transition hover:text-primary">Contacto</a>
             </div>
           </nav>
 
           <div className="grid min-h-[calc(100vh-3rem)] items-center gap-10 py-16 lg:grid-cols-[minmax(0,1fr)_440px]">
             <div>
-              <p className="inline-flex items-center gap-2 rounded-full border border-[#ffaa00]/25 bg-[#ffaa00]/10 px-4 py-2 font-sans text-sm font-semibold text-[#ffd38b]">
+              <p className="inline-flex items-center gap-2 rounded-full border border-[#ffaa00]/25 bg-primary/10 px-4 py-2 font-sans text-sm font-semibold text-[#ffd38b]">
                 <Sparkles className="h-4 w-4" />
                 Impressão 3D personalizada para empresas
               </p>
@@ -155,7 +155,7 @@ export default function EmpresasContent() {
                 Criamos pequenas séries, brindes, displays, sinalética e peças com QR para marcas que querem testar ideias físicas com rapidez, presença e controlo local.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Button asChild size="lg" className="h-14 bg-[#ffaa00] px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+                <Button asChild size="lg" className="h-14 bg-primary px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
                   <a href="#contacto">
                     Pedir proposta
                     <ArrowRight className="ml-2 h-5 w-5" />
@@ -168,7 +168,7 @@ export default function EmpresasContent() {
               <div className="mt-9 grid gap-3 sm:grid-cols-2">
                 {proofPoints.map((point) => (
                   <div key={point} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/8 px-4 py-3 font-sans text-sm text-white/76 backdrop-blur-md">
-                    <Check className="h-4 w-4 shrink-0 text-[#ffaa00]" />
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
                     {point}
                   </div>
                 ))}
@@ -183,7 +183,7 @@ export default function EmpresasContent() {
                   { label: "Sem molde industrial", value: "produção local", icon: Factory },
                 ].map((item) => (
                   <div key={item.label} className="rounded-lg border border-white/10 bg-[#121212]/70 p-5">
-                    <item.icon className="h-7 w-7 text-[#ffaa00]" />
+                    <item.icon className="h-7 w-7 text-primary" />
                     <p className="mt-4 font-sans text-sm text-white/50">{item.label}</p>
                     <p className="mt-1 font-serif text-3xl font-bold text-white">{item.value}</p>
                   </div>
@@ -197,13 +197,13 @@ export default function EmpresasContent() {
       <section id="cenarios" className="px-5 py-16 sm:px-8 lg:py-24">
         <div className="mx-auto max-w-7xl">
           <div className="mb-12 max-w-3xl">
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Onde faz diferença</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-primary">Onde faz diferença</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Objetos físicos que tornam uma campanha mais memorável.</h2>
           </div>
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
             {scenarios.map((scenario) => (
               <article key={scenario.title} className="rounded-lg border border-white/10 bg-white/8 p-6 backdrop-blur-md">
-                <scenario.icon className="h-8 w-8 text-[#ffaa00]" />
+                <scenario.icon className="h-8 w-8 text-primary" />
                 <h3 className="mt-5 font-serif text-2xl font-bold">{scenario.title}</h3>
                 <p className="mt-3 font-sans text-sm leading-6 text-white/62">{scenario.text}</p>
               </article>
@@ -215,12 +215,12 @@ export default function EmpresasContent() {
       <section id="qr" className="border-y border-white/5 bg-white/[0.03] px-5 py-16 sm:px-8 lg:py-24">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
           <div>
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">QR tracking teaser</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-primary">QR tracking teaser</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Peças que podem levar a campanha para o digital.</h2>
             <p className="mt-5 font-sans text-lg leading-8 text-white/68">
               Estamos a explorar peças físicas com QR para campanhas, eventos e ativações. Nesta fase é um teaser: recolhemos interesse e casos de uso pelo formulário, sem dashboard ou tracking real implementado ainda.
             </p>
-            <Button asChild size="lg" className="mt-8 h-14 bg-[#ffaa00] px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
+            <Button asChild size="lg" className="mt-8 h-14 bg-primary px-8 font-sans text-base text-[#121212] hover:bg-[#ffc14a]">
               <a href="#contacto">
                 Tenho interesse em QR
                 <QrCode className="ml-2 h-5 w-5" />
@@ -229,8 +229,8 @@ export default function EmpresasContent() {
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {["Scans por campanha", "Locais e datas", "Versões de peça"].map((metric) => (
-              <div key={metric} className="rounded-lg border border-[#ffaa00]/20 bg-[#ffaa00]/10 p-5">
-                <QrCode className="h-7 w-7 text-[#ffaa00]" />
+              <div key={metric} className="rounded-lg border border-[#ffaa00]/20 bg-primary/10 p-5">
+                <QrCode className="h-7 w-7 text-primary" />
                 <p className="mt-5 font-serif text-2xl font-bold">{metric}</p>
                 <p className="mt-2 font-sans text-sm leading-6 text-white/58">Conceito para validar procura B2B antes de desenvolver tracking.</p>
               </div>
@@ -242,13 +242,13 @@ export default function EmpresasContent() {
       <section id="produtos-b2b" className="px-5 py-16 sm:px-8 lg:py-24">
         <div className="mx-auto max-w-7xl">
           <div className="mb-12 max-w-3xl">
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Produtos para o MVP</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-primary">Produtos para o MVP</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Começar pequeno, personalizar muito.</h2>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {products.map((product) => (
               <div key={product} className="flex min-h-28 items-start gap-4 rounded-lg border border-white/10 bg-white/8 p-5">
-                <PackageCheck className="mt-1 h-6 w-6 shrink-0 text-[#ffaa00]" />
+                <PackageCheck className="mt-1 h-6 w-6 shrink-0 text-primary" />
                 <p className="font-sans text-base leading-7 text-white/76">{product}</p>
               </div>
             ))}
@@ -259,13 +259,13 @@ export default function EmpresasContent() {
       <section id="contacto" className="px-5 py-16 sm:px-8 lg:py-24">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div>
-            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-[#ffaa00]">Contacto B2B</p>
+            <p className="font-sans text-sm font-semibold uppercase tracking-[0.22em] text-primary">Contacto B2B</p>
             <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-6xl">Conte-nos o cenário, nós propomos as peças.</h2>
             <p className="mt-5 font-sans text-lg leading-8 text-white/68">
               Indique objetivo, quantidade aproximada, prazo e se quer explorar QR, personalização por pessoa ou uma pequena série para testar no mercado.
             </p>
             <div className="mt-8 rounded-lg border border-white/10 bg-white/8 p-5">
-              <Building2 className="h-8 w-8 text-[#ffaa00]" />
+              <Building2 className="h-8 w-8 text-primary" />
               <p className="mt-4 font-sans text-sm leading-6 text-white/62">
                 Produzimos localmente e adaptamos a proposta ao nível de detalhe, prazo e acabamento que a marca precisa.
               </p>
@@ -322,7 +322,7 @@ export default function EmpresasContent() {
             {error && <p className="mt-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 font-sans text-sm text-red-100">{error}</p>}
             {success && <p className="mt-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-3 font-sans text-sm text-emerald-100">{success}</p>}
 
-            <Button type="submit" disabled={isSubmitting} className="mt-5 h-12 w-full bg-[#ffaa00] font-sans text-[#121212] hover:bg-[#ffc14a]">
+            <Button type="submit" disabled={isSubmitting} className="mt-5 h-12 w-full bg-primary font-sans text-[#121212] hover:bg-[#ffc14a]">
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Enviar pedido
             </Button>

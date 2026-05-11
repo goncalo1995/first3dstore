@@ -241,15 +241,7 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
               {lastOrderId ? (
                 <>
                   <p className="font-semibold text-foreground">Pré-encomenda submetida</p>
-                  <p className="mt-2 text-sm text-muted-foreground">Guarde o seguinte código para acompanhar o estado do pedido:<br /><br/> <strong className="text-primary">{lastOrderId}</strong></p>
-                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(lastOrderId)}>
-                    <Copy className="w-4 h-4 mr-2" /> Copiar
-                  </Button>
-                  <br />
                   <p className="mt-2 text-sm text-muted-foreground">Entraremos em contacto brevemente para confirmar os detalhes da sua encomenda.</p>
-                  <Button asChild className="mt-4" onClick={closeCart}>
-                    <Link href={`/track-order?orderId=${encodeURIComponent(lastOrderId)}`}>Acompanhar encomenda</Link>
-                  </Button>
                 </>
               ) : (
                 <>
@@ -502,7 +494,7 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
                   type="submit"
                   form="cart-checkout-form"
                   disabled={isSubmitting}
-                  className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-6 px-4 rounded-lg"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-6 px-4 rounded-lg"
                 >
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Submeter pré-encomenda

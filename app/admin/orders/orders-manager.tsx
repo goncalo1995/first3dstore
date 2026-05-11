@@ -368,7 +368,7 @@ type OrderRequest = {
   companyName?: string
   productName?: string
   productSlug?: string
-  status: 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+  status: 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
   isPaid?: boolean
   selectedPrice?: number
   createdAt: Date | string
@@ -378,6 +378,7 @@ const orderRequestStatusLabels: Record<OrderRequest['status'], string> = {
   PENDING_REVIEW: 'Pendente',
   MODELING: 'Modelação',
   AWAITING_PAYMENT: 'Aguarda pagamento',
+  READY_FOR_PRODUCTION: 'Pronto para produção',
   IN_PRODUCTION: 'Em produção',
   SHIPPED: 'Enviado',
   B2B_LEAD: 'Lead B2B',
@@ -387,6 +388,7 @@ const orderRequestStatusTone: Record<OrderRequest['status'], string> = {
   PENDING_REVIEW: 'bg-sky-100 text-sky-900',
   MODELING: 'bg-violet-100 text-violet-900',
   AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
+  READY_FOR_PRODUCTION: 'bg-lime-100 text-lime-900',
   IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
   SHIPPED: 'bg-indigo-100 text-indigo-900',
   B2B_LEAD: 'bg-orange-100 text-orange-900',

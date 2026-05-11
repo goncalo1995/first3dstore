@@ -278,24 +278,37 @@ const _schema = i.schema({
       imageUrl: i.string().optional(),
       companyName: i.string().optional(),
       baseColor: i.string<'black' | 'wood'>().optional(),
+      productType: i.string<'hexa-memoria'>().optional(),
       productSlug: i.string().indexed().optional(),
       productName: i.string().optional(),
+      stlUrl: i.string().optional(),
+      svgUrl: i.string().optional(),
+      previewUrl: i.string().optional(),
+      paymentUrl: i.string().optional(),
+      estimatedPrice: i.number().optional(),
+      quotedPrice: i.number().optional(),
       variantId: i.string().optional(),
       variantName: i.string().optional(),
       selectedPrice: i.number().optional(),
       lightMode: i.string<'desligada' | 'quente' | 'fria'>().optional(),
       canvasConfig: i.json<{
         version: number
-        type: 'simple' | 'modular-list'
+        type: 'simple' | 'modular-list' | 'photo-puzzle' | 'svg-puzzle' | 'wall-forge' | 'hexa-memoria'
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),
       leadType: i.string<'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
-      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
+      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
       createdAt: i.date().indexed(),
       updatedAt: i.date(),
+    }),
+    stripeWebhookEvents: i.entity({
+      eventId: i.string().unique().indexed(),
+      type: i.string().indexed(),
+      orderRequestId: i.string().indexed().optional(),
+      processedAt: i.date().indexed(),
     }),
     productInventory: i.entity({
       productSlug: i.string().unique().indexed(),

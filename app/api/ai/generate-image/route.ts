@@ -9,15 +9,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'O prompt é obrigatório' }, { status: 400 })
     }
 
-    const munzuaOpenRouterApiKey = process.env.MUNZUA_OPENROUTER_API_KEY
-
-    if (!munzuaOpenRouterApiKey) {
-      return NextResponse.json(
-        { error: 'A chave OpenRouter do Munzua não está configurada' },
-        { status: 500 },
-      )
-    }
-
     const image = await generateImageFromPrompt({
       prompt,
       negativePrompt,
@@ -25,8 +16,7 @@ export async function POST(req: NextRequest) {
       quality,
       model,
       style: 'studio',
-      openrouterApiKey: munzuaOpenRouterApiKey,
-      trackingFeature: 'munzua.generateImage',
+      trackingFeature: 'foto3d.generateImage',
       usePromptDirectly: true,
     })
 

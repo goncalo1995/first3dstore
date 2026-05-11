@@ -2,23 +2,39 @@
 
 import { revalidatePath } from 'next/cache'
 import { id } from '@instantdb/admin'
+import { Resend } from 'resend'
 import { dbAdmin } from '@/lib/db-admin'
+import { getPuzzleApprovedEmail } from '@/lib/email-templates'
 import {
   baseColorToGlobalColorName,
   colorSourceToGlobalColorName,
   type ProductionJobTemplate,
 } from '@/lib/products'
 
-type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
 
 const validStatuses = new Set<OrderRequestStatus>([
   'PENDING_REVIEW',
   'MODELING',
   'AWAITING_PAYMENT',
+  'READY_FOR_PRODUCTION',
   'IN_PRODUCTION',
   'SHIPPED',
   'B2B_LEAD',
 ])
+
+function getSender() {
+  return process.env.RESEND_FROM_EMAIL || 'foto3d.pt <onboarding@resend.dev>'
+}
+
+function isValidUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
+  }
+}
 
 export async function updateOrderRequestStatus(requestId: string, status: OrderRequestStatus) {
   if (!requestId) throw new Error('Pedido inválido.')
@@ -32,6 +48,7 @@ export async function updateOrderRequestStatus(requestId: string, status: OrderR
   )
 
   revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/encomendas')
   revalidatePath('/admin/production')
 }
 
@@ -47,6 +64,85 @@ export async function approveOrderRequestPhoto(requestId: string) {
   )
 
   revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/encomendas')
+  revalidatePath('/admin/production')
+}
+
+export async function sendPuzzlePaymentApproval(params: {
+  requestId: string
+  paymentUrl: string
+  quotedPrice: number
+}) {
+  if (!params.requestId) throw new Error('Pedido inválido.')
+  if (!isValidUrl(params.paymentUrl)) throw new Error('Link de pagamento inválido.')
+  if (!Number.isFinite(params.quotedPrice) || params.quotedPrice <= 0 || params.quotedPrice > 1000) {
+    throw new Error('Preço final inválido.')
+  }
+
+  const requestResult = await dbAdmin.query({
+    orderRequests: {
+      $: { where: { id: params.requestId } },
+    },
+  })
+
+  const request = requestResult.orderRequests?.[0] as any
+  if (!request) throw new Error('Pedido não encontrado.')
+  if (request.canvasConfig?.type !== 'svg-puzzle') throw new Error('Esta ação só está disponível para puzzles SVG.')
+
+  // State guard: prevent regression of paid/fulfilled orders
+  if (request.isPaid === true) {
+    throw new Error('Operação inválida para pedidos pagos/fulfillados.')
+  }
+  const laterStates = new Set(['AWAITING_PRODUCTION', 'READY_FOR_PRODUCTION', 'IN_PRODUCTION', 'SHIPPED', 'FULFILLED', 'PAID'])
+  if (laterStates.has(request.status)) {
+    throw new Error('Operação inválida para pedidos pagos/fulfillados.')
+  }
+
+  await dbAdmin.transact(
+    dbAdmin.tx.orderRequests[params.requestId].update({
+      paymentUrl: params.paymentUrl,
+      quotedPrice: params.quotedPrice,
+      selectedPrice: params.quotedPrice,
+      status: 'AWAITING_PAYMENT',
+      isPaid: false,
+      updatedAt: new Date(),
+    }),
+  )
+
+  if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const { error } = await resend.emails.send({
+      from: getSender(),
+      to: request.customerEmail,
+      subject: 'O seu puzzle Foto3D.pt está pronto para confirmação',
+      text: getPuzzleApprovedEmail({
+        name: request.customerName,
+        paymentLink: params.paymentUrl,
+        price: params.quotedPrice,
+        previewUrl: request.previewUrl || request.svgUrl || request.imageUrl,
+      }),
+    })
+
+    if (error) {
+      console.error('Puzzle approval email failed:', error)
+      throw new Error('Pedido atualizado, mas o email não foi enviado.')
+    }
+  } else {
+    const urlHost = (() => {
+      try {
+        return new URL(params.paymentUrl).host
+      } catch {
+        return 'invalid-url'
+      }
+    })()
+    console.info('Puzzle approval email skipped because RESEND_API_KEY is missing.', {
+      requestId: params.requestId,
+      paymentUrlHost: urlHost,
+    })
+  }
+
+  revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/encomendas')
   revalidatePath('/admin/production')
 }
 
@@ -73,6 +169,7 @@ export async function updateOrderRequestPaymentReceived(requestId: string, isPai
   )
 
   revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/encomendas')
   revalidatePath('/admin/production')
 }
 
@@ -138,7 +235,11 @@ export async function approveOrderRequestForProduction(requestId: string) {
 
   const request = requestResult.orderRequests?.[0] as any
   if (!request) throw new Error('Pedido não encontrado.')
-  if (request.status !== 'AWAITING_PAYMENT') {
+  const isHexa = request.canvasConfig?.type === 'hexa-memoria'
+  if (isHexa && request.status !== 'READY_FOR_PRODUCTION') {
+    throw new Error('A encomenda HexaMemória tem de estar paga antes de criar a produção.')
+  }
+  if (!isHexa && request.status !== 'AWAITING_PAYMENT') {
     throw new Error('A fotografia deve ser aprovada e o pagamento confirmado antes de criar a produção.')
   }
   if (request.isPaid !== true) {
@@ -163,6 +264,87 @@ export async function approveOrderRequestForProduction(requestId: string) {
 
   const catalogProduct = (catalogResult.catalogProducts?.[0] as any) || null
   const globalColors = (colorsResult.globalColors || []) as { id: string; name: string; hex: string }[]
+  const now = new Date()
+  const jobIds: string[] = []
+  const transactions: any[] = []
+
+  if (isHexa) {
+    const hexaRequest = request.canvasConfig?.request ?? request.canvasConfig?.hexaRequest
+    const tiles = (Array.isArray(hexaRequest?.tiles) ? hexaRequest.tiles : []) as any[]
+
+    // Fail fast: prevent mutation if no tiles
+    if (tiles.length === 0) {
+      throw new Error('Cannot create production jobs: no tiles found in hexaRequest.')
+    }
+
+    const size = hexaRequest?.mosaicSize || '-'
+    const materialGrams = Number(catalogProduct?.materialGrams) || (size === 'XS' ? 42 : size === 'M' ? 112 : 72)
+    const groups = tiles.reduce<Record<string, number>>((acc, tile: any) => {
+      const color = typeof tile.color === 'string' ? tile.color : 'Preto'
+      acc[color] = (acc[color] ?? 0) + 1
+      return acc
+    }, {})
+
+    transactions.push(
+      dbAdmin.tx.orderRequests[requestId].update({
+        status: 'IN_PRODUCTION',
+        updatedAt: now,
+      }),
+    )
+
+    Object.entries(groups).forEach(([colorName, quantity], index) => {
+      const jobId = id()
+      jobIds.push(jobId)
+      const globalColor = globalColors.find((color) => color.name === colorName)
+      const colorHex = globalColor?.hex || (colorName === 'Branco' ? '#ffffff' : colorName === 'Madeira' ? '#b88452' : '#1f1f1d')
+      const colorId = globalColor?.id || 'fallback'
+      const jobTx = dbAdmin.tx.productionJobs[jobId].update({
+        orderId: `request-${requestId}`,
+        orderRequestId: requestId,
+        orderItemIndex: index,
+        productSlug: request.productSlug,
+        productName: request.productName || catalogProduct?.name || `HexaMemória ${size}`,
+        source: 'order_request',
+        partLabel: `Moldura HexaMemória ${size}`,
+        colorName,
+        colorHex,
+        materialGrams,
+        materialType: 'PLA',
+        quantity,
+        status: 'queued',
+        isMultiColor: false,
+        colorRequirements: [{
+          colorId,
+          colorName,
+          colorHex,
+          grams: materialGrams * quantity,
+          materialType: 'PLA',
+        }],
+        requiredColorIds: colorId,
+        totalGrams: materialGrams * quantity,
+        outsourced: false,
+        notes: [
+          request.notes,
+          `Produção HexaMemória: ${quantity}x tamanho ${size} em ${colorName}`,
+          `Total Parts to Print: ${tiles.length}x Size ${size}`,
+          request.canvasConfig ? `CanvasConfig: ${JSON.stringify(request.canvasConfig)}` : null,
+        ].filter(Boolean).join('\n\n'),
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      if (globalColor?.id) {
+        jobTx.link({ globalColor: globalColor.id })
+      }
+      transactions.push(jobTx)
+    })
+
+    await dbAdmin.transact(transactions)
+    revalidatePath('/admin/order-requests')
+    revalidatePath('/admin/encomendas')
+    revalidatePath('/admin/production')
+    return { created: true, jobIds }
+  }
 
   // Get production job templates from product
   const templates: ProductionJobTemplate[] = catalogProduct?.productionJobTemplates || []
@@ -172,10 +354,6 @@ export async function approveOrderRequestForProduction(requestId: string) {
     templates.length > 0
       ? templates
       : [{ partLabel: 'Parte principal', colorSource: 'baseColor', materialGrams: 100, materialType: 'PLA' }]
-
-  const now = new Date()
-  const jobIds: string[] = []
-  const transactions: any[] = []
 
   // Update order request status
   transactions.push(
@@ -255,6 +433,7 @@ export async function approveOrderRequestForProduction(requestId: string) {
   await dbAdmin.transact(transactions)
 
   revalidatePath('/admin/order-requests')
+  revalidatePath('/admin/encomendas')
   revalidatePath('/admin/production')
 
   return { created: true, jobIds }
