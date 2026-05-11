@@ -24,13 +24,15 @@ export type HexaRequestTile = {
   photoAdjustments: HexaPhotoAdjustments
 }
 
+export type HexaCustomer = {
+  name: string
+  email: string
+  phone: string
+  spaceType: HexaSpaceType
+}
+
 export type HexaRequest = {
-  customer: {
-    name: string
-    email: string
-    phone: string
-    spaceType: HexaSpaceType
-  }
+  customer: HexaCustomer
   mosaicSize: HexaSize
   productSlug: string
   tiles: HexaRequestTile[]

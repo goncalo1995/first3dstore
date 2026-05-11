@@ -3,15 +3,11 @@ import { id } from '@instantdb/admin'
 import Stripe from 'stripe'
 import { dbAdmin } from '@/lib/db-admin'
 import { HEXA_SIZES, type HexaSize, type HexaSpaceType } from '@/types/hexa'
+import { sizeToSlug } from '@/lib/hexa-helpers'
 
 export const runtime = 'nodejs'
 
 const spaceTypes = new Set<HexaSpaceType>(['Casa', 'Escritório', 'Loja', 'Restaurante'])
-const sizeToSlug: Record<HexaSize, string> = {
-  XS: 'hexa-xs',
-  S: 'hexa-s',
-  M: 'hexa-m',
-}
 
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')

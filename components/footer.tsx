@@ -7,15 +7,15 @@ export function Footer() {
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           <div>
-            <Link href="/" className="block text-2xl font-bold tracking-tight text-[#231f19]">HexaMemória</Link>
+            <Link href="/" className="block text-2xl font-bold tracking-tight text-[#231f19]">Foto3D</Link>
             <p className="mt-3 text-sm text-[#62574d] leading-relaxed">
               Mosaicos hexagonais 3D para fotos personalizadas. Peças impressas em Lisboa, montagem sem ferramentas.
             </p>
             <div className="flex gap-4 mt-4">
-              <a href="https://instagram.com/hexamemoria" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
+              <a href="https://instagram.com/foto3d.pt" target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="mailto:ola@hexamemoria.pt" className="text-primary hover:text-primary/80">
+              <a href="mailto:geral@foto3d.pt" className="text-primary hover:text-primary/80">
                 <Mail className="w-5 h-5" />
               </a>
             </div>
@@ -45,7 +45,7 @@ export function Footer() {
         </div>
         <div className="border-t border-[#e2d8ca] mt-10 pt-6 flex flex-col md:flex-row justify-between items-center text-xs text-[#62574d]">
           {/* <p>Feito com cuidado em Lisboa, Portugal</p> */}
-          <p>{new Date().getFullYear()} HexaMemória. Todos os direitos reservados.</p>
+          <p>{new Date().getFullYear()} Foto3D. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>

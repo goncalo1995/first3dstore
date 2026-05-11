@@ -9,7 +9,7 @@ export default function EncomendaSucessoPage() {
         <CheckCircle2 className="mx-auto size-12 text-[#1b6b45]" />
         <h1 className="mt-5 text-3xl font-bold">Pagamento recebido</h1>
         <p className="mt-3 leading-7 text-[#62574d]">
-          Obrigado. A sua encomenda HexaMemória ficou registada e será preparada para produção. Enviaremos novidades por email.
+          Obrigado. A sua encomenda ficou registada e será preparada para produção. Enviaremos novidades por email.
         </p>
         <Button asChild className="mt-6 bg-primary text-white hover:bg-primary/90">
           <Link href="/">Voltar à página inicial</Link>
