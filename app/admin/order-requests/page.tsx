@@ -40,7 +40,7 @@ type OrderRequest = {
   engravingText?: string
   isPaid?: boolean
   notes?: string
-  leadType?: 'photo_request' | 'b2b'
+  leadType?: 'custom_idea' | 'photo_request' | 'b2b'
   status: OrderRequestStatus
   createdAt: Date | string
   updatedAt: Date | string

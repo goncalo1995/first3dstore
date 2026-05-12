@@ -4,7 +4,7 @@ import { getCatalogProductBySlugForBuild, getCatalogProductsForBuild } from '@/l
 import { ProductConfigurator } from './product-configurator'
 
 export const metadata: Metadata = {
-  title: 'Configurador | Foto3D.pt',
+  title: 'Configurador | EM3D',
   description: 'Configure a sua peça personalizada, carregue a fotografia e peça revisão gratuita antes do pagamento.',
 }
 

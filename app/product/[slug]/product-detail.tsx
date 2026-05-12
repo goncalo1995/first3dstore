@@ -374,7 +374,7 @@ Por favor, confirme a disponibilidade!`
       {/* Breadcrumb */}
       <div className="container mx-auto px-4 py-4">
         <Link
-          href="/shop"
+          href="/loja"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />

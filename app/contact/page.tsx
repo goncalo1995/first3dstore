@@ -6,8 +6,8 @@ import { WhatsAppButton } from '@/components/whatsapp-button'
 import { WHATSAPP_NUMBER } from '@/data/constants'
 
 export const metadata: Metadata = {
-  title: 'Contactos | Foto3D.pt',
-  description: 'Contacte a Foto3D.pt para dúvidas sobre molduras luminosas, qualidade de imagem, encomendas personalizadas e pedidos empresariais.',
+  title: 'Contactos | EM3D',
+  description: 'Contacte a EM3D para dúvidas sobre objetos personalizados, prazos de produção, encomendas e pedidos empresariais.',
 }
 
 export default function ContactPage() {
@@ -17,10 +17,10 @@ export default function ContactPage() {
       <main className="min-h-screen">
         <section className="border-b border-border bg-secondary">
           <div className="container mx-auto px-4 py-12 md:py-16">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Foto3D.pt</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">EM3D</p>
             <h1 className="mt-3 text-3xl font-bold text-foreground md:text-4xl">Contactos</h1>
             <p className="mt-3 max-w-2xl text-muted-foreground">
-              Fale connosco sobre a sua fotografia, prazos de produção, personalizações ou projetos para empresas.
+              Fale connosco sobre prazos de produção, personalizações, presentes ou projetos para empresas.
             </p>
           </div>
         </section>
@@ -30,7 +30,7 @@ export default function ContactPage() {
             <div>
               <h2 className="text-2xl font-bold text-foreground">Como podemos ajudar?</h2>
               <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                Se tiver dúvidas sobre a qualidade da imagem, quer preparar um presente especial ou precisa de uma proposta para a sua empresa, envie-nos uma mensagem com o máximo de contexto possível.
+                Se quiser preparar um presente especial, resolver uma necessidade concreta ou pedir uma proposta para a sua empresa, envie-nos uma mensagem com o máximo de contexto possível.
               </p>
               <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
                 <div className="rounded-lg border border-border bg-secondary p-4">
@@ -48,7 +48,7 @@ export default function ContactPage() {
 
             <div className="space-y-4">
               <a
-                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho uma questão sobre uma moldura Foto3D.pt.')}`}
+                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho uma questão sobre a EM3D.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-4 rounded-lg bg-primary p-4 text-primary-foreground transition-colors hover:bg-primary/90"
@@ -60,20 +60,20 @@ export default function ContactPage() {
                 </div>
               </a>
               <a
-                href="mailto:geral@foto3d.pt"
+                href="mailto:geral@em3d.pt"
                 className="flex items-center gap-4 rounded-lg border border-border bg-secondary p-4 text-foreground transition-colors hover:bg-secondary/80"
               >
                 <Mail className="h-6 w-6" />
                 <div>
                   <p className="font-semibold">Enviar email</p>
-                  <p className="text-sm text-muted-foreground">geral@foto3d.pt</p>
+                  <p className="text-sm text-muted-foreground">geral@em3d.pt</p>
                 </div>
               </a>
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-5">
                 <Sparkles className="mb-3 h-6 w-6 text-primary" />
                 <h3 className="text-lg font-semibold text-foreground">Pedidos para empresas</h3>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Para brindes corporativos, logótipos iluminados ou decoração de escritório, use a secção “Para Empresas” na landing page e descreva quantidades, prazo e objetivo.
+                  Para brindes corporativos, protótipos ou decoração de escritório, use a página Empresas e descreva quantidades, prazo e objetivo.
                 </p>
               </div>
             </div>

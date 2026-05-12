@@ -7,11 +7,11 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://foto3d.pt').replace(/\/$/, '')
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://em3d.pt').replace(/\/$/, '')
 
   const staticRoutes = [
     '/',
-    '/shop',
+    '/loja',
     '/about',
     '/contact',
     '/privacy',
@@ -48,7 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const productUrls = catalogProducts
     .filter(product => product.slug && product.visible !== false)
     .map(product => ({
-      url: `${baseUrl}/product/${product.slug}`,
+      url: `${baseUrl}/produto/${product.slug}`,
       lastModified: product.updatedAt ? new Date(product.updatedAt) : new Date(),
       changeFrequency: 'monthly' as const,
       priority: 0.7,

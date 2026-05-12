@@ -132,7 +132,7 @@ export default function EmpresasContent() {
         <div className="relative mx-auto max-w-7xl">
           <nav className="flex items-center justify-between gap-4">
             <Link href="/" className="font-sans text-lg font-semibold tracking-tight">
-              Foto3D.pt
+              EM3D
             </Link>
             <div className="hidden items-center gap-5 font-sans text-sm text-white/66 md:flex">
               <a href="#cenarios" className="transition hover:text-primary">Cenários</a>

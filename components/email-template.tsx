@@ -34,7 +34,7 @@ export function HexaOrderConfirmationEmail({
         <div style={{ padding: '32px 24px 24px', textAlign: 'center', backgroundColor: '#f7f2ea', borderRadius: '8px 8px 0 0' }}>
           <img
             src={`${siteUrl}/logo_horizontal.png`}
-            alt="Foto3D.pt"
+            alt="EM3D"
             width={180}
             style={{ maxWidth: '100%', height: 'auto' }}
           />
@@ -103,14 +103,14 @@ export function HexaOrderConfirmationEmail({
 
           <p style={{ margin: '24px 0 0', fontSize: 16, color: '#4a4540' }}>
             Com os melhores cumprimentos,<br />
-            <strong style={{ color: '#2a2520' }}>A equipa Foto3D.pt</strong>
+            <strong style={{ color: '#2a2520' }}>A equipa EM3D</strong>
           </p>
         </div>
 
         {/* Footer */}
         <div style={{ padding: '20px 24px', textAlign: 'center', backgroundColor: '#f7f2ea', borderRadius: '0 0 8px 8px' }}>
           <p style={{ margin: 0, fontSize: 12, color: '#8b8075' }}>
-            Foto3D.pt · Memórias iluminadas em 3D
+            EM3D · Objetos úteis impressos em 3D
           </p>
         </div>
       </div>

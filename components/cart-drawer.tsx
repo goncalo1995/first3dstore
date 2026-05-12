@@ -247,7 +247,7 @@ Por favor, confirme a disponibilidade e os dados de pagamento!`
                 <>
                   <p className="text-muted-foreground mb-4">O seu carrinho está vazio</p>
                   <Button asChild onClick={closeCart}>
-                    <Link href="/shop">Ver Produtos</Link>
+                    <Link href="/loja">Ver Produtos</Link>
                   </Button>
                 </>
               )}

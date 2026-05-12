@@ -297,7 +297,7 @@ const _schema = i.schema({
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),
-      leadType: i.string<'photo_request' | 'b2b'>().optional(),
+      leadType: i.string<'custom_idea' | 'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
       status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),

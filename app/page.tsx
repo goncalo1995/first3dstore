@@ -1,249 +1,240 @@
-'use client'
-
+import Image from 'next/image'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { ArrowRight, BriefcaseBusiness, Heart, PawPrint, Sparkles, Ruler, Grid3X3, Palette, CreditCard, PackageCheck, Truck } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { HEXA_SIZES } from '@/types/hexa'
-import FaqSection from '@/components/landing/FaqSection'
+import { ArrowRight, Building2, Check, Gift, Home, MessageSquareText, PackageCheck, PenLine, Sparkles, Store, Wand2 } from 'lucide-react'
+import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
-import GalleryItems from '@/components/landing/GalleryItems'
+import { Button } from '@/components/ui/button'
 
-const heroImage = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1800&q=86'
-
-const useCases = [
+const bestsellers = [
   {
-    title: 'Família',
-    text: 'Transforme férias, aniversários e pequenos momentos numa colmeia viva.',
-    image: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=1000&q=86',
-    icon: Heart,
+    title: 'Placa Casa Nova',
+    text: 'Uma peça simples para marcar uma porta, uma entrada ou uma memória de mudança.',
+    href: '/produto/moldura-quadrada',
+    image: '/about/products.jpg',
+    price: 'desde 39 EUR',
   },
   {
-    title: 'Pets',
-    text: 'Retratos com personalidade para a parede que já é deles, sejamos honestos.',
-    image: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1000&q=86',
-    icon: PawPrint,
+    title: 'Candeeiro com Nome',
+    text: 'Luz ambiente personalizada para quartos, presentes e pequenos momentos especiais.',
+    href: '/produto/candeeiros',
+    image: '/hero.png',
+    price: 'desde 59 EUR',
   },
   {
-    title: 'Escritórios e Lojas',
-    text: 'Crie uma parede de equipa, clientes, campanhas ou memórias do espaço.',
-    image: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1000&q=86',
-    icon: BriefcaseBusiness,
+    title: 'Retrato em Luz',
+    text: 'Uma fotografia transformada numa peça luminosa, revista antes de produzir.',
+    href: '/produto/moldura-retrato',
+    image: '/about/workshop.jpg',
+    price: 'desde 44 EUR',
+  },
+]
+
+const categories = [
+  {
+    title: 'Casa & Organização',
+    text: 'Peças úteis, discretas e feitas à medida para resolver pequenos problemas do dia a dia.',
+    icon: Home,
+  },
+  {
+    title: 'Secretária',
+    text: 'Acessórios funcionais para trabalhar melhor, arrumar melhor e personalizar o espaço.',
+    icon: Store,
+  },
+  {
+    title: 'Empresas',
+    text: 'Brindes, protótipos e pequenas séries com acabamento cuidado e produção local.',
+    icon: Building2,
   },
 ]
 
 const processSteps = [
-  {
-    title: '1. Escolher tamanho',
-    text: 'Seleccione XS, S ou M para definir a dimensão física de cada hexágono.',
-    icon: Ruler,
-  },
-  {
-    title: '2. Dispor as peças',
-    text: 'Adicione hexágonos, reordene-os na lista e veja a colmeia a organizar-se automaticamente.',
-    icon: Grid3X3,
-  },
-  {
-    title: '3. Customizar',
-    text: 'Ajuste a disposição, cor de cada hexágono e veja como fica com as suas imagens.',
-    icon: Palette,
-  },
-  {
-    title: '4. Finalizar encomenda',
-    text: 'Preencha os dados de contacto e efectue o pagamento seguro com Stripe (cartão de crédito ou MBWay).',
-    icon: CreditCard,
-  },
-  {
-    title: '5. Produção 3D',
-    text: 'Imprimimos cada hexágono individualmente com o material e a cor escolhidos.',
-    icon: PackageCheck,
-  },
-  {
-    title: '6. Envio e montagem',
-    text: 'Recebe as peças em casa, com tiras adesivas, e monta o seu mosaico único.',
-    icon: Truck,
-  },
+  { title: 'Diz-nos o que queres', icon: PenLine },
+  { title: 'Recebes proposta', icon: MessageSquareText },
+  { title: 'Aprovas detalhes', icon: Check },
+  { title: 'Produzimos', icon: PackageCheck },
 ]
-
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value)
-}
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f7f2ea] text-[#231f19]">
-      <section className="relative min-h-[92vh] overflow-hidden">
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${heroImage})` }} />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/25 to-[#f7f2ea]" />
+    <main className="min-h-screen bg-background text-foreground">
+      <Header />
 
-        <div className="relative z-10 mx-auto flex min-h-[92vh] max-w-7xl flex-col justify-between px-5 py-6 sm:px-8 lg:px-10">
-          <nav className="flex items-center justify-between text-white">
+      <section className="relative min-h-[88vh] overflow-hidden bg-[#101010] text-white">
+        <Image
+          src="/hero.png"
+          alt="Objeto personalizado impresso em 3D"
+          fill
+          priority
+          className="object-cover opacity-58"
+          sizes="100vw"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.78),rgba(0,0,0,0.42),rgba(0,0,0,0.18))]" />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent" />
+
+        <div className="relative z-10 mx-auto flex min-h-[88vh] max-w-7xl flex-col justify-end px-5 pb-20 pt-28 sm:px-8 lg:px-10">
+          <p className="mb-5 inline-flex w-fit items-center gap-2 border border-white/18 bg-white/10 px-4 py-2 text-sm font-medium text-white/82 backdrop-blur-md">
+            <Sparkles className="size-4 text-primary" />
+            Impressão 3D útil, personalizada e feita em Portugal
+          </p>
+          <h1 className="max-w-5xl font-serif text-5xl font-bold leading-[0.98] tracking-tight sm:text-7xl lg:text-8xl">
+            Objetos úteis, feitos à tua medida.
+          </h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-white/76 sm:text-xl">
+            Da ideia ao objeto final: peças para casa, secretária, presentes e empresas, com design cuidado e produção local.
+          </p>
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-14 bg-primary px-7 text-base text-primary-foreground hover:bg-primary/90">
+              <Link href="/pedido-personalizado">
+                Criar Produto Personalizado
+                <ArrowRight className="size-5" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-14 border-white/25 bg-white/8 px-7 text-base text-white hover:bg-white hover:text-[#111111]">
+              <Link href="#colecoes">Explorar Coleções</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section id="colecoes" className="px-5 py-16 sm:px-8 lg:px-10 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.28em]">HexaMemória</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Mais pedidos</p>
+              <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-5xl">Bestsellers com espaço para personalizar.</h2>
             </div>
-            <Button asChild className="rounded-full bg-white text-[#231f19] hover:bg-[#f4eadc]">
-              <Link href="/criar/hexa">
-                Criar mosaico
+            <Button asChild variant="ghost" className="w-fit text-primary hover:text-primary/80">
+              <Link href="/loja">
+                Ver loja
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
-          </nav>
-
-          <div className="max-w-4xl pb-12 pt-24 text-white">
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/16 px-4 py-2 text-sm backdrop-blur"
-            >
-              <Sparkles className="size-4" />
-              Azulejos hexagonais 3D para fotos que crescem consigo
-            </motion.p>
-            <motion.h1
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 }}
-              className="font-serif text-5xl font-bold leading-[0.96] sm:text-7xl lg:text-8xl"
-            >
-              A sua vida, peça a peça. Construa o seu mosaico hexagonal.
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.16 }}
-              className="mt-6 max-w-2xl text-lg leading-8 text-white/90 sm:text-xl"
-            >
-              Escolha um tamanho, carregue as suas fotografias e veja a colmeia organizar-se automaticamente. Nós fabricamos cada peça para criar uma parede pessoal, modular e fácil de expandir.
-            </motion.p>
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="mt-8">
-              <Button asChild className="h-12 rounded-full bg-primary px-6 text-base text-primary-foreground hover:bg-primary/90">
-                <Link href="/criar/hexa">
-                  Criar o meu mosaico
-                  <ArrowRight className="size-5" />
-                </Link>
-              </Button>
-            </motion.div>
           </div>
-        </div>
-      </section>
 
-      <section id="tamanhos" className="mx-auto max-w-7xl px-5 py-14 sm:px-8 lg:px-10">
-        <div className="mb-8 max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Tamanhos</p>
-          <h2 className="mt-3 font-serif text-4xl font-bold sm:text-5xl">Três escalas, uma colmeia perfeita.</h2>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {Object.values(HEXA_SIZES).map((size) => (
-            <div key={size.label} className="relative group">
-              {/* Hexagon shape using clip-path */}
-              <div className="relative bg-white shadow-md transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1"
-                  style={{
-                    clipPath: 'polygon(50% 0%, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%)',
-                    aspectRatio: '1 / 1.154', // ≈ 1 / (√3/2) for regular hex aspect
-                  }}
-              >
-                <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                  <span className="text-5xl font-bold text-primary">{size.label}</span>
-                  <span className="mt-2 text-2xl font-bold text-[#231f19]">{formatPrice(size.price)}</span>
-                  <span className="mt-1 text-sm text-[#62574d]">{size.width} × {size.height} mm</span>
-                  <p className="mt-3 text-xs text-[#62574d] max-w-[80%]">{size.note}</p>
+          <div className="grid gap-5 md:grid-cols-3">
+            {bestsellers.map((product) => (
+              <Link key={product.title} href={product.href} className="group block overflow-hidden rounded-lg border border-border bg-card">
+                <div className="relative aspect-[4/3] overflow-hidden bg-secondary">
+                  <Image
+                    src={product.image}
+                    alt={product.title}
+                    fill
+                    className="object-cover transition duration-500 group-hover:scale-105"
+                    sizes="(max-width: 768px) 100vw, 33vw"
+                  />
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* <section className="mx-auto max-w-7xl px-5 py-14 sm:px-8 lg:px-10">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Só uma peça?</p>
-          <h2 className="mt-3 font-serif text-4xl font-bold sm:text-5xl">Molduras individuais</h2>
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          {[
-            { title: 'Parede vertical', icon: '⬆️', desc: 'Para retratos, animais ou uma foto especial.' },
-            { title: 'Parede horizontal', icon: '⬅️➡️', desc: 'Perfeita para paisagens ou grupos.' },
-            { title: 'Secretária', icon: '🖥️', desc: 'Base incluída, ideal para escritório.' },
-          ].map((item) => (
-            <div key={item.title} className="rounded-lg border border-[#e4d8c7] bg-white p-5 text-center shadow-sm">
-              <div className="text-4xl mb-3">{item.icon}</div>
-              <h3 className="text-xl font-semibold">{item.title}</h3>
-              <p className="mt-2 text-sm text-[#62574d]">{item.desc}</p>
-              <Button asChild variant="outline" size="sm" className="mt-4 border-primary text-primary hover:bg-primary/10">
-                <Link href="/criar/hexa?size=S&single=true">Começar</Link>
-              </Button>
-            </div>
-          ))}
-        </div>
-      </section> */}
-
-      <section className="mx-auto grid max-w-7xl gap-4 px-5 pb-16 sm:px-8 md:grid-cols-3 lg:px-10">
-        {useCases.map((item) => {
-          const Icon = item.icon
-          return (
-            <motion.article
-              key={item.title}
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-80px' }}
-              className="group overflow-hidden rounded-lg bg-white shadow-sm"
-            >
-              <div className="aspect-4/3 overflow-hidden">
-                <img src={item.image} alt={item.title} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-              </div>
-              <div className="p-5">
-                <div className="mb-4 flex size-10 items-center justify-center rounded-md bg-secondary text-primary">
-                  <Icon className="size-5" />
+                <div className="p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{product.price}</p>
+                  <h3 className="mt-3 text-xl font-semibold">{product.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{product.text}</p>
                 </div>
-                <h3 className="text-xl font-semibold">{item.title}</h3>
-                <p className="mt-2 leading-7 text-[#62574d]">{item.text}</p>
-              </div>
-            </motion.article>
-          )
-        })}
-      </section>
-
-      {/* <section id="galeria" className="px-5 py-12 sm:px-8 lg:py-24">
-        <GalleryItems />
-      </section> */}
-
-      <section id="como-funciona" className="relative border-y border-white/5 bg-white/[0.03] px-5 py-16 sm:px-8 lg:py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-16 text-center">
-            <h2 className="font-serif text-3xl font-bold tracking-tight sm:text-5xl">Como Funciona</h2>
-            <p className="mt-4 font-sans text-lg">Um processo simples para uma recordação eterna.</p>
-          </div>
-          <div className="relative grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {processSteps.map(({ title, text, icon: Icon }) => (
-              <div key={title} className="group relative z-10 flex flex-col items-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-[#1f1f1f] transition-all duration-500 group-hover:border-[#ffaa00]/50 group-hover:shadow-[0_0_30px_rgba(255,170,0,0.15)]">
-                  <Icon className="h-9 w-9 text-primary" />
-                </div>
-                <h3 className="font-serif text-2xl font-bold">{title}</h3>
-                <p className="mt-3 max-w-[290px] font-sans text-sm leading-6">{text}</p>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-y border-[#e2d8ca] bg-white px-5 py-14 sm:px-8 lg:px-10">
-        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+      <section className="border-y border-border bg-[#111111] px-5 py-16 text-white sm:px-8 lg:px-10 lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Sistema modular</p>
-            <h2 className="mt-3 font-serif text-4xl font-bold sm:text-5xl">Sem obras. Sem molduras genéricas. Só uma composição sua.</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Mensagem por IA</p>
+            <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-5xl">Uma dedicatória pronta a acompanhar o presente.</h2>
+            <p className="mt-5 max-w-xl leading-8 text-white/66">
+              A EM3D pode ajudar a transformar uma intenção simples numa mensagem bonita para acompanhar uma peça personalizada.
+            </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {['Cole à parede', 'Troque fotografias', 'Expanda quando quiser'].map((text) => (
-              <div key={text} className="rounded-lg border border-[#e7ded2] bg-[#fbf8f2] p-5">
-                <p className="text-lg font-semibold">{text}</p>
+
+          <div className="rounded-lg border border-white/12 bg-white/[0.06] p-5 shadow-2xl shadow-black/30 backdrop-blur-md">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border border-white/10 bg-black/22 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Ocasião</p>
+                <p className="mt-2 font-medium">Casa nova</p>
               </div>
-            ))}
+              <div className="rounded-md border border-white/10 bg-black/22 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Tom</p>
+                <p className="mt-2 font-medium">Caloroso e simples</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-md border border-primary/30 bg-primary/10 p-5">
+              <div className="mb-4 flex items-center gap-2 text-primary">
+                <Wand2 className="size-5" />
+                <span className="text-sm font-semibold">Mensagem sugerida</span>
+              </div>
+              <p className="font-serif text-2xl leading-9">
+                Que esta casa guarde conversas boas, luz nos dias compridos e pequenos detalhes que façam tudo parecer vosso.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      <FaqSection />
+      <section className="px-5 py-16 sm:px-8 lg:px-10 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Categorias</p>
+            <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-5xl">Começa pelo uso, nós tratamos da forma.</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {categories.map((category) => {
+              const Icon = category.icon
+              return (
+                <Link key={category.title} href="/loja" className="group rounded-lg border border-border bg-secondary p-6 transition hover:border-primary/45 hover:bg-card">
+                  <Icon className="size-8 text-primary" />
+                  <h3 className="mt-6 text-xl font-semibold">{category.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{category.text}</p>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-secondary px-5 py-16 sm:px-8 lg:px-10 lg:py-24">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10 max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Processo</p>
+            <h2 className="mt-3 font-serif text-4xl font-bold tracking-tight sm:text-5xl">Quatro passos, sem complicar.</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {processSteps.map((step, index) => {
+              const Icon = step.icon
+              return (
+                <div key={step.title} className="rounded-lg border border-border bg-background p-6">
+                  <div className="flex items-center justify-between">
+                    <Icon className="size-7 text-primary" />
+                    <span className="font-serif text-3xl font-bold text-foreground/18">{index + 1}</span>
+                  </div>
+                  <h3 className="mt-8 text-lg font-semibold">{step.title}</h3>
+                </div>
+              )
+            })}
+          </div>
+          <div className="mt-10">
+            <Button asChild size="lg" className="h-14 bg-primary px-7 text-base text-primary-foreground hover:bg-primary/90">
+              <Link href="/pedido-personalizado">
+                Fazer pedido personalizado
+                <ArrowRight className="size-5" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-5 py-16 sm:px-8 lg:px-10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 border-y border-border py-10 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="font-serif text-3xl font-bold tracking-tight">Tens uma ideia específica?</h2>
+            <p className="mt-2 text-muted-foreground">Descreve o que precisas e respondemos com uma proposta clara.</p>
+          </div>
+          <Button asChild size="lg" variant="outline" className="h-12 border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+            <Link href="/pedido-personalizado">
+              Enviar pedido
+              <Gift className="size-4" />
+            </Link>
+          </Button>
+        </div>
+      </section>
+
       <Footer />
     </main>
   )

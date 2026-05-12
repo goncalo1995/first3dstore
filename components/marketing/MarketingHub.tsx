@@ -916,7 +916,7 @@ export function MarketingHub({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label>Hashtags</Label>
-                  <Input value={draft.hashtagsText} onChange={event => setDraft({ ...draft, hashtagsText: event.target.value })} placeholder="#3dphoto #foto3d.pts" />
+                  <Input value={draft.hashtagsText} onChange={event => setDraft({ ...draft, hashtagsText: event.target.value })} placeholder="#em3d #impressao3d" />
                 </div>
                 {!isStory && (
                   <div>

@@ -3,8 +3,8 @@ import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidade | Foto3D.pt',
-  description: 'Política de privacidade provisória da Foto3D.pt – substituir pela definitiva antes do lançamento.',
+  title: 'Política de Privacidade | EM3D',
+  description: 'Política de privacidade provisória da EM3D.',
 }
 
 export default function PrivacyPage() {
@@ -24,11 +24,11 @@ export default function PrivacyPage() {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Responsável pelo Tratamento</h2>
               <p>
-                <strong>Foto3D.pt</strong><br />
+                <strong>EM3D</strong><br />
                 Travessa do Girassol, Bairro da Torre, n61 3D<br />
                 2775-811 Carcavelos<br />
                 NIF: 518493385<br />
-                geral@foto3d.pt
+                geral@em3d.pt
               </p>
             </div>
 
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Direitos do Titular</h2>
               <p>
-                Pode solicitar o acesso, rectificação, eliminação ou portabilidade dos seus dados, bem como limitar ou opor-se ao tratamento, através do email geral@foto3d.pt. Responderemos no prazo máximo de 30 dias. O cliente tem ainda direito a apresentar reclamação à CNPD (Comissão Nacional de Protecção de Dados).
+                Pode solicitar o acesso, rectificação, eliminação ou portabilidade dos seus dados, bem como limitar ou opor-se ao tratamento, através do email geral@em3d.pt. Responderemos no prazo máximo de 30 dias. O cliente tem ainda direito a apresentar reclamação à CNPD (Comissão Nacional de Protecção de Dados).
               </p>
             </div>
 

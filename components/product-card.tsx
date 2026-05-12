@@ -13,7 +13,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const variants = product.variants ?? []
   const categorySlugs = getProductCategorySlugs(product)
   const isLithophane = categorySlugs.includes('lithophane')
-  const productHref = isLithophane ? `/produto/${product.slug}` : `/product/${product.slug}`
+  const productHref = `/produto/${product.slug}`
   const variantPrices = variants
     .map(variant => getVariantPrice(product, variant))
     .filter(price => Number.isFinite(price))

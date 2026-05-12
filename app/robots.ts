@@ -21,6 +21,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/admin/', '/api/'],
       }
     ],
-    sitemap: 'https://foto3d.pt/sitemap.xml',
+    sitemap: 'https://em3d.pt/sitemap.xml',
   }
 }
