@@ -1,0 +1,307 @@
+import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
+import { dbAdmin, id } from '@/lib/db-admin'
+import { getCatalogProductBySlugForBuild } from '@/lib/catalog'
+import type { CartItemPartColor, CartItemVariant } from '@/lib/cart-context'
+import type { Product, ProductColor } from '@/lib/products'
+
+export const runtime = 'nodejs'
+
+const SHIPPING_COST = 4.99
+const MAX_ITEMS = 30
+const MAX_QUANTITY = 99
+
+type CheckoutPayload = {
+  customer?: {
+    name?: string
+    email?: string
+    phone?: string
+  }
+  shipping?: {
+    method?: 'pickup_carcavelos' | 'mainland_portugal'
+    address?: string
+  }
+  notes?: string
+  items?: {
+    productSlug?: string
+    quantity?: number
+    selectedColor?: ProductColor
+    selectedColors?: ProductColor[]
+    selectedParts?: CartItemPartColor[]
+    selectedVariant?: CartItemVariant
+    customizations?: {
+      label?: string
+      value?: string
+      priceAdd?: number
+    }[]
+  }[]
+}
+
+function siteUrl() {
+  return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
+}
+
+function getStripe() {
+  const secretKey = process.env.STRIPE_SECRET_KEY
+  if (!secretKey) return null
+  return new Stripe(secretKey)
+}
+
+function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function formatCustomText(customizations: NonNullable<CheckoutPayload['items']>[number]['customizations']) {
+  return (customizations ?? [])
+    .map(customization => ({
+      label: String(customization.label ?? '').trim(),
+      value: String(customization.value ?? '').trim(),
+    }))
+    .filter(customization => customization.label && customization.value)
+    .map(customization => `${customization.label}: ${customization.value}`)
+    .join(' | ')
+}
+
+function getVariant(product: Product, selectedVariant?: CartItemVariant) {
+  if (!selectedVariant?.id) return undefined
+  return product.variants?.find(variant => variant.id === selectedVariant.id)
+}
+
+function validateCustomizations(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
+  const options = variant?.kind === 'custom_text'
+    ? variant.customizationOptions ?? []
+    : product.customizationOptions ?? []
+  const customizations = item.customizations ?? []
+
+  for (const customization of customizations) {
+    const label = String(customization.label ?? '').trim()
+    const value = String(customization.value ?? '').trim()
+    if (!label || !value) continue
+
+    const option = options.find(candidate => candidate.label === label)
+    if (!option) {
+      throw new Error(`Personalização inválida para ${product.name}.`)
+    }
+    if (value.length > option.maxChars) {
+      throw new Error(`${option.label} excede o limite de caracteres.`)
+    }
+  }
+
+  return customizations.reduce((sum, customization) => {
+    const label = String(customization.label ?? '').trim()
+    const value = String(customization.value ?? '').trim()
+    if (!label || !value) return sum
+
+    const option = options.find(candidate => candidate.label === label)
+    return sum + (option?.priceAdd ?? 0)
+  }, 0)
+}
+
+function getItemColors(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
+  if (variant) {
+    return variant.colors.map(color => color.name)
+  }
+
+  if (item.selectedParts?.length) {
+    return item.selectedParts.map(part => `${part.label}: ${part.colorName}`)
+  }
+
+  if (item.selectedColors?.length) {
+    return item.selectedColors.map(color => color.name)
+  }
+
+  if (item.selectedColor?.name) {
+    return [item.selectedColor.name]
+  }
+
+  return product.colors[0]?.name ? [product.colors[0].name] : []
+}
+
+function getUnitPrice(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
+  const basePrice = product.salePrice ?? product.priceFrom
+  const customizationPriceAdd = validateCustomizations(product, item, variant)
+
+  if (variant?.finalPrice !== undefined) {
+    return variant.finalPrice + customizationPriceAdd
+  }
+
+  const variantPriceAdd = variant?.priceAdd ?? 0
+  const multiColorPriceAdd = !variant && item.selectedColors && item.selectedColors.length > 1
+    ? product.multiColorPriceAdd ?? 0
+    : 0
+
+  return basePrice + variantPriceAdd + multiColorPriceAdd + customizationPriceAdd
+}
+
+function cents(value: number) {
+  return Math.round(value * 100)
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const stripe = getStripe()
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe não está configurado.' }, { status: 500 })
+    }
+
+    const body = await request.json() as CheckoutPayload
+    const customerName = String(body.customer?.name ?? '').trim()
+    const customerEmail = String(body.customer?.email ?? '').trim().toLowerCase()
+    const customerPhone = String(body.customer?.phone ?? '').trim()
+    const shippingMethod = body.shipping?.method
+    const shippingAddress = String(body.shipping?.address ?? '').trim()
+    const notes = String(body.notes ?? '').trim()
+
+    if (customerName.length < 2) return NextResponse.json({ error: 'Indique o seu nome.' }, { status: 400 })
+    if (!isEmail(customerEmail)) return NextResponse.json({ error: 'Indique um email válido.' }, { status: 400 })
+    if (shippingMethod !== 'pickup_carcavelos' && shippingMethod !== 'mainland_portugal') {
+      return NextResponse.json({ error: 'Método de envio inválido.' }, { status: 400 })
+    }
+    if (shippingMethod === 'mainland_portugal' && shippingAddress.length < 8) {
+      return NextResponse.json({ error: 'Indique uma morada completa.' }, { status: 400 })
+    }
+    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > MAX_ITEMS) {
+      return NextResponse.json({ error: 'Carrinho inválido.' }, { status: 400 })
+    }
+
+    const orderItems = []
+    const lineItems: Stripe.Checkout.SessionCreateParams['line_items'] = []
+
+    for (const item of body.items) {
+      const slug = String(item.productSlug ?? '').trim()
+      const quantity = Number(item.quantity)
+      if (!slug || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
+        return NextResponse.json({ error: 'Um dos artigos é inválido.' }, { status: 400 })
+      }
+
+      const product = await getCatalogProductBySlugForBuild(slug)
+      if (!product || product.visible === false) {
+        return NextResponse.json({ error: `Produto indisponível: ${slug}.` }, { status: 404 })
+      }
+
+      const variant = getVariant(product, item.selectedVariant)
+      if (item.selectedVariant?.id && !variant) {
+        return NextResponse.json({ error: `Opção inválida para ${product.name}.` }, { status: 400 })
+      }
+
+      const unitPrice = getUnitPrice(product, item, variant)
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        return NextResponse.json({ error: `Preço inválido para ${product.name}.` }, { status: 400 })
+      }
+
+      const colors = getItemColors(product, item, variant)
+      const customText = formatCustomText(item.customizations)
+
+      orderItems.push({
+        productId: product.id,
+        productName: product.name,
+        quantity,
+        colors,
+        selectedVariant: variant
+          ? {
+              id: variant.id,
+              name: variant.name,
+              kind: variant.kind,
+              colors: variant.colors.map(color => color.name),
+            }
+          : undefined,
+        customText: customText || undefined,
+        unitPrice,
+        itemStatus: 'new' as const,
+        adminNotes: '',
+        scheduledFor: '',
+        quantityDone: 0,
+      })
+
+      lineItems.push({
+        quantity,
+        price_data: {
+          currency: 'eur',
+          unit_amount: cents(unitPrice),
+          product_data: {
+            name: product.name,
+            description: [
+              variant?.name,
+              colors.length ? colors.join(', ') : null,
+              customText || null,
+            ].filter(Boolean).join(' · ').slice(0, 1000),
+          },
+        },
+      })
+    }
+
+    const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) * 100) / 100
+    const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
+    const total = Math.round((subtotal + shippingCost) * 100) / 100
+
+    if (shippingCost > 0) {
+      lineItems.push({
+        quantity: 1,
+        price_data: {
+          currency: 'eur',
+          unit_amount: cents(shippingCost),
+          product_data: {
+            name: 'Envio nacional',
+            description: 'Entrega em Portugal continental',
+          },
+        },
+      })
+    }
+
+    const orderId = id()
+    const now = new Date()
+
+    await dbAdmin.transact(
+      dbAdmin.tx.orders[orderId].update({
+        customerName,
+        customerEmail,
+        ...(customerPhone ? { customerPhone } : {}),
+        paymentPreference: 'stripe',
+        shippingMethod,
+        ...(shippingMethod === 'mainland_portugal' ? { shippingAddress } : {}),
+        items: orderItems,
+        subtotal,
+        shippingCost,
+        total,
+        paymentStatus: 'pending',
+        fulfillmentStatus: 'new',
+        ...(notes ? { notes } : {}),
+        createdAt: now,
+        updatedAt: now,
+      }),
+    )
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer_email: customerEmail,
+      client_reference_id: orderId,
+      success_url: `${siteUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${siteUrl()}/checkout`,
+      metadata: {
+        orderId,
+        flow: 'standard_order',
+      },
+      line_items: lineItems,
+    })
+
+    if (!session.url) {
+      throw new Error('Stripe não devolveu URL de checkout.')
+    }
+
+    await dbAdmin.transact(
+      dbAdmin.tx.orders[orderId].update({
+        stripeSessionId: session.id,
+        paymentUrl: session.url,
+        updatedAt: new Date(),
+      }),
+    )
+
+    return NextResponse.json({ checkoutUrl: session.url })
+  } catch (error) {
+    console.error('Cart checkout failed:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Não foi possível iniciar o pagamento.' },
+      { status: 500 },
+    )
+  }
+}

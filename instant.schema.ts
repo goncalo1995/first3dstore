@@ -241,9 +241,13 @@ const _schema = i.schema({
       customerName: i.string(),
       customerEmail: i.string().optional(),
       customerPhone: i.string().optional(),
-      paymentPreference: i.string<'mbway' | 'bank_transfer' | 'cash_pickup' | 'other'>(),
+      paymentPreference: i.string<'mbway' | 'bank_transfer' | 'cash_pickup' | 'other' | 'stripe'>(),
       shippingMethod: i.string<'pickup_carcavelos' | 'mainland_portugal'>(),
       shippingAddress: i.string().optional(),
+      stripeSessionId: i.string().indexed().optional(),
+      stripePaymentIntentId: i.string().indexed().optional(),
+      paymentUrl: i.string().optional(),
+      paidAt: i.date().optional(),
       items: i.json<{
         productId?: string
         productName: string
@@ -308,6 +312,8 @@ const _schema = i.schema({
       eventId: i.string().unique().indexed(),
       type: i.string().indexed(),
       orderRequestId: i.string().indexed().optional(),
+      orderId: i.string().indexed().optional(),
+      stripeSessionId: i.string().indexed().optional(),
       processedAt: i.date().indexed(),
     }),
     productInventory: i.entity({

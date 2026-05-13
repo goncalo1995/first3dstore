@@ -28,9 +28,13 @@ export type OrderRecord = {
   customerName: string
   customerEmail?: string
   customerPhone?: string
-  paymentPreference?: 'mbway' | 'bank_transfer' | 'cash_pickup' | 'other'
+  paymentPreference?: 'mbway' | 'bank_transfer' | 'cash_pickup' | 'other' | 'stripe'
   shippingMethod: 'pickup_carcavelos' | 'mainland_portugal'
   shippingAddress?: string
+  stripeSessionId?: string
+  stripePaymentIntentId?: string
+  paymentUrl?: string
+  paidAt?: Date
   items: {
     productId?: string
     productName: string

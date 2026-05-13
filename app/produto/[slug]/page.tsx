@@ -1,7 +1,11 @@
 import { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getCatalogProductBySlugForBuild, getCatalogProductsForBuild } from '@/lib/catalog'
-import { ProductExperience } from './product-experience'
+import { Header } from '@/components/header'
+import { Footer } from '@/components/footer'
+import { WhatsAppButton } from '@/components/whatsapp-button'
+import { getProductCategorySlugs, type Product } from '@/lib/products'
+import { ProductDetail } from '@/app/product/[slug]/product-detail'
 
 export async function generateStaticParams() {
   const products = await getCatalogProductsForBuild()
@@ -9,6 +13,28 @@ export async function generateStaticParams() {
 }
 
 export const dynamicParams = true
+
+function getDedicatedConfiguratorHref(product: Product) {
+  const categorySlugs = getProductCategorySlugs(product)
+  const normalizedSlug = product.slug.toLowerCase()
+
+  if (
+    product.isModular === true
+    || categorySlugs.includes('hexa-memoria')
+    || normalizedSlug.startsWith('hexa-')
+  ) {
+    return '/criar/hexa'
+  }
+
+  if (
+    categorySlugs.includes('lithophane')
+    || normalizedSlug.includes('moldura')
+  ) {
+    return `/configurador?produto=${encodeURIComponent(product.slug)}`
+  }
+
+  return null
+}
 
 export async function generateMetadata({
   params,
@@ -69,5 +95,19 @@ export default async function ProdutoPage({
     notFound()
   }
 
-  return <ProductExperience product={product} />
+  const dedicatedConfiguratorHref = getDedicatedConfiguratorHref(product)
+  if (dedicatedConfiguratorHref) {
+    redirect(dedicatedConfiguratorHref)
+  }
+
+  return (
+    <>
+      <Header />
+      <main className="min-h-screen bg-background">
+        <ProductDetail product={product} />
+      </main>
+      <Footer />
+      <WhatsAppButton message={`Olá! Tenho uma pergunta sobre ${product.name}`} />
+    </>
+  )
 }

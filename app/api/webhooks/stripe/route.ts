@@ -14,7 +14,7 @@ function siteUrl() {
 }
 
 function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'Foto3D <onboarding@resend.dev>'
+  return process.env.RESEND_FROM_EMAIL || 'EM3D <onboarding@resend.dev>'
 }
 
 function getAdminEmail() {
@@ -27,6 +27,49 @@ function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY
   if (!secretKey) return null
   return new Stripe(secretKey)
+}
+
+function getStripeObjectId(value: string | { id?: string } | null | undefined) {
+  if (!value) return undefined
+  return typeof value === 'string' ? value : value.id
+}
+
+async function getOrderById(orderId: string) {
+  const orderData = await dbAdmin.query({
+    orders: {
+      $: { where: { id: orderId } },
+    },
+  })
+
+  return (orderData.orders?.[0] as any) || null
+}
+
+async function resolveStandardOrderFromSession(session: Stripe.Checkout.Session) {
+  const candidateIds = [
+    session.metadata?.orderId,
+    session.client_reference_id,
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidateId of candidateIds) {
+    const order = await getOrderById(candidateId)
+    if (order) {
+      return { orderId: candidateId, order, source: candidateId === session.metadata?.orderId ? 'metadata' : 'client_reference_id' }
+    }
+  }
+
+  if (session.id) {
+    const orderData = await dbAdmin.query({
+      orders: {
+        $: { where: { stripeSessionId: session.id } },
+      },
+    })
+    const order = (orderData.orders?.[0] as any) || null
+    if (order) {
+      return { orderId: order.id as string, order, source: 'stripeSessionId' }
+    }
+  }
+
+  return { orderId: undefined, order: null, source: undefined }
 }
 
 async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
@@ -81,6 +124,78 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
   }
 }
 
+function formatPrice(value: number) {
+  return new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(value)
+}
+
+function getShippingLabel(method: string) {
+  return method === 'mainland_portugal' ? 'Envio nacional' : 'Levantamento em Carcavelos'
+}
+
+async function sendStandardOrderEmails(order: any, orderId: string) {
+  try {
+    const itemLines = (order.items ?? [])
+      .map((item: any) => {
+        const details = [
+          item.selectedVariant?.name ? `Opção: ${item.selectedVariant.name}` : null,
+          item.colors?.length ? `Cores: ${item.colors.join(', ')}` : null,
+          item.customText ? `Personalização: ${item.customText}` : null,
+        ].filter(Boolean).join(' | ')
+
+        return `- ${item.productName} x${item.quantity} — ${formatPrice(Number(item.unitPrice) * Number(item.quantity))}
+${details ? `  ${details}` : ''}`
+      })
+      .join('\n')
+
+    await resend.emails.send({
+      from: getSender(),
+      to: order.customerEmail,
+      subject: 'Encomenda confirmada - EM3D',
+      text: `Olá ${order.customerName},
+
+Recebemos o pagamento da sua encomenda EM3D.
+
+ID da encomenda: ${orderId}
+
+Artigos:
+${itemLines}
+
+Subtotal: ${formatPrice(order.subtotal)}
+Entrega: ${formatPrice(order.shippingCost)} (${getShippingLabel(order.shippingMethod)})
+Total: ${formatPrice(order.total)}
+
+Vamos preparar a encomenda e enviaremos novidades por email.
+
+A equipa EM3D`,
+    })
+
+    const adminEmail = getAdminEmail()
+    if (adminEmail) {
+      await resend.emails.send({
+        from: getSender(),
+        to: adminEmail,
+        subject: `Nova encomenda EM3D - ${order.customerName}`,
+        text: `Nova encomenda paga.
+
+ID: ${orderId}
+Cliente: ${order.customerName}
+Email: ${order.customerEmail}
+Telefone: ${order.customerPhone || '-'}
+Entrega: ${getShippingLabel(order.shippingMethod)}
+Total: ${formatPrice(order.total)}
+
+Artigos:
+${itemLines}`,
+      })
+    }
+  } catch (error) {
+    console.error('Failed to send standard order emails:', error)
+  }
+}
+
 export async function POST(req: NextRequest) {
   const signature = req.headers.get('stripe-signature')
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -103,11 +218,17 @@ export async function POST(req: NextRequest) {
     const now = new Date()
     const transactions: any[] = []
     let orderRequestId: string | undefined
+    let orderId: string | undefined
+    let stripeSessionId: string | undefined
+    let stripePaymentIntentId: string | undefined
     let productType: string | undefined
-    let shouldSendEmails = false
+    let shouldSendHexaEmails = false
+    let shouldSendStandardOrderEmails = false
 
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
+      stripeSessionId = session.id
+      stripePaymentIntentId = getStripeObjectId(session.payment_intent)
       orderRequestId = session.metadata?.orderRequestId || undefined
       productType = session.metadata?.productType
 
@@ -123,8 +244,41 @@ export async function POST(req: NextRequest) {
 
         // Mark for email sending after transaction
         if (productType === 'hexa-memoria') {
-          shouldSendEmails = true
+          shouldSendHexaEmails = true
         }
+      }
+
+      const resolvedOrder = await resolveStandardOrderFromSession(session)
+      orderId = resolvedOrder.orderId
+
+      if (orderId) {
+        transactions.push(
+          dbAdmin.tx.orders[orderId].update({
+            paymentStatus: 'paid',
+            paidAt: now,
+            stripeSessionId,
+            ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+            updatedAt: now,
+          }),
+        )
+        shouldSendStandardOrderEmails = resolvedOrder.order?.paymentStatus !== 'paid'
+      }
+
+      if (!orderRequestId && !orderId) {
+        console.warn('Stripe checkout.session.completed did not resolve to an order or order request.', {
+          eventId: event.id,
+          sessionId: session.id,
+          clientReferenceId: session.client_reference_id,
+          metadata: session.metadata,
+        })
+      } else {
+        console.info('Stripe checkout.session.completed resolved.', {
+          eventId: event.id,
+          sessionId: session.id,
+          orderId,
+          orderRequestId,
+          resolutionSource: resolvedOrder.source,
+        })
       }
     }
 
@@ -136,6 +290,8 @@ export async function POST(req: NextRequest) {
         eventId: event.id,
         type: event.type,
         orderRequestId,
+        orderId,
+        stripeSessionId,
         processedAt: now,
       }),
     )
@@ -155,7 +311,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Send emails only after successful transaction
-    if (shouldSendEmails && orderRequestId) {
+    if (shouldSendHexaEmails && orderRequestId) {
       const orderData = await dbAdmin.query({
         orderRequests: {
           $: { where: { id: orderRequestId } },
@@ -164,6 +320,18 @@ export async function POST(req: NextRequest) {
       const orderRequest = (orderData.orderRequests?.[0] as any) || null
       if (orderRequest) {
         await sendHexaOrderEmails(orderRequest, orderRequestId)
+      }
+    }
+
+    if (shouldSendStandardOrderEmails && orderId) {
+      const orderData = await dbAdmin.query({
+        orders: {
+          $: { where: { id: orderId } },
+        },
+      })
+      const order = (orderData.orders?.[0] as any) || null
+      if (order?.customerEmail) {
+        await sendStandardOrderEmails(order, orderId)
       }
     }
 

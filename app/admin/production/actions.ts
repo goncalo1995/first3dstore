@@ -145,8 +145,11 @@ export async function generateProductionJobs(orderId: string) {
         ? item.colors
         : []
 
-    recipe.forEach((part, partIndex) => {
-      const jobId = id()
+    const quantity = Math.max(1, Number(item.quantity || 1))
+
+    Array.from({ length: quantity }).forEach((_, unitIndex) => {
+      recipe.forEach((part, partIndex) => {
+        const jobId = id()
       
       // Multi-color logic:
       // For now, if a product is multiColor and we have 1 part, we assume it uses all selected colors.
@@ -173,38 +176,40 @@ export async function generateProductionJobs(orderId: string) {
       const requiredColorIds = colorRequirements.map(cr => cr.colorId).join(',')
       const primaryColor = findGlobalColor(colorByName, partColorNames[0])
       const primaryColorName = colorRequirements[0]?.colorName ?? 'Unassigned'
+      const primaryColorHex = primaryColor?.hex ?? primaryColorName ?? '#888888'
 
-      const jobTx = dbAdmin.tx.productionJobs[jobId]
-        .update({
-          orderId,
-          orderItemIndex: itemIndex,
-          productId: product?.id ?? item.productId,
-          selectedVariantId: item.selectedVariant?.id,
-          selectedVariantName: item.selectedVariant?.name,
-          productName: item.productName,
-          partLabel: part.label,
-          colorName: primaryColorName,
-          colorHex: primaryColor?.hex ?? '#888888',
-          materialGrams: part.grams,
-          totalGrams: part.grams,
-          quantity: item.quantity,
-          status: 'queued',
-          isMultiColor,
-          colorRequirements,
-          requiredColorIds,
-          materialType,
-          outsourced: false,
-          customText: item.customText ?? '',
-          createdAt: now,
-          updatedAt: now,
-        })
-        .link({ order: orderId })
+        const jobTx = dbAdmin.tx.productionJobs[jobId]
+          .update({
+            orderId,
+            orderItemIndex: itemIndex,
+            productId: product?.id ?? item.productId,
+            selectedVariantId: item.selectedVariant?.id,
+            selectedVariantName: item.selectedVariant?.name,
+            productName: item.productName,
+            partLabel: quantity > 1 ? `${part.label} #${unitIndex + 1}` : part.label,
+            colorName: primaryColorName,
+            colorHex: primaryColorHex,
+            materialGrams: part.grams,
+            totalGrams: part.grams,
+            quantity: 1,
+            status: 'queued',
+            isMultiColor,
+            colorRequirements,
+            requiredColorIds,
+            materialType,
+            outsourced: false,
+            customText: item.customText ?? '',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .link({ order: orderId })
 
-      if (primaryColor) {
-        jobTx.link({ globalColor: primaryColor.id })
-      }
+        if (primaryColor) {
+          jobTx.link({ globalColor: primaryColor.id })
+        }
 
-      transactions.push(jobTx)
+        transactions.push(jobTx)
+      })
     })
   })
 

@@ -21,12 +21,9 @@ export function ProductCard({ product }: ProductCardProps) {
   const ctaHref = isLithophane && product.customizable && variants.length
     ? `/configurador?produto=${encodeURIComponent(product.slug)}`
     : productHref
-  const ctaLabel = !product.customizable && !variants.length
-    ? 'Brevemente'
-    : isLithophane && variants.length
+  const ctaLabel = variants.length
       ? 'Personalizar'
       : 'Ver Produto'
-  const ctaDisabled = !product.customizable && !variants.length
   const finishSwatches = getUniqueVariantFinishes(product)
 
   return (
@@ -98,15 +95,9 @@ export function ProductCard({ product }: ProductCardProps) {
             <p className="font-semibold text-primary">€{lowestPrice}</p>
           </div>
         </div>
-        {ctaDisabled ? (
-          <Button disabled variant="outline" className="mt-4 w-full border-border text-muted-foreground">
-            {ctaLabel}
-          </Button>
-        ) : (
-          <Button asChild variant="outline" className="mt-4 w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-            <Link href={ctaHref}>{ctaLabel}</Link>
-          </Button>
-        )}
+        <Button asChild variant="outline" className="mt-4 w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+          <Link href={ctaHref}>{ctaLabel}</Link>
+        </Button>
       </div>
     </article>
   )

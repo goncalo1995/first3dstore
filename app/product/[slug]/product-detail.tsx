@@ -324,9 +324,9 @@ Por favor, confirme a disponibilidade!`
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappMessage)}`
 
   const handleShare = async () => {
-    const shareUrl = typeof window !== 'undefined' ? window.location.href : `/product/${product.slug}`
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : `/produto/${product.slug}`
     const shareTitle = displayProduct.name
-    const shareText = `${displayProduct.name} da Foto3d.pt - ${displayProduct.benefit}`
+    const shareText = `${displayProduct.name} da EM3D - ${displayProduct.benefit}`
     
     const shareData: ShareData = {
       title: shareTitle,

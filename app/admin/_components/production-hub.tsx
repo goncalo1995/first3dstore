@@ -182,11 +182,11 @@ export function ProductionHub() {
             try {
               const result = await generateAllPendingJobs()
               if (result.totalCreated > 0) {
-                toast.success(`Created ${result.totalCreated} jobs from ${result.ordersProcessed} orders`)
+                setTimeout(() => toast.success(`Created ${result.totalCreated} jobs from ${result.ordersProcessed} orders`), 0)
               } else {
-                toast.info('No new orders to synchronize')
+                setTimeout(() => toast.info('No new orders to synchronize'), 0)
               }
-            } catch (err: any) { toast.error(err.message) }
+            } catch (err: any) { setTimeout(() => toast.error(err.message), 0) }
           }}>
             <RefreshCw className="mr-3 h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
             Synchronize

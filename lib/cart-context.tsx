@@ -107,6 +107,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [removeItem])
 
   const clearCart = useCallback(() => {
+    try {
+      window.localStorage.removeItem(CART_STORAGE_KEY)
+    } catch {
+      // Ignore storage failures; state is still cleared below.
+    }
     setItems([])
   }, [])
 

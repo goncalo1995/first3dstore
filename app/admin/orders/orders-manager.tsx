@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label'
 import { db, id } from '@/lib/db'
 import type { OrderRecord } from '@/app/admin/types'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cancelJob, requeueJob } from '@/app/admin/production/actions'
 import { toast } from 'sonner'
+import { recheckStripeOrderPayment } from './actions'
 
 type OrderItem = OrderRecord['items'][number]
 type OrderItemStatus = NonNullable<OrderItem['itemStatus']>
@@ -421,6 +422,10 @@ export function OrdersManager({
   const [draftOrder, setDraftOrder] = useState<any | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [activeTab, setActiveTab] = useState<'orders' | 'requests'>('orders')
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | OrderRequest['status']>('all')
+  const [requestPaymentFilter, setRequestPaymentFilter] = useState<'all' | 'paid' | 'unpaid' | 'not_applicable'>('all')
+  const [pendingPaymentSyncId, setPendingPaymentSyncId] = useState<string | null>(null)
+  const router = useRouter()
 
   const shippingCost = shippingMethod === 'mainland_portugal' && Number(subtotal) < 50 ? 9.99 : 0
   const total = (Number(subtotal) || 0) + shippingCost
@@ -488,6 +493,23 @@ export function OrdersManager({
     if (!confirmed) return
 
     await db.transact(db.tx.orders[order.id].delete())
+  }
+
+  const syncStripePayment = async (order: OrderRecord) => {
+    setPendingPaymentSyncId(order.id)
+    try {
+      const result = await recheckStripeOrderPayment(order.id)
+      if (result.updated) {
+        toast.success(result.message)
+      } else {
+        toast.info(result.message)
+      }
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível confirmar o pagamento Stripe.')
+    } finally {
+      setPendingPaymentSyncId(null)
+    }
   }
 
   const openEditor = (order: any, isRequest: boolean = false) => {
@@ -615,20 +637,40 @@ export function OrdersManager({
   // Filter order requests based on search query
   const filteredRequests = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    return orderRequests.filter(request => {
-      if (!normalizedQuery) return true
-      const haystack = [
-        request.id,
-        request.customerName,
-        request.customerEmail ?? '',
-        request.customerPhone ?? '',
-        request.companyName ?? '',
-        request.productName ?? '',
-        request.productSlug ?? '',
-      ].join(' ').toLowerCase()
-      return haystack.includes(normalizedQuery)
-    })
-  }, [orderRequests, query])
+    return orderRequests
+      .filter(request => {
+        if (requestStatusFilter !== 'all' && request.status !== requestStatusFilter) return false
+        if (requestPaymentFilter === 'paid' && !request.isPaid) return false
+        if (requestPaymentFilter === 'unpaid' && (request.isPaid || request.status === 'B2B_LEAD')) return false
+        if (requestPaymentFilter === 'not_applicable' && request.status !== 'B2B_LEAD') return false
+        if (!normalizedQuery) return true
+        const haystack = [
+          request.id,
+          request.customerName,
+          request.customerEmail ?? '',
+          request.customerPhone ?? '',
+          request.companyName ?? '',
+          request.productName ?? '',
+          request.productSlug ?? '',
+        ].join(' ').toLowerCase()
+        return haystack.includes(normalizedQuery)
+      })
+      .sort((left, right) => {
+        switch (sortBy) {
+          case 'oldest':
+            return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+          case 'total_desc':
+            return (right.selectedPrice ?? 0) - (left.selectedPrice ?? 0)
+          case 'total_asc':
+            return (left.selectedPrice ?? 0) - (right.selectedPrice ?? 0)
+          case 'customer':
+            return (left.customerName || '').localeCompare(right.customerName || '')
+          case 'recent':
+          default:
+            return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        }
+      })
+  }, [orderRequests, query, requestPaymentFilter, requestStatusFilter, sortBy])
 
   return (
     <div className="space-y-4">
@@ -639,6 +681,7 @@ export function OrdersManager({
               <h2 className="text-xl font-bold text-foreground">Orders Manager</h2>
               <div className="flex rounded-md border border-border bg-muted/50 p-0.5">
                 <button
+                  type="button"
                   onClick={() => setActiveTab('orders')}
                   className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
                     activeTab === 'orders'
@@ -649,6 +692,7 @@ export function OrdersManager({
                   Orders ({orders.length})
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveTab('requests')}
                   className={`px-3 py-1 text-xs font-medium rounded-sm transition-colors ${
                     activeTab === 'requests'
@@ -690,61 +734,79 @@ export function OrdersManager({
           </div>
         </div>
 
-        <div className="mt-6">
-          <Tabs 
-            value={fulfillmentFilter} 
-            onValueChange={(val: any) => setFulfillmentFilter(val)} 
-            className="w-full"
-          >
-            <TabsList className="flex w-full h-auto p-1 bg-muted/50 overflow-x-auto justify-start scrollbar-hide">
-              <TabsTrigger value="all" className="gap-2 px-4 h-9">
-                All <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.all}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="new" className="gap-2 px-4 h-9">
-                <Clock className="h-3.5 w-3.5" /> New 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.new}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="printing" className="gap-2 px-4 h-9">
-                <Hammer className="h-3.5 w-3.5" /> Printing 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.printing}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="ready" className="gap-2 px-4 h-9">
-                <Package className="h-3.5 w-3.5" /> Ready 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.ready}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="shipped" className="gap-2 px-4 h-9">
-                <Truck className="h-3.5 w-3.5" /> Shipped 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.shipped}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="completed" className="gap-2 px-4 h-9">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Completed 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.completed}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="cancelled" className="gap-2 px-4 h-9">
-                <AlertCircle className="h-3.5 w-3.5" /> Cancelled 
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.cancelled}</Badge>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+        {activeTab === 'orders' ? (
+          <>
+            <div className="mt-6">
+              <Tabs
+                value={fulfillmentFilter}
+                onValueChange={(val: any) => setFulfillmentFilter(val)}
+                className="w-full"
+              >
+                <TabsList className="flex w-full h-auto p-1 bg-muted/50 overflow-x-auto justify-start scrollbar-hide">
+                  <TabsTrigger value="all" className="gap-2 px-4 h-9">
+                    All <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.all}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="new" className="gap-2 px-4 h-9">
+                    <Clock className="h-3.5 w-3.5" /> New
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.new}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="printing" className="gap-2 px-4 h-9">
+                    <Hammer className="h-3.5 w-3.5" /> Printing
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.printing}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="ready" className="gap-2 px-4 h-9">
+                    <Package className="h-3.5 w-3.5" /> Ready
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.ready}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="shipped" className="gap-2 px-4 h-9">
+                    <Truck className="h-3.5 w-3.5" /> Shipped
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.shipped}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="completed" className="gap-2 px-4 h-9">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Completed
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.completed}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="cancelled" className="gap-2 px-4 h-9">
+                    <AlertCircle className="h-3.5 w-3.5" /> Cancelled
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.cancelled}</Badge>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 items-center">
-          <p className="text-[10px] uppercase font-bold text-muted-foreground mr-2">Additional Filters:</p>
-          <select value={paymentFilter} onChange={event => setPaymentFilter(event.target.value as typeof paymentFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
-            <option value="all">All payments</option>
-            {Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-          <select value={itemFilter} onChange={event => setItemFilter(event.target.value as typeof itemFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
-            <option value="all">All item states</option>
-            {Object.entries(itemStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </div>
+            <div className="mt-4 flex flex-wrap gap-2 items-center">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground mr-2">Additional Filters:</p>
+              <select value={paymentFilter} onChange={event => setPaymentFilter(event.target.value as typeof paymentFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
+                <option value="all">All payments</option>
+                {Object.entries(paymentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <select value={itemFilter} onChange={event => setItemFilter(event.target.value as typeof itemFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
+                <option value="all">All item states</option>
+                {Object.entries(itemStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <p className="text-[10px] uppercase font-bold text-muted-foreground mr-2">Request Filters:</p>
+            <select value={requestStatusFilter} onChange={event => setRequestStatusFilter(event.target.value as typeof requestStatusFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
+              <option value="all">All request statuses</option>
+              {Object.entries(orderRequestStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            <select value={requestPaymentFilter} onChange={event => setRequestPaymentFilter(event.target.value as typeof requestPaymentFilter)} className="h-8 rounded border border-input bg-background px-2 text-[11px]">
+              <option value="all">All payment states</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="not_applicable">N/A</option>
+            </select>
+          </div>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-lg border border-border bg-background">
         {activeTab === 'orders' ? (
           <>
-            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:gap-4">
+            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_96px] xl:gap-4">
               <span>Customer</span>
               <span>Items</span>
               <span>Factory Status</span>
@@ -761,10 +823,12 @@ export function OrdersManager({
                 </div>
               ) : filteredOrders.map(order => {
             const factory = getFactoryStatus(order.productionJobs)
+            const canSyncStripe = order.paymentPreference === 'stripe' && order.paymentStatus === 'pending' && Boolean(order.stripeSessionId)
+            const isSyncingStripe = pendingPaymentSyncId === order.id
 
             return (
               <article key={order.id} className="p-4 hover:bg-muted/30 transition-colors">
-                <div className="grid gap-4 xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:items-start xl:gap-4">
+                <div className="grid gap-4 xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_96px] xl:items-start xl:gap-4">
                   <div>
                     <h3 className="font-bold text-sm text-foreground">{order.customerName}</h3>
                     <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">#{order.id.slice(0, 8)} · {formatOrderDate(order.createdAt)}</p>
@@ -803,7 +867,20 @@ export function OrdersManager({
                   <div>
                     <p className="font-bold text-foreground text-sm">€{order.total.toFixed(2)}</p>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-1">
+                    {canSyncStripe && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={isSyncingStripe}
+                        title="Recheck Stripe payment"
+                        onClick={() => syncStripePayment(order)}
+                      >
+                        {isSyncingStripe ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                      </Button>
+                    )}
                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditor(order)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -816,7 +893,7 @@ export function OrdersManager({
           </>
         ) : (
           <>
-            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:gap-4">
+            <div className="hidden border-b border-border bg-secondary/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground xl:grid xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_96px] xl:gap-4">
               <span>Customer</span>
               <span>Product</span>
               <span>Jobs</span>
@@ -837,7 +914,7 @@ export function OrdersManager({
 
                 return (
                   <article key={request.id} className="p-4 hover:bg-muted/30 transition-colors">
-                    <div className="grid gap-4 xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_60px] xl:items-start xl:gap-4">
+                    <div className="grid gap-4 xl:grid-cols-[1.2fr_1.5fr_1fr_0.8fr_0.8fr_0.8fr_96px] xl:items-start xl:gap-4">
                       <div>
                         <h3 className="font-bold text-sm text-foreground">{request.customerName || 'Contacto B2B'}</h3>
                         <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">#{request.id.slice(0, 8)} · {formatOrderDate(request.createdAt)}</p>
