@@ -142,13 +142,7 @@ function resolveGlobalColor(
 }
 
 function getItemColorChoices(item: OrderItem): { name: string; hex?: string; globalColorId?: string }[] {
-  if (item.selectedVariant?.colors?.length) {
-    return item.selectedVariant.colors.map(color => {
-      if (typeof color === 'string') return { name: color }
-      return { name: color.name, hex: color.hex, globalColorId: color.globalColorId }
-    })
-  }
-
+  // Prioritize customer-selected values over variant display colors
   if (item.selectedParts?.length) {
     return item.selectedParts.map(part => ({
       name: `${part.label}: ${part.colorName}`,
@@ -171,6 +165,14 @@ function getItemColorChoices(item: OrderItem): { name: string; hex?: string; glo
       hex: item.selectedColor.hex,
       globalColorId: item.selectedColor.globalColorId,
     }]
+  }
+
+  // Only fall back to variant display colors if no customer selection exists
+  if (item.selectedVariant?.colors?.length) {
+    return item.selectedVariant.colors.map(color => {
+      if (typeof color === 'string') return { name: color }
+      return { name: color.name, hex: color.hex, globalColorId: color.globalColorId }
+    })
   }
 
   return (item.colors ?? []).map(color => ({ name: color }))

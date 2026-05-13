@@ -24,10 +24,11 @@ import { toast } from 'sonner'
 import { db, id } from '@/lib/db'
 import { archiveGlobalColor } from '@/app/admin/production/actions'
 import type { GlobalColorRecord } from '@/app/admin/types'
+import type { Product } from '@/lib/products'
 
 interface GlobalColorManagerProps {
   colors: GlobalColorRecord[]
-  products: any[]
+  products: Product[]
 }
 
 export function GlobalColorManager({ colors, products }: GlobalColorManagerProps) {
@@ -107,7 +108,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
       offeredProducts: 0,
       fixedVariants: 0,
       allowedVariantsOrParts: 0,
-      products: [] as any[],
+      products: [] as Product[],
     }
 
     products.forEach(product => {

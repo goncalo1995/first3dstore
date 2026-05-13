@@ -75,6 +75,10 @@ function getOrderItemStatus(item: OrderItem): OrderItemStatus {
   return item.itemStatus ?? 'new'
 }
 
+function computeShippingCost(shippingMethod: OrderRecord['shippingMethod'], subtotal: number): number {
+  return shippingMethod === 'mainland_portugal' && subtotal < 50 ? 9.99 : 0
+}
+
 function getFactoryStatus(jobs?: any[]) {
   if (!jobs || jobs.length === 0) return { label: 'Awaiting Generation', tone: 'bg-secondary text-muted-foreground' }
   const allAssembled = jobs.every(j => j.status === 'assembled')
@@ -249,11 +253,19 @@ function OrderEditDialog({
                     <select
                       id="order-shipping-method"
                       value={draft.shippingMethod ?? 'pickup_carcavelos'}
-                      onChange={event => onDraftChange({
-                        ...draft,
-                        shippingMethod: event.target.value as OrderRecord['shippingMethod'],
-                        shippingAddress: event.target.value === 'pickup_carcavelos' ? '' : draft.shippingAddress,
-                      })}
+                      onChange={event => {
+                        const newShippingMethod = event.target.value as OrderRecord['shippingMethod']
+                        const subtotal = draft.items.reduce((sum: number, item: OrderItem) => sum + (item.unitPrice * item.quantity), 0)
+                        const newShippingCost = computeShippingCost(newShippingMethod, subtotal)
+                        const newTotal = subtotal + newShippingCost
+                        onDraftChange({
+                          ...draft,
+                          shippingMethod: newShippingMethod,
+                          shippingAddress: newShippingMethod === 'pickup_carcavelos' ? '' : draft.shippingAddress,
+                          shippingCost: newShippingCost,
+                          total: newTotal,
+                        })
+                      }}
                       className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                     >
                       <option value="pickup_carcavelos">Pickup in Carcavelos</option>

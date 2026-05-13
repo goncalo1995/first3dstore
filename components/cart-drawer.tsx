@@ -27,12 +27,21 @@ function getItemDescriptor(item: ReturnType<typeof useCart>['items'][number]) {
     return `Cores: ${item.selectedColors.map(color => color.name).join(', ')}`
   }
 
-  return `Cor: ${item.selectedColor.name}`
+  // Guard legacy/stale items
+  if (item.selectedColor && typeof item.selectedColor === 'object' && item.selectedColor.name) {
+    return `Cor: ${item.selectedColor.name}`
+  }
+
+  return ''
 }
 
 function getCustomText(item: ReturnType<typeof useCart>['items'][number]) {
+  // Guard legacy/stale items - ensure customizations is an array
+  if (!Array.isArray(item.customizations)) {
+    return ''
+  }
   return item.customizations
-    .filter(customization => customization.value.trim().length > 0)
+    .filter(customization => customization.value?.trim?.().length > 0)
     .map(customization => `${customization.label}: ${customization.value}`)
     .join(' | ')
 }

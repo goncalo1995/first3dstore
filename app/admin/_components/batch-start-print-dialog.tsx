@@ -301,6 +301,8 @@ export function BatchStartPrintDialog({
                               <span
                                 className="ml-1 text-amber-500"
                                 title="Cor resolvida por nome; pode não corresponder exactamente ao material actual"
+                                role="img"
+                                aria-label="Warning: color resolved by name may not match actual material"
                               >
                                 ⚠
                               </span>

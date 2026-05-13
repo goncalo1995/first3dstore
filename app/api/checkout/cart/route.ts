@@ -222,6 +222,72 @@ function cents(value: number) {
   return Math.round(value * 100)
 }
 
+function validateSelectedColors(
+  product: Product,
+  item: NonNullable<CheckoutPayload['items']>[number],
+  variant: NonNullable<Product['variants']>[number] | undefined,
+  globalColors: GlobalColor[],
+): string | null {
+  if (!variant) return null
+
+  const colorMode = variant.colorMode
+  const allowedGlobalColorIds = variant.allowedGlobalColorIds ?? []
+
+  // Validate single color mode
+  if (colorMode === 'customer_choice') {
+    const selectedColor = item.selectedColor ?? item.selectedColors?.[0]
+    if (selectedColor?.globalColorId && allowedGlobalColorIds.length > 0) {
+      if (!allowedGlobalColorIds.includes(selectedColor.globalColorId)) {
+        return `Selected color is not allowed for this variant of ${product.name}`
+      }
+    }
+    if (!item.selectedColor && !item.selectedColors?.length) {
+      return `Color selection is required for ${product.name}`
+    }
+    if (item.selectedColors && item.selectedColors.length > 1) {
+      return `Only one color allowed for this variant of ${product.name}`
+    }
+  }
+
+  // Validate multi-part mode
+  if (colorMode === 'multi_part' && variant.parts?.length) {
+    const selectedParts = item.selectedParts ?? []
+    if (selectedParts.length !== variant.parts.length) {
+      return `Invalid part selection for ${product.name}`
+    }
+
+    for (let i = 0; i < variant.parts.length; i++) {
+      const partDef = variant.parts[i]
+      const selectedPart = selectedParts[i]
+
+      if (!selectedPart) {
+        return `Missing color selection for ${partDef.label} in ${product.name}`
+      }
+
+      // Check fixed color constraint
+      if (partDef.fixedGlobalColorId && selectedPart.globalColorId !== partDef.fixedGlobalColorId) {
+        return `Invalid color for ${partDef.label} in ${product.name}`
+      }
+
+      // Check allowed colors constraint
+      if (partDef.allowedGlobalColorIds?.length && selectedPart.globalColorId) {
+        if (!partDef.allowedGlobalColorIds.includes(selectedPart.globalColorId)) {
+          return `Selected color not allowed for ${partDef.label} in ${product.name}`
+        }
+      }
+    }
+  }
+
+  // Validate fixed mode - customer shouldn't be setting colors
+  if (colorMode === 'fixed') {
+    if (item.selectedColor || item.selectedColors?.length || item.selectedParts?.length) {
+      return `Color selection not allowed for this variant of ${product.name} (colors are pre-set)`
+    }
+  }
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const stripe = getStripe()
@@ -269,6 +335,12 @@ export async function POST(request: NextRequest) {
       const variant = getVariant(product, item.selectedVariant)
       if (item.selectedVariant?.id && !variant) {
         return NextResponse.json({ error: `Opção inválida para ${product.name}.` }, { status: 400 })
+      }
+
+      // Validate color selections against variant rules
+      const colorValidationError = validateSelectedColors(product, item, variant, globalColors)
+      if (colorValidationError) {
+        return NextResponse.json({ error: colorValidationError }, { status: 400 })
       }
 
       const unitPrice = getUnitPrice(product, item, globalColors, variant)
@@ -348,28 +420,8 @@ export async function POST(request: NextRequest) {
     }
 
     const orderId = id()
-    const now = new Date()
 
-    await dbAdmin.transact(
-      dbAdmin.tx.orders[orderId].update({
-        customerName,
-        customerEmail,
-        ...(customerPhone ? { customerPhone } : {}),
-        paymentPreference: 'stripe',
-        shippingMethod,
-        ...(shippingMethod === 'mainland_portugal' ? { shippingAddress } : {}),
-        items: orderItems,
-        subtotal,
-        shippingCost,
-        total,
-        paymentStatus: 'pending',
-        fulfillmentStatus: 'new',
-        ...(notes ? { notes } : {}),
-        createdAt: now,
-        updatedAt: now,
-      }),
-    )
-
+    // Create Stripe session first to ensure it succeeds before saving order
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer_email: customerEmail,
@@ -387,11 +439,27 @@ export async function POST(request: NextRequest) {
       throw new Error('Stripe não devolveu URL de checkout.')
     }
 
+    // Now create the order atomically with Stripe session info
+    const now = new Date()
     await dbAdmin.transact(
       dbAdmin.tx.orders[orderId].update({
+        customerName,
+        customerEmail,
+        ...(customerPhone ? { customerPhone } : {}),
+        paymentPreference: 'stripe',
+        shippingMethod,
+        ...(shippingMethod === 'mainland_portugal' ? { shippingAddress } : {}),
+        items: orderItems,
+        subtotal,
+        shippingCost,
+        total,
+        paymentStatus: 'pending',
+        fulfillmentStatus: 'new',
+        ...(notes ? { notes } : {}),
         stripeSessionId: session.id,
         paymentUrl: session.url,
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       }),
     )
 

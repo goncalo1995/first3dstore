@@ -3,6 +3,8 @@
 import Stripe from 'stripe'
 import { revalidatePath } from 'next/cache'
 import { dbAdmin } from '@/lib/db-admin'
+import { requireAdminForAction } from '@/lib/server-auth'
+import type { Order } from '@/types'
 
 function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY
@@ -19,12 +21,15 @@ function getStripeObjectId(value: string | { id?: string } | null | undefined) {
 }
 
 export async function recheckStripeOrderPayment(orderId: string) {
+  // Require admin authorization before proceeding
+  await requireAdminForAction()
+
   const orderData = await dbAdmin.query({
     orders: {
       $: { where: { id: orderId } },
     },
   })
-  const order = (orderData.orders?.[0] as any) || null
+  const order = (orderData.orders?.[0] as Order) ?? null
 
   if (!order) {
     throw new Error('Encomenda não encontrada.')

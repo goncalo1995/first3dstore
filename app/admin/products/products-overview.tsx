@@ -208,7 +208,7 @@ export function ProductsOverview({
                     <Link href={`/admin/products/${product.slug}`}>Edit</Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href={`/product/${product.slug}`} target="_blank">
+                    <Link href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer" aria-label={`View ${product.name} in new tab`}>
                       <Eye className="h-4 w-4" />
                     </Link>
                   </Button>

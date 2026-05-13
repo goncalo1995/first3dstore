@@ -29,8 +29,9 @@ export async function POST(req: NextRequest) {
     if (!cleanFileName) {
       return NextResponse.json({ error: 'Missing fileName' }, { status: 400 })
     }
-    if (!contentType.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image uploads are supported' }, { status: 400 })
+    const allowedMimeTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/avif'])
+    if (!allowedMimeTypes.has(contentType)) {
+      return NextResponse.json({ error: 'Only PNG/JPEG/WebP/AVIF uploads are supported' }, { status: 400 })
     }
 
     const fileExtension = cleanFileName.split('.').pop()?.toLowerCase() || 'png'

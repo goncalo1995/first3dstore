@@ -17,6 +17,7 @@ export type ProductInventory = InstaQLEntity<typeof schema, 'productInventory'>;
 export type GlobalColor = InstaQLEntity<typeof schema, 'globalColors'>;
 export type Spool = InstaQLEntity<typeof schema, 'spools'>;
 export type PrintFarm = InstaQLEntity<typeof schema, 'printFarms'>;
+export type Order = InstaQLEntity<typeof schema, 'orders'>;
 // export type ProductPrintableVariant = InstaQLEntity<typeof schema, 'productPrintableVariants'>;
 // export type PrintFarmJob = InstaQLEntity<typeof schema, 'printFarmJobs'>;
 

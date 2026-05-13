@@ -723,22 +723,26 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
 
   const transactions = []
   let created = 0
-  let skipped = 0
+  let updated = 0
 
   for (const product of exampleProductsToSeed) {
     const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
-    if (existingProduct) {
-      console.log(`   ⏭️  Skipping ${product.slug}: already exists`)
-      skipped++
-      continue
-    }
 
-    const productId = id()
-    const inventoryId = id()
+    const productId = existingProduct?.id || id()
+    const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productId === productId)
+    const inventoryId = existingInventory?.id || id()
     const now = new Date()
 
     // Create images array from single image
     const images = [product.image]
+
+    if (existingProduct) {
+      console.log(`   🔄  Updating ${product.slug}`)
+      updated++
+    } else {
+      console.log(`   ✨  Creating ${product.slug}`)
+      created++
+    }
 
     transactions.push(
       dbAdmin.tx.catalogProducts[productId].update({
@@ -772,15 +776,13 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
       })
     )
     transactions.push(dbAdmin.tx.productInventory[inventoryId].update(createInventory(product.slug, colorMap, product.inventoryColors)))
-    console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
-    created++
   }
 
   if (transactions.length > 0) {
     await dbAdmin.transact(transactions)
   }
 
-  console.log(`   ✅ Products: ${created} created, ${skipped} skipped`)
+  console.log(`   ✅ Products: ${created} created, ${updated} updated`)
 }
 
 async function main(): Promise<void> {

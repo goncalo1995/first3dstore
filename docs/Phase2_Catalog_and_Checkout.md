@@ -26,15 +26,17 @@
    - Apply shipping logic: 0€ for pickup, €4.99 for national shipping.  
    - Submit order button.
 
-4. **Order Creation Logic (`orders` table)**  
-   - Write directly to the InstantDB `orders` table (no need for a separate `/api/checkout` route if InstantDB client handles it securely, otherwise use a server action).
-   - **Schema Mapping:** 
+4. **Order Creation Logic (Server-Authoritative)**
+   - **IMPORTANT:** All order creation and price calculation MUST be performed server-side via a secure API endpoint (`/api/checkout/cart`). Never allow client-side writes to the `orders` table.
+   - The server endpoint validates all inputs, fetches current product pricing from the database, and computes totals server-side to prevent price manipulation.
+   - **Payment Flow:** Use Stripe checkout sessions for payment. Payment status transitions are handled server-side via Stripe webhooks.
+   - **Schema Mapping:**
      - `customerName`, `customerEmail`, `customerPhone`, `shippingMethod`, `shippingAddress`.
-     - `items`: array of objects. Map `productId`, `productName`, `quantity`, `colors`, `selectedVariant`, `unitPrice`.
+     - `items`: array of objects. Map `productId`, `productName`, `quantity`, `colors`, `selectedVariant`, `unitPrice` (validated server-side).
      - **CustomText Concatenation:** Since `items` has a single `customText: string` field, map the dynamic customizations object into a single formatted string (e.g., `"Nome: João | Idade: 30"`).
-     - Set defaults: `subtotal`, `shippingCost`, `total`, `paymentStatus: 'pending'`, `fulfillmentStatus: 'new'`.
-   - Clear cart after successful order submission.
-   - Show a Success State with manual payment instructions (MBWay number / IBAN).
+     - Set defaults: `subtotal`, `shippingCost`, `total` (all computed server-side), `paymentStatus: 'pending'`, `fulfillmentStatus: 'new'`.
+   - Clear cart only after successful payment verification (on the success page with verified session_id).
+   - Payment state is managed exclusively via Stripe webhooks handled server-side. Manual payment methods have been deprecated in favor of Stripe-driven flows.
 
 **Test Plan**  
 - Add multiple products to cart (with and without custom text), verify cart updates correctly.  

@@ -5,9 +5,9 @@ EM3D.pt is a premium umbrella brand for useful, personalized objects 3D-printed 
 
 ## 2. Technical Architecture & Database Mapping
 **Flow A: Catalog Sales (E-commerce)**
-- Uses `catalogProducts`. 
+- Uses `catalogProducts`.
 - **Dynamic Customization:** Products support multiple custom fields via `customizationOptions` JSON array. The UI dynamically generates these inputs.
-- Checkout is Direct (No Cart MVP). Saves to `orders`.
+- Checkout supports both cart-based flow (primary UX) and direct no-cart flow (optional MVP mode). Saves to `orders`.
 
 **Flow B: Custom Ideas & B2B (Lead Gen)**
 - Uses `/pedido-personalizado` form.

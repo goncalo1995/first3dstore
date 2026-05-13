@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,10 +9,18 @@ import { useCart } from '@/lib/cart-context'
 
 export default function CheckoutSuccessPage() {
   const { clearCart } = useCart()
+  const searchParams = useSearchParams()
+  const sessionId = searchParams.get('session_id')
+  const [verified, setVerified] = useState(false)
 
   useEffect(() => {
-    clearCart()
-  }, [clearCart])
+    // Only clear cart if we have a valid session_id from Stripe redirect
+    // This prevents clearing cart on direct visits or page refreshes
+    if (sessionId) {
+      setVerified(true)
+      clearCart()
+    }
+  }, [sessionId, clearCart])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">

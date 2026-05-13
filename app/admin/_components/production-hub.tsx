@@ -37,14 +37,14 @@ import { format } from 'date-fns'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
-import type { 
-  ProductionJob, 
-  Printer, 
-  Spool, 
-  GlobalColor, 
-  PrintFarm, 
-  CatalogProduct, 
-  PrintHistory 
+import type {
+  ProductionJob,
+  Printer,
+  Spool,
+  GlobalColor,
+  PrintFarm,
+  CatalogProduct,
+  PrintHistory
 } from '@/types'
 
 export function ProductionHub() {
@@ -79,7 +79,7 @@ export function ProductionHub() {
   const [schedulingDate, setSchedulingDate] = useState<Date>(new Date())
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
-  const [selectedJobDetails, setSelectedJobDetails] = useState<any>(null)
+  const [selectedJobDetails, setSelectedJobDetails] = useState<ProductionJob | null>(null)
 
   if (isLoading) return <div className="flex h-[400px] items-center justify-center font-black uppercase tracking-[0.2em] animate-pulse text-muted-foreground/30">Syncing MRP Hub...</div>
   if (error) return <div className="p-8 text-destructive font-bold">Error loading hub: {error.message}</div>

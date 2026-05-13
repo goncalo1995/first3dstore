@@ -115,16 +115,24 @@ function toDraftVariantOption(option: ProductVariantOption): DraftVariantOption 
   }
 }
 
-function ensureUniqueDraftVariants(options: (ProductVariantOption | DraftVariantOption)[]): DraftVariantOption[] {
+function ensureUniqueDraftVariants(options: (ProductVariantOption | DraftVariantOption)[]): { variants: DraftVariantOption[]; idMapping: Record<string, string> } {
   const seen = new Set<string>()
-  return options.map(option => {
+  const idMapping: Record<string, string> = {}
+  const variants = options.map(option => {
     const next = toDraftVariantOption(option as ProductVariantOption)
+    const oldId = next.id
     if (!next.id || seen.has(next.id)) {
       next.id = id()
+      if (oldId) {
+        idMapping[oldId] = next.id
+      }
+    } else {
+      idMapping[oldId!] = next.id
     }
     seen.add(next.id)
     return next
   })
+  return { variants, idMapping }
 }
 
 function slugify(value: string) {
@@ -356,7 +364,7 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [multiColorCount, setMultiColorCount] = useState(String(product.multiColorCount ?? 1))
   const [colorSelectionMode, setColorSelectionMode] = useState<Product['colorSelectionMode']>(product.colorSelectionMode ?? (product.variants?.length ? 'preset_options' : product.multiColor ? 'flexible_parts' : 'single'))
   const [multiColorPriceAdd, setMultiColorPriceAdd] = useState(String(product.multiColorPriceAdd ?? 0))
-  const [variants, setVariants] = useState<DraftVariantOption[]>(() => ensureUniqueDraftVariants(product.variants ?? []))
+  const [variants, setVariants] = useState<DraftVariantOption[]>(() => ensureUniqueDraftVariants(product.variants ?? []).variants)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [featured, setFeatured] = useState(Boolean(product.featured))
   const [featuredRank, setFeaturedRank] = useState(String(product.featuredRank ?? 99))
@@ -686,7 +694,17 @@ export function ProductEditor({ slug }: { slug: string }) {
     setMultiColorCount(String(product.multiColorCount ?? 1))
     setColorSelectionMode(product.colorSelectionMode ?? (product.variants?.length ? 'preset_options' : product.multiColor ? 'flexible_parts' : 'single'))
     setMultiColorPriceAdd(String(product.multiColorPriceAdd ?? 0))
-    setVariants(ensureUniqueDraftVariants(product.variants ?? []))
+    const { variants: newVariants, idMapping } = ensureUniqueDraftVariants(product.variants ?? [])
+    setVariants(newVariants)
+    // Preserve aspect ratio texts with new IDs
+    setVariantAspectRatioTexts(current => {
+      const updated: Record<string, string> = {}
+      Object.entries(current).forEach(([oldId, text]) => {
+        const newId = idMapping[oldId] ?? oldId
+        updated[newId] = text
+      })
+      return updated
+    })
     setPreviewImageUrl('')
     setFeatured(Boolean(product.featured))
     setFeaturedRank(String(product.featuredRank ?? 99))
@@ -945,7 +963,14 @@ export function ProductEditor({ slug }: { slug: string }) {
         }
       })
       const offeredColors = normalizedColorInventory.filter(color => color.offered)
-      const dedupedVariants = ensureUniqueDraftVariants(variants)
+      const { variants: dedupedVariants, idMapping } = ensureUniqueDraftVariants(variants)
+      // Update aspect ratio texts to use new IDs after deduplication
+      const updatedAspectRatioTexts: Record<string, string> = {}
+      Object.entries(variantAspectRatioTexts).forEach(([oldId, text]) => {
+        const newId = idMapping[oldId] ?? oldId
+        updatedAspectRatioTexts[newId] = text
+      })
+      setVariantAspectRatioTexts(updatedAspectRatioTexts)
       const normalizedVariants: ProductVariantOption[] = dedupedVariants
         .map((variant, index) => ({
           id: variant.id || id(),
