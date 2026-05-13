@@ -40,11 +40,42 @@ export type OrderRecord = {
     productName: string
     quantity: number
     colors: string[]
+    selectedColor?: {
+      name: string
+      hex: string
+      imageUrl?: string
+      globalColorId?: string
+      colorPriceAdd?: number
+    }
+    selectedColors?: {
+      name: string
+      hex: string
+      imageUrl?: string
+      globalColorId?: string
+      colorPriceAdd?: number
+    }[]
+    selectedParts?: {
+      label: string
+      colorName: string
+      colorHex: string
+      globalColorId?: string
+      colorPriceAdd?: number
+      resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
+      grams: number
+    }[]
     selectedVariant?: {
       id?: string
       name: string
       kind?: 'single_color' | 'preset_pack' | 'custom_text'
-      colors: string[]
+      colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
+      allowedGlobalColorIds?: string[]
+      colors: {
+        name: string
+        hex: string
+        imageUrl?: string
+        globalColorId?: string
+        priceAdd?: number
+      }[]
     }
     customText?: string
     unitPrice: number
@@ -57,7 +88,7 @@ export type OrderRecord = {
   shippingCost: number
   total: number
   paymentStatus: 'pending' | 'paid' | 'refunded'
-  fulfillmentStatus: 'new' | 'printing' | 'ready' | 'shipped' | 'completed' | 'cancelled'
+  fulfillmentStatus: 'new' | 'printing' | 'ready' | 'ready_for_pickup' | 'shipped' | 'completed' | 'cancelled'
   notes?: string
   createdAt: Date
   updatedAt: Date

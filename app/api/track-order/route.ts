@@ -32,7 +32,7 @@ type OrderRecord = {
   shippingCost: number
   total: number
   paymentStatus: 'pending' | 'paid' | 'refunded'
-  fulfillmentStatus: 'new' | 'printing' | 'ready' | 'shipped' | 'completed' | 'cancelled'
+  fulfillmentStatus: 'new' | 'printing' | 'ready' | 'ready_for_pickup' | 'shipped' | 'completed' | 'cancelled'
   notes?: string
   createdAt: string | Date
   updatedAt: string | Date

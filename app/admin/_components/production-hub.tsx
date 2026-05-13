@@ -79,6 +79,7 @@ export function ProductionHub() {
   const [schedulingDate, setSchedulingDate] = useState<Date>(new Date())
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
+  const [selectedJobDetails, setSelectedJobDetails] = useState<any>(null)
 
   if (isLoading) return <div className="flex h-[400px] items-center justify-center font-black uppercase tracking-[0.2em] animate-pulse text-muted-foreground/30">Syncing MRP Hub...</div>
   if (error) return <div className="p-8 text-destructive font-bold">Error loading hub: {error.message}</div>
@@ -119,10 +120,18 @@ export function ProductionHub() {
     const product = getJobProduct(job)
     const variantId = getJobVariantId(job, product)
     const files = Array.isArray(product?.stlFiles) ? product.stlFiles : []
+    const orderItem = typeof job.orderItemIndex === 'number' ? job.order?.items?.[job.orderItemIndex] : undefined
+    const variant = variantId ? product?.variants?.find((item: any) => item.id === variantId) : undefined
+    const matchingFiles = files.filter((file: any) => !file.variantId || file.variantId === variantId)
 
     return {
       product,
-      files: files.filter((file: any) => !file.variantId || file.variantId === variantId),
+      variant,
+      orderItem,
+      files: matchingFiles,
+      estimatedPrintMinutes: job.estimatedPrintMinutes
+        ?? matchingFiles.find((file: any) => Number(file.estimatedPrintMinutes) > 0)?.estimatedPrintMinutes
+        ?? variant?.estimatedPrintMinutes,
     }
   }
 
@@ -200,7 +209,7 @@ export function ProductionHub() {
               <LayoutDashboard className="h-4 w-4 sm:mr-2 text-primary" /> <span className="ml-1 hidden xl:inline">Dashboard</span>
             </TabsTrigger>
             <TabsTrigger value="production" className="rounded-lg font-black text-[10px] uppercase tracking-widest h-9 px-3 sm:px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <PrinterIcon className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden sm:inline">Production</span>
+              <PrinterIcon className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden md:inline">Production</span>
               {queuedJobs.length > 0 && (
                 <span className="ml-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary text-[8px] font-black text-primary-foreground px-1">
                   {queuedJobs.length}
@@ -208,10 +217,10 @@ export function ProductionHub() {
               )}
             </TabsTrigger>
             <TabsTrigger value="inventory" className="rounded-lg font-black text-[10px] uppercase tracking-widest h-9 px-3 sm:px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <Palette className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden sm:inline">Spools</span>
+              <Palette className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden md:inline">Spools</span>
             </TabsTrigger>
             <TabsTrigger value="fleet" className="rounded-lg font-black text-[10px] uppercase tracking-widest h-9 px-3 sm:px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <HardDrive className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden sm:inline">Printers</span>
+              <HardDrive className="h-4 w-4 sm:mr-2" /> <span className="ml-1 hidden md:inline">Printers</span>
             </TabsTrigger>
             <TabsTrigger value="outsourced" className="rounded-lg font-black text-[10px] uppercase tracking-widest h-9 px-3 sm:px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <ExternalLink className="h-4 w-4 sm:mr-2" /> <span className="ml-1 sr-only">Outsourced</span>
@@ -279,7 +288,7 @@ export function ProductionHub() {
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
               {queuedJobs.length === 0 ? (
                 <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20">
                   <PrinterIcon className="h-10 w-10 mx-auto mb-4 opacity-20" />
@@ -297,6 +306,7 @@ export function ProductionHub() {
                   onAction={() => setAssigningJob(job)}
                   actionLabel="Schedule"
                   onOutsource={() => toggleOutsourced(job.id, true)}
+                  onOpenDetails={() => setSelectedJobDetails(job)}
                 />
               ))}
             </div>
@@ -357,6 +367,14 @@ export function ProductionHub() {
           setSelectedJobIds([])
         }}
       />
+
+      {selectedJobDetails && (
+        <PrintJobDetailsDialog
+          job={selectedJobDetails}
+          printInfo={getJobPrintInfo(selectedJobDetails)}
+          onClose={() => setSelectedJobDetails(null)}
+        />
+      )}
     </div>
   )
 }
@@ -372,6 +390,7 @@ function getScheduleRequirements(job: any) {
     colorHex: requirement.colorHex || job.globalColor?.hex || job.colorHex || '#e5e7eb',
     materialType: requirement.materialType || job.materialType || 'PLA',
     grams: Number(requirement.grams || job.materialGrams || 0),
+    resolvedBy: requirement.resolvedBy,
   }))
 }
 
@@ -532,6 +551,135 @@ function AssignJobDialog({ job, printers, spools, onClose, onConfirm }: any) {
   )
 }
 
+function PrintJobDetailsDialog({ job, printInfo, onClose }: { job: any; printInfo: any; onClose: () => void }) {
+  const requirements = getScheduleRequirements(job)
+  const orderItem = printInfo?.orderItem
+  const estimatedPrintMinutes = printInfo?.estimatedPrintMinutes
+  const detailRows = [
+    ['Order', job.orderId ? `#${String(job.orderId).slice(0, 8)}` : 'No order'],
+    ['Customer', job.order?.customerName ?? 'Unknown'],
+    ['Product', job.productName],
+    ['Variant', job.selectedVariantName ?? orderItem?.selectedVariant?.name ?? printInfo?.variant?.name ?? 'Default'],
+    ['Part', job.partLabel],
+    ['Status', job.status],
+    ['Priority', job.priority ? `#${job.priority}` : 'Normal'],
+    ['Material', job.materialType ?? 'PLA'],
+    ['Grams', `${Math.round(Number(job.materialGrams ?? job.totalGrams ?? 0))}g`],
+    ['Estimated print', estimatedPrintMinutes ? `${estimatedPrintMinutes} min` : 'Not set'],
+  ]
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] sm:max-w-3xl overflow-y-auto p-0">
+        <div className="border-b p-5">
+          <DialogTitle className="font-black text-xl uppercase tracking-tight">Print Job Details</DialogTitle>
+          <p className="mt-1 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            {job.productName} · {job.partLabel}
+          </p>
+        </div>
+
+        <div className="grid gap-4 p-5 lg:grid-cols-[1fr_280px]">
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Job summary</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {detailRows.map(([label, value]) => (
+                  <div key={label} className="rounded-lg border bg-background p-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Color requirements</p>
+              <div className="space-y-2">
+                {requirements.map((requirement: any, index: number) => (
+                  <div key={`${requirement.colorId}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="h-6 w-6 rounded-md border shadow-sm" style={{ backgroundColor: requirement.colorHex }} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black">
+                          {requirement.colorName}
+                          {requirement.resolvedBy && requirement.resolvedBy !== 'globalColorId' && (
+                            <span className="ml-1 text-amber-500" title="Cor resolvida por nome; pode não corresponder exactamente ao material actual">⚠</span>
+                          )}
+                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{requirement.materialType} · {Math.round(requirement.grams)}g</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] uppercase">{requirement.colorId}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {(job.customText || orderItem?.customText || job.notes || job.order?.notes || printInfo?.product?.slicerNotes) && (
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Instructions</p>
+                <div className="space-y-3 text-sm">
+                  {job.customText && <InstructionBlock label="Job custom text" value={job.customText} />}
+                  {orderItem?.customText && orderItem.customText !== job.customText && <InstructionBlock label="Order item custom text" value={orderItem.customText} />}
+                  {job.notes && <InstructionBlock label="Job notes" value={job.notes} />}
+                  {job.order?.notes && <InstructionBlock label="Order notes" value={job.order.notes} />}
+                  {printInfo?.product?.slicerNotes && <InstructionBlock label="Slicer notes" value={printInfo.product.slicerNotes} />}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <aside className="space-y-4">
+            {job.imageUrl ? (
+              <div className="overflow-hidden rounded-xl border bg-background">
+                <img src={job.imageUrl} alt={`${job.productName} preview`} className="aspect-square w-full object-cover" />
+              </div>
+            ) : (
+              <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed bg-muted/20 text-center text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                No preview image
+              </div>
+            )}
+
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="mb-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Files</p>
+              {printInfo?.files?.length ? (
+                <div className="space-y-2">
+                  {printInfo.files.map((file: any, index: number) => (
+                    <Button key={`${file.url}-${index}`} asChild variant="outline" className="h-auto w-full justify-start px-3 py-2 text-left">
+                      <a href={file.url} target="_blank" rel="noreferrer">
+                        <Download className="mr-2 h-4 w-4 shrink-0" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-black uppercase tracking-widest">{file.name || `STL ${index + 1}`}</span>
+                          {(file.notes || file.estimatedPrintMinutes) && (
+                            <span className="block truncate text-[10px] text-muted-foreground">
+                              {[file.estimatedPrintMinutes ? `${file.estimatedPrintMinutes} min` : null, file.notes].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                        </span>
+                      </a>
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No STL/3MF file matched this job or variant.</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function InstructionBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border bg-background p-3">
+      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{value}</p>
+    </div>
+  )
+}
+
 function JobCard({ 
   job, 
   printInfo,
@@ -541,6 +689,7 @@ function JobCard({
   onAction,
   actionLabel,
   onOutsource,
+  onOpenDetails,
   compact 
 }: { 
   job: any, 
@@ -551,19 +700,25 @@ function JobCard({
   onAction?: () => void,
   actionLabel?: string,
   onOutsource?: () => void,
+  onOpenDetails?: () => void,
   compact?: boolean
 }) {
   return (
-    <Card className={`relative overflow-hidden group hover:border-primary/50 transition-all shadow-sm ${selected ? 'border-primary ring-2 ring-primary/15' : ''} ${job.status === 'printing' ? 'border-emerald-200' : ''}`}>
+    <Card
+      className={`relative overflow-hidden group hover:border-primary/50 transition-all shadow-sm ${onOpenDetails ? 'cursor-pointer' : ''} ${selected ? 'border-primary ring-2 ring-primary/15' : ''} ${job.status === 'printing' ? 'border-emerald-200' : ''}`}
+      onClick={onOpenDetails}
+    >
       <CardContent className={compact ? 'p-3' : 'p-4'}>
         <div className="flex items-start justify-between gap-3">
           {onSelectedChange && (
-            <Checkbox
-              checked={selected}
-              onCheckedChange={(checked) => onSelectedChange(checked === true)}
-              aria-label={`Select ${job.productName}`}
-              className="mt-0.5 h-6 w-6 border-2"
-            />
+            <div onClick={(event) => event.stopPropagation()}>
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(checked) => onSelectedChange(checked === true)}
+                aria-label={`Select ${job.productName}`}
+                className="mt-0.5 h-6 w-6 border-2"
+              />
+            </div>
           )}
           <div className="space-y-1.5 flex-1 min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.1em] text-muted-foreground/60 leading-none">
@@ -580,8 +735,8 @@ function JobCard({
           
           {onReorder && (
             <div className="flex flex-col gap-0.5 -mt-1">
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-primary/10 hover:text-primary" onClick={() => onReorder(job.id, 'up')}><ArrowRight className="h-3.5 w-3.5 -rotate-90" /></Button>
-              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-primary/10 hover:text-primary" onClick={() => onReorder(job.id, 'down')}><ArrowRight className="h-3.5 w-3.5 rotate-90" /></Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); onReorder(job.id, 'up') }}><ArrowRight className="h-3.5 w-3.5 -rotate-90" /></Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-primary/10 hover:text-primary" onClick={(event) => { event.stopPropagation(); onReorder(job.id, 'down') }}><ArrowRight className="h-3.5 w-3.5 rotate-90" /></Button>
             </div>
           )}
         </div>
@@ -636,12 +791,12 @@ function JobCard({
           
           <div className="flex items-center gap-1">
             {onOutsource && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-amber-600 hover:bg-amber-50" title="Outsource Job" onClick={onOutsource}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-amber-600 hover:bg-amber-50" title="Outsource Job" onClick={(event) => { event.stopPropagation(); onOutsource() }}>
                 <ExternalLink className="h-3.5 w-3.5" />
               </Button>
             )}
             {onAction && (
-              <Button size="sm" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest gap-2 shadow-sm" onClick={onAction}>
+              <Button size="sm" className="h-8 px-3 text-[10px] font-black uppercase tracking-widest gap-2 shadow-sm" onClick={(event) => { event.stopPropagation(); onAction() }}>
                 {actionLabel} <ArrowRight className="h-3 w-3" />
               </Button>
             )}

@@ -27,6 +27,7 @@ const fulfillmentLabels: Record<OrderRecord['fulfillmentStatus'], string> = {
   new: 'New',
   printing: 'Printing',
   ready: 'Ready',
+  ready_for_pickup: 'Ready for pickup',
   shipped: 'Shipped',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -41,6 +42,15 @@ const itemStatusLabels: Record<OrderItemStatus, string> = {
   assembled: 'Assembled',
   done: 'Done',
   blocked: 'Blocked',
+}
+
+function hasFallbackResolvedColor(item: any) {
+  const selectedParts = item.selectedParts ?? []
+  if (selectedParts.some((part: any) => part.resolvedBy && part.resolvedBy !== 'globalColorId')) return true
+  const selectedColors = item.selectedColors ?? []
+  if (selectedColors.some((color: any) => !color.globalColorId && color.name)) return true
+  if (item.selectedColor?.name && !item.selectedColor.globalColorId) return true
+  return false
 }
 
 const itemStatusTone: Record<OrderItemStatus, string> = {
@@ -72,6 +82,10 @@ function getFactoryStatus(jobs?: any[]) {
   const allPrinted = jobs.every(j => j.status === 'printed' || j.status === 'assembled')
   if (allPrinted) return { label: 'In Assembly', tone: 'bg-amber-100 text-amber-900' }
   return { label: 'In Production', tone: 'bg-violet-100 text-violet-900' }
+}
+
+function getShippingLabel(method?: OrderRecord['shippingMethod']) {
+  return method === 'mainland_portugal' ? 'Portugal mainland shipping' : 'Pickup in Carcavelos'
 }
 
 function OrderEditDialog({
@@ -226,6 +240,106 @@ function OrderEditDialog({
               </div>
             </div>
 
+            {!order.isRequest && (
+              <div className="rounded-lg border border-border bg-secondary p-4">
+                <h3 className="mb-3 font-semibold text-foreground">Delivery</h3>
+                <div className="grid gap-3">
+                  <div>
+                    <Label htmlFor="order-shipping-method">Method</Label>
+                    <select
+                      id="order-shipping-method"
+                      value={draft.shippingMethod ?? 'pickup_carcavelos'}
+                      onChange={event => onDraftChange({
+                        ...draft,
+                        shippingMethod: event.target.value as OrderRecord['shippingMethod'],
+                        shippingAddress: event.target.value === 'pickup_carcavelos' ? '' : draft.shippingAddress,
+                      })}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="pickup_carcavelos">Pickup in Carcavelos</option>
+                      <option value="mainland_portugal">Portugal mainland shipping</option>
+                    </select>
+                  </div>
+                  {draft.shippingMethod === 'mainland_portugal' ? (
+                    <div>
+                      <Label htmlFor="order-shipping-address">Shipping address</Label>
+                      <textarea
+                        id="order-shipping-address"
+                        value={draft.shippingAddress ?? ''}
+                        onChange={event => updateDraft({ shippingAddress: event.target.value })}
+                        rows={3}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed border-border bg-background p-3">
+                      <p className="text-sm font-medium text-foreground">Pickup in Carcavelos</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Use "Ready for pickup" when the order is assembled and waiting for customer collection.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div className="rounded-lg border border-border bg-secondary p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="font-semibold text-foreground">Items</h3>
+                <p className="text-sm text-muted-foreground">Total €{draft.total.toFixed(2)}</p>
+              </div>
+              <div className="space-y-3">
+                {draft.items.map((item: any, index: number) => (
+                  <div key={`${item.productName}-${index}`} className="rounded-lg border border-border bg-background p-3">
+                    <div className="grid gap-3 md:grid-cols-[1fr_120px]">
+                      <div>
+                        <Label htmlFor={`item-${index}-name`}>Product</Label>
+                        <Input id={`item-${index}-name`} value={item.productName} onChange={event => updateItem(index, { productName: event.target.value })} />
+                      </div>
+                      <div>
+                        <Label htmlFor={`item-${index}-quantity`}>Quantity</Label>
+                        <Input id={`item-${index}-quantity`} type="number" min="1" value={item.quantity} onChange={event => updateItem(index, { quantity: Number(event.target.value) || 1 })} />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_150px_120px]">
+                      <div>
+                        <Label htmlFor={`item-${index}-colors`} className="inline-flex items-center gap-1">
+                          Colors / parts
+                          {hasFallbackResolvedColor(item) && (
+                            <span
+                              className="text-amber-500"
+                              title="Cor resolvida por nome; pode não corresponder exactamente ao material actual"
+                            >
+                              ⚠
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          id={`item-${index}-colors`}
+                          value={item.colors.join(', ')}
+                          onChange={event => updateItem(index, { colors: event.target.value.split(',').map(color => color.trim()).filter(Boolean) })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`item-${index}-status`}>Item status</Label>
+                        <select
+                          id={`item-${index}-status`}
+                          value={getOrderItemStatus(item)}
+                          onChange={event => updateItem(index, { itemStatus: event.target.value as OrderItemStatus })}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          {Object.entries(itemStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <Label htmlFor={`item-${index}-done`}>Done</Label>
+                        <Input id={`item-${index}-done`} type="number" min="0" value={item.quantityDone ?? 0} onChange={event => updateItem(index, { quantityDone: Number(event.target.value) || 0 })} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             {/* Production Breakdown */}
             <div className="rounded-lg border border-border bg-violet-50/30 p-4">
               <h3 className="mb-3 flex items-center gap-2 font-semibold text-violet-900">
@@ -295,56 +409,6 @@ function OrderEditDialog({
                   </table>
                 </div>
               )}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <div className="rounded-lg border border-border bg-secondary p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-foreground">Items</h3>
-                <p className="text-sm text-muted-foreground">Total €{draft.total.toFixed(2)}</p>
-              </div>
-              <div className="space-y-3">
-                {draft.items.map((item: any, index: number) => (
-                  <div key={`${item.productName}-${index}`} className="rounded-lg border border-border bg-background p-3">
-                    <div className="grid gap-3 md:grid-cols-[1fr_120px]">
-                      <div>
-                        <Label htmlFor={`item-${index}-name`}>Product</Label>
-                        <Input id={`item-${index}-name`} value={item.productName} onChange={event => updateItem(index, { productName: event.target.value })} />
-                      </div>
-                      <div>
-                        <Label htmlFor={`item-${index}-quantity`}>Quantity</Label>
-                        <Input id={`item-${index}-quantity`} type="number" min="1" value={item.quantity} onChange={event => updateItem(index, { quantity: Number(event.target.value) || 1 })} />
-                      </div>
-                    </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-[1fr_150px_120px]">
-                      <div>
-                        <Label htmlFor={`item-${index}-colors`}>Colors / parts</Label>
-                        <Input
-                          id={`item-${index}-colors`}
-                          value={item.colors.join(', ')}
-                          onChange={event => updateItem(index, { colors: event.target.value.split(',').map(color => color.trim()).filter(Boolean) })}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`item-${index}-status`}>Item status</Label>
-                        <select
-                          id={`item-${index}-status`}
-                          value={getOrderItemStatus(item)}
-                          onChange={event => updateItem(index, { itemStatus: event.target.value as OrderItemStatus })}
-                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        >
-                          {Object.entries(itemStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <Label htmlFor={`item-${index}-done`}>Done</Label>
-                        <Input id={`item-${index}-done`} type="number" min="0" value={item.quantityDone ?? 0} onChange={event => updateItem(index, { quantityDone: Number(event.target.value) || 0 })} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           </section>
         </div>
@@ -758,6 +822,10 @@ export function OrdersManager({
                     <Package className="h-3.5 w-3.5" /> Ready
                     <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.ready}</Badge>
                   </TabsTrigger>
+                  <TabsTrigger value="ready_for_pickup" className="gap-2 px-4 h-9">
+                    <Package className="h-3.5 w-3.5" /> Pickup
+                    <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.ready_for_pickup}</Badge>
+                  </TabsTrigger>
                   <TabsTrigger value="shipped" className="gap-2 px-4 h-9">
                     <Truck className="h-3.5 w-3.5" /> Shipped
                     <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1 text-[10px]">{stats.shipped}</Badge>
@@ -832,6 +900,7 @@ export function OrdersManager({
                   <div>
                     <h3 className="font-bold text-sm text-foreground">{order.customerName}</h3>
                     <p className="mt-0.5 text-[10px] text-muted-foreground font-mono">#{order.id.slice(0, 8)} · {formatOrderDate(order.createdAt)}</p>
+                    <p className="mt-1 text-[10px] font-medium text-muted-foreground">{getShippingLabel(order.shippingMethod)}</p>
                   </div>
                   <div className="space-y-1">
                     {order.items.map((item: any, index: number) => (

@@ -229,7 +229,7 @@ export function InventoryManager({ spools, jobs, products, colors, printers = []
         </Card>
       )}
 
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-col gap-4">
         {colors.map((color: any) => {
           const stats = statsByColor[color.id] || { available: 0, required: 0, inbound: 0, spools: [], materialSummary: {} }
           const isExpanded = expandedColor === color.id
@@ -237,7 +237,7 @@ export function InventoryManager({ spools, jobs, products, colors, printers = []
           const isCritical = netStock < 0 && Math.abs(netStock) > stats.inbound
 
           return (
-            <Card key={color.id} className={`overflow-hidden transition-all hover:shadow-sm ${isCritical ? 'border-red-200' : ''}`}>
+            <Card key={color.id} className={`overflow-hidden py-0 transition-all hover:shadow-sm ${isCritical ? 'border-red-200' : ''}`}>
               <div 
                 className="p-4 flex flex-wrap items-center justify-between gap-4 cursor-pointer"
                 onClick={() => setExpandedColor(isExpanded ? null : color.id)}

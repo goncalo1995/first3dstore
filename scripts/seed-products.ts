@@ -417,6 +417,7 @@ const colorsToSeed = [
     spoolStatus: 'available' as const,
     isGlobal: true,
     isActive: true,
+    priceAdd: 0,
   },
   {
     name: 'Madeira',
@@ -425,6 +426,7 @@ const colorsToSeed = [
     spoolStatus: 'available' as const,
     isGlobal: true,
     isActive: true,
+    priceAdd: 5,
   },
   {
     name: 'Branco',
@@ -433,25 +435,56 @@ const colorsToSeed = [
     spoolStatus: 'available' as const,
     isGlobal: true,
     isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Amarelo',
+    hex: '#FED607',
+    gramsAvailable: 750,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Azul',
+    hex: '#144995',
+    gramsAvailable: 750,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
   },
 ]
 
-async function seedGlobalColors(): Promise<void> {
+type SeedColorMap = Map<string, { id: string; name: string; hex: string; priceAdd?: number }>
+
+async function seedGlobalColors(): Promise<SeedColorMap> {
   console.log('\n🎨 Seeding global colors...')
 
   const existingColors = await dbAdmin.query({ globalColors: {} })
-  const existingNames = new Set(
-    (existingColors.globalColors || []).map((c: any) => c.name)
-  )
+  const existingByName = new Map((existingColors.globalColors || []).map((c: any) => [c.name.toLowerCase(), c]))
 
   const transactions = []
   let created = 0
-  let skipped = 0
+  let updated = 0
 
   for (const color of colorsToSeed) {
-    if (existingNames.has(color.name)) {
-      console.log(`   ⏭️  Skipping ${color.name} (already exists)`)
-      skipped++
+    const existing = existingByName.get(color.name.toLowerCase())
+    if (existing) {
+      transactions.push(
+        dbAdmin.tx.globalColors[existing.id].update({
+          hex: existing.hex ?? color.hex,
+          gramsAvailable: existing.gramsAvailable ?? color.gramsAvailable,
+          spoolStatus: existing.spoolStatus ?? color.spoolStatus,
+          isGlobal: existing.isGlobal ?? true,
+          isActive: existing.isActive ?? true,
+          priceAdd: existing.priceAdd ?? color.priceAdd ?? 0,
+          updatedAt: new Date(),
+        })
+      )
+      console.log(`   🔁 Upserting ${color.name} (already exists)`)
+      updated++
       continue
     }
 
@@ -470,30 +503,238 @@ async function seedGlobalColors(): Promise<void> {
     await dbAdmin.transact(transactions)
   }
 
-  console.log(`   ✅ Colors: ${created} created, ${skipped} skipped`)
+  const refreshedColors = await dbAdmin.query({ globalColors: {} })
+  const colorMap: SeedColorMap = new Map()
+  ;(refreshedColors.globalColors || []).forEach((color: any) => {
+    colorMap.set(color.name.toLowerCase(), {
+      id: color.id,
+      name: color.name,
+      hex: color.hex,
+      priceAdd: color.priceAdd,
+    })
+  })
+
+  console.log(`   ✅ Colors: ${created} created, ${updated} upserted`)
+  return colorMap
 }
 
-async function seedProducts(): Promise<void> {
+function colorRef(colorMap: SeedColorMap, name: string) {
+  const color = colorMap.get(name.toLowerCase())
+  if (!color) throw new Error(`Global color not found: ${name}`)
+  return color
+}
+
+function createInventory(slug: string, colorMap: SeedColorMap, names: string[]) {
+  return {
+    productSlug: slug,
+    activeColorNames: names,
+    colorInventory: names.map(name => {
+      const color = colorRef(colorMap, name)
+      return {
+        globalColorId: color.id,
+        colorName: color.name,
+        colorHex: color.hex,
+        offered: true,
+        stockQuantity: 0,
+        gramsAvailable: 0,
+        priceAdd: color.priceAdd ?? 0,
+      }
+    }),
+    stockQuantity: 0,
+    stockStatus: 'made_to_order' as const,
+    leadTimeDays: 4,
+    visible: true,
+    allowCustomColorRequest: true,
+    updatedAt: new Date(),
+  }
+}
+
+function createExampleProducts(colorMap: SeedColorMap) {
+  const preto = colorRef(colorMap, 'Preto')
+  const madeira = colorRef(colorMap, 'Madeira')
+  const branco = colorRef(colorMap, 'Branco')
+  const amarelo = colorRef(colorMap, 'Amarelo')
+  const azul = colorRef(colorMap, 'Azul')
+
+  return [
+    {
+      slug: 'suporte-telemovel-simples',
+      name: 'Suporte de Telemóvel Simples',
+      priceFrom: 10,
+      priceTo: 15,
+      description: 'Suporte compacto para telemóvel, ideal para secretária, chamadas e carregamento.',
+      benefit: 'Mantém o telemóvel estável sem ocupar espaço',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: true,
+      colorSelectionMode: 'preset_options' as const,
+      customizable: false,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'casa-escritorio',
+      categorySlugs: ['casa-escritorio', 'organização'],
+      variants: [
+        {
+          id: 'preto-10',
+          name: 'Preto',
+          kind: 'single_color' as const,
+          colorMode: 'fixed' as const,
+          finalPrice: 10,
+          colors: [{ name: preto.name, hex: preto.hex, globalColorId: preto.id, priceAdd: preto.priceAdd }],
+        },
+        {
+          id: 'madeira-15',
+          name: 'Madeira',
+          kind: 'single_color' as const,
+          colorMode: 'fixed' as const,
+          finalPrice: 15,
+          colors: [{ name: madeira.name, hex: madeira.hex, globalColorId: madeira.id, priceAdd: madeira.priceAdd }],
+        },
+      ],
+      materialRecipe: [{ label: 'Suporte', grams: 45, materialType: 'PLA' as const, colorSource: 'variantColor' as const }],
+      materialGrams: 45,
+      sortOrder: 30,
+      inventoryColors: ['Preto', 'Madeira'],
+    },
+    {
+      slug: 'organizador-secretaria-standard',
+      name: 'Organizador de Secretária Standard',
+      priceFrom: 18,
+      priceTo: 21,
+      description: 'Organizador modular para canetas, notas e pequenos acessórios de trabalho.',
+      benefit: 'Arruma a secretária com uma peça simples e resistente',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: true,
+      colorSelectionMode: 'preset_options' as const,
+      customizable: false,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'casa-escritorio',
+      categorySlugs: ['casa-escritorio', 'organização'],
+      variants: [
+        {
+          id: 'standard-cor-stock',
+          name: 'Standard',
+          kind: 'single_color' as const,
+          colorMode: 'customer_choice' as const,
+          finalPrice: 18,
+          allowedGlobalColorIds: [preto.id, branco.id, amarelo.id, azul.id],
+          colors: [],
+        },
+      ],
+      materialRecipe: [{ label: 'Corpo', grams: 95, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 95,
+      sortOrder: 31,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
+    },
+    {
+      slug: 'tabuleiro-secretaria-multipartes',
+      name: 'Tabuleiro de Secretária Multi-partes',
+      priceFrom: 24,
+      priceTo: 30,
+      description: 'Tabuleiro de secretária com base e divisórias em cores escolhidas separadamente.',
+      benefit: 'Organização visual com cores por zona',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: true,
+      colorSelectionMode: 'preset_options' as const,
+      customizable: false,
+      multiColor: true,
+      multiColorCount: 2,
+      category: 'casa-escritorio',
+      categorySlugs: ['casa-escritorio', 'organização'],
+      variants: [
+        {
+          id: 'base-divisorias',
+          name: 'Base + divisórias',
+          kind: 'preset_pack' as const,
+          colorMode: 'multi_part' as const,
+          finalPrice: 24,
+          colors: [],
+          parts: [
+            { label: 'Base', grams: 120, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: [preto.id, branco.id, madeira.id] },
+            { label: 'Divisórias', grams: 55, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: [preto.id, branco.id, amarelo.id, azul.id] },
+          ],
+        },
+      ],
+      materialRecipe: [
+        { label: 'Base', grams: 120, materialType: 'PLA' as const, colorSource: 'partColor' as const },
+        { label: 'Divisórias', grams: 55, materialType: 'PLA' as const, colorSource: 'partColor' as const },
+      ],
+      materialGrams: 175,
+      sortOrder: 32,
+      inventoryColors: ['Preto', 'Branco', 'Madeira', 'Amarelo', 'Azul'],
+    },
+    {
+      slug: 'porta-chaves-personalizado',
+      name: 'Porta-chaves Personalizado',
+      priceFrom: 8,
+      priceTo: 11,
+      description: 'Porta-chaves leve com texto curto personalizado e cor à escolha.',
+      benefit: 'Pequeno presente útil com nome ou iniciais',
+      image: '/placeholder.svg',
+      featured: true,
+      featuredRank: 1,
+      visible: true,
+      colorSelectionMode: 'preset_options' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'presentes',
+      categorySlugs: ['presentes', 'personalizado'],
+      variants: [
+        {
+          id: 'texto-cor-stock',
+          name: 'Texto + cor',
+          kind: 'custom_text' as const,
+          colorMode: 'customer_choice' as const,
+          finalPrice: 8,
+          allowedGlobalColorIds: [preto.id, branco.id, amarelo.id, azul.id],
+          colors: [],
+          customizationOptions: [{ type: 'text' as const, label: 'Texto', maxChars: 14, priceAdd: 0 }],
+        },
+      ],
+      materialRecipe: [{ label: 'Porta-chaves', grams: 18, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 18,
+      sortOrder: 33,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
+    },
+  ]
+}
+
+async function seedProducts(colorMap: SeedColorMap): Promise<void> {
   console.log('\n📦 Seeding products...')
+  const exampleProductsToSeed = createExampleProducts(colorMap)
 
   const existingProducts = await dbAdmin.query({
     catalogProducts: {
       $: {
         where: {
-          slug: { $in: productsToSeed.map((p) => p.slug) },
+          slug: { $in: exampleProductsToSeed.map((p) => p.slug) },
         },
       },
     },
+    productInventory: {},
   })
 
   const transactions = []
   let created = 0
-  let updated = 0
+  let skipped = 0
 
-  for (const product of productsToSeed) {
+  for (const product of exampleProductsToSeed) {
     const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
+    if (existingProduct) {
+      console.log(`   ⏭️  Skipping ${product.slug}: already exists`)
+      skipped++
+      continue
+    }
 
-    const productId = existingProduct?.id ?? id()
+    const productId = id()
+    const inventoryId = id()
     const now = new Date()
 
     // Create images array from single image
@@ -507,14 +748,14 @@ async function seedProducts(): Promise<void> {
         categorySlugs: product.categorySlugs,
         priceFrom: product.priceFrom,
         priceTo: product.priceTo,
-        aspectRatio: product.aspectRatio,
+        aspectRatio: (product as any).aspectRatio,
         description: product.description,
         benefit: product.benefit,
         image: product.image,
         images,
         visible: product.visible,
         featured: product.featured,
-        featuredRank: product.featuredRank,
+        featuredRank: (product as any).featuredRank,
         sortOrder: product.sortOrder,
         customizable: product.customizable,
         customizationOptions: [],
@@ -522,7 +763,7 @@ async function seedProducts(): Promise<void> {
         multiColorCount: product.multiColorCount,
         colorSelectionMode: product.colorSelectionMode,
         variants: product.variants ?? [],
-        productionJobTemplates: product.productionJobTemplates,
+        productionJobTemplates: (product as any).productionJobTemplates,
         materialRecipe: product.materialRecipe,
         materialGrams: product.materialGrams,
         stlFiles: [],
@@ -530,20 +771,16 @@ async function seedProducts(): Promise<void> {
         updatedAt: now,
       })
     )
-    if (existingProduct) {
-      console.log(`   🔁 Updating ${product.slug}: ${product.name} (€${product.priceFrom})`)
-      updated++
-    } else {
-      console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
-      created++
-    }
+    transactions.push(dbAdmin.tx.productInventory[inventoryId].update(createInventory(product.slug, colorMap, product.inventoryColors)))
+    console.log(`   ✨ Creating ${product.slug}: ${product.name} (€${product.priceFrom})`)
+    created++
   }
 
   if (transactions.length > 0) {
     await dbAdmin.transact(transactions)
   }
 
-  console.log(`   ✅ Products: ${created} created, ${updated} updated`)
+  console.log(`   ✅ Products: ${created} created, ${skipped} skipped`)
 }
 
 async function main(): Promise<void> {
@@ -552,8 +789,8 @@ async function main(): Promise<void> {
   console.log(`App ID: ${INSTANT_APP_ID!.slice(0, 8)}...`)
 
   try {
-    await seedGlobalColors()
-    await seedProducts()
+    const colorMap = await seedGlobalColors()
+    await seedProducts(colorMap)
 
     console.log('\n✅ Seed completed successfully!')
     console.log('\nNext steps:')

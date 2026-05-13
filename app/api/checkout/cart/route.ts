@@ -3,7 +3,7 @@ import Stripe from 'stripe'
 import { dbAdmin, id } from '@/lib/db-admin'
 import { getCatalogProductBySlugForBuild } from '@/lib/catalog'
 import type { CartItemPartColor, CartItemVariant } from '@/lib/cart-context'
-import type { Product, ProductColor } from '@/lib/products'
+import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
 export const runtime = 'nodejs'
 
@@ -67,6 +67,21 @@ function getVariant(product: Product, selectedVariant?: CartItemVariant) {
   return product.variants?.find(variant => variant.id === selectedVariant.id)
 }
 
+function normalizeName(value: string | undefined) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function getGlobalColorPriceAdd(
+  globalColors: GlobalColor[],
+  color: { globalColorId?: string; name?: string; colorName?: string } | undefined,
+) {
+  if (!color) return 0
+  const globalColor = color.globalColorId
+    ? globalColors.find(candidate => candidate.id === color.globalColorId || candidate.globalColorId === color.globalColorId)
+    : globalColors.find(candidate => normalizeName(candidate.name) === normalizeName(color.name ?? color.colorName))
+  return globalColor?.priceAdd ?? 0
+}
+
 function validateCustomizations(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
   const options = variant?.kind === 'custom_text'
     ? variant.customizationOptions ?? []
@@ -98,7 +113,7 @@ function validateCustomizations(product: Product, item: NonNullable<CheckoutPayl
 }
 
 function getItemColors(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
-  if (variant) {
+  if (variant && variant.colorMode !== 'customer_choice' && variant.colorMode !== 'multi_part') {
     return variant.colors.map(color => color.name)
   }
 
@@ -117,20 +132,90 @@ function getItemColors(product: Product, item: NonNullable<CheckoutPayload['item
   return product.colors[0]?.name ? [product.colors[0].name] : []
 }
 
-function getUnitPrice(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
+function withColorPriceAdd<T extends ProductColor>(globalColors: GlobalColor[], color: T | undefined): T | undefined {
+  if (!color) return undefined
+  return {
+    ...color,
+    colorPriceAdd: getGlobalColorPriceAdd(globalColors, color),
+  } as T & { colorPriceAdd: number }
+}
+
+function getSelectedColorPayload(
+  product: Product,
+  item: NonNullable<CheckoutPayload['items']>[number],
+  globalColors: GlobalColor[],
+  variant?: NonNullable<Product['variants']>[number],
+) {
+  if (variant?.colors?.length && variant.colorMode !== 'customer_choice' && variant.colorMode !== 'multi_part') {
+    return {
+      selectedColor: withColorPriceAdd(globalColors, variant.colors[0]),
+      selectedColors: variant.colors.map(color => withColorPriceAdd(globalColors, color)).filter(Boolean),
+      selectedParts: undefined,
+    }
+  }
+
+  if (item.selectedParts?.length) {
+    return {
+      selectedColor: withColorPriceAdd(globalColors, item.selectedColor),
+      selectedColors: item.selectedParts.map(part => ({
+        name: part.colorName,
+        hex: part.colorHex,
+        globalColorId: part.globalColorId,
+        colorPriceAdd: getGlobalColorPriceAdd(globalColors, part),
+      })),
+      selectedParts: item.selectedParts.map(part => ({
+        ...part,
+        colorPriceAdd: getGlobalColorPriceAdd(globalColors, part),
+      })),
+    }
+  }
+
+  if (item.selectedColors?.length) {
+    return {
+      selectedColor: withColorPriceAdd(globalColors, item.selectedColors[0]),
+      selectedColors: item.selectedColors.map(color => withColorPriceAdd(globalColors, color)).filter(Boolean),
+      selectedParts: undefined,
+    }
+  }
+
+  const selectedColor = item.selectedColor ?? product.colors[0]
+  return {
+    selectedColor: withColorPriceAdd(globalColors, selectedColor),
+    selectedColors: selectedColor ? [withColorPriceAdd(globalColors, selectedColor)].filter(Boolean) : [],
+    selectedParts: undefined,
+  }
+}
+
+function getUnitPrice(
+  product: Product,
+  item: NonNullable<CheckoutPayload['items']>[number],
+  globalColors: GlobalColor[],
+  variant?: NonNullable<Product['variants']>[number],
+) {
   const basePrice = product.salePrice ?? product.priceFrom
   const customizationPriceAdd = validateCustomizations(product, item, variant)
+  const variantColorMode = variant?.colorMode
 
   if (variant?.finalPrice !== undefined) {
-    return variant.finalPrice + customizationPriceAdd
+    const premiumColorPriceAdd = variantColorMode === 'customer_choice'
+      ? getGlobalColorPriceAdd(globalColors, item.selectedColor ?? item.selectedColors?.[0])
+      : variantColorMode === 'multi_part'
+        ? (item.selectedParts ?? []).reduce((sum, part) => sum + getGlobalColorPriceAdd(globalColors, part), 0)
+        : 0
+    return variant.finalPrice + customizationPriceAdd + premiumColorPriceAdd
   }
 
   const variantPriceAdd = variant?.priceAdd ?? 0
   const multiColorPriceAdd = !variant && item.selectedColors && item.selectedColors.length > 1
     ? product.multiColorPriceAdd ?? 0
     : 0
+  const premiumColorPriceAdd = variantColorMode === 'customer_choice'
+    ? getGlobalColorPriceAdd(globalColors, item.selectedColor ?? item.selectedColors?.[0])
+    : variantColorMode === 'multi_part'
+      ? (item.selectedParts ?? []).reduce((sum, part) => sum + getGlobalColorPriceAdd(globalColors, part), 0)
+      : 0
 
-  return basePrice + variantPriceAdd + multiColorPriceAdd + customizationPriceAdd
+  return basePrice + variantPriceAdd + multiColorPriceAdd + customizationPriceAdd + premiumColorPriceAdd
 }
 
 function cents(value: number) {
@@ -166,6 +251,8 @@ export async function POST(request: NextRequest) {
 
     const orderItems = []
     const lineItems: Stripe.Checkout.SessionCreateParams['line_items'] = []
+    const globalColorData = await dbAdmin.query({ globalColors: {} })
+    const globalColors = (globalColorData.globalColors ?? []) as GlobalColor[]
 
     for (const item of body.items) {
       const slug = String(item.productSlug ?? '').trim()
@@ -184,12 +271,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Opção inválida para ${product.name}.` }, { status: 400 })
       }
 
-      const unitPrice = getUnitPrice(product, item, variant)
+      const unitPrice = getUnitPrice(product, item, globalColors, variant)
       if (!Number.isFinite(unitPrice) || unitPrice < 0) {
         return NextResponse.json({ error: `Preço inválido para ${product.name}.` }, { status: 400 })
       }
 
       const colors = getItemColors(product, item, variant)
+      const selectedColorPayload = getSelectedColorPayload(product, item, globalColors, variant)
       const customText = formatCustomText(item.customizations)
 
       orderItems.push({
@@ -197,12 +285,23 @@ export async function POST(request: NextRequest) {
         productName: product.name,
         quantity,
         colors,
+        selectedColor: selectedColorPayload.selectedColor,
+        selectedColors: selectedColorPayload.selectedColors,
+        selectedParts: selectedColorPayload.selectedParts,
         selectedVariant: variant
           ? {
               id: variant.id,
               name: variant.name,
               kind: variant.kind,
-              colors: variant.colors.map(color => color.name),
+              colorMode: variant.colorMode,
+              allowedGlobalColorIds: variant.allowedGlobalColorIds,
+              colors: variant.colors.map(color => ({
+                name: color.name,
+                hex: color.hex,
+                imageUrl: color.imageUrl,
+                globalColorId: color.globalColorId,
+                priceAdd: color.priceAdd,
+              })),
             }
           : undefined,
         customText: customText || undefined,

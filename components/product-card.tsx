@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { getProductCategorySlugs, type Product, type ProductVariantOption } from '@/lib/products'
+import { getProductCategorySlugs, getSellableColors, type Product, type ProductVariantOption } from '@/lib/products'
 import { Button } from '@/components/ui/button'
 
 interface ProductCardProps {
@@ -24,7 +24,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const ctaLabel = variants.length
       ? 'Personalizar'
       : 'Ver Produto'
-  const finishSwatches = getUniqueVariantFinishes(product)
+  const finishSwatches = getSellableColors(product)
 
   return (
     <article className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-colors hover:border-primary/30">
@@ -107,19 +107,4 @@ function getVariantPrice(product: Product, variant?: ProductVariantOption) {
   const basePrice = product.salePrice ?? product.priceFrom
   if (variant?.finalPrice !== undefined) return variant.finalPrice
   return basePrice + (variant?.priceAdd ?? 0)
-}
-
-function getUniqueVariantFinishes(product: Product) {
-  const byName = new Map<string, { name: string; hex: string; imageUrl?: string }>()
-  product.variants?.forEach(variant => {
-    variant.colors.forEach(color => {
-      if (!byName.has(color.name)) {
-        byName.set(color.name, { name: color.name, hex: color.hex, imageUrl: color.imageUrl })
-      }
-    })
-  })
-  product.colors.forEach(color => {
-    if (!byName.has(color.name)) byName.set(color.name, color)
-  })
-  return [...byName.values()]
 }

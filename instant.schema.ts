@@ -26,6 +26,7 @@ const _schema = i.schema({
       spoolStatus: i.string<'available' | 'low' | 'archived'>(),
       supplierUrl: i.string().optional(),
       pricePerKg: i.number().optional(),
+      priceAdd: i.number().optional(),
       notes: i.string().optional(),
       productId: i.string().indexed().optional(), // Scoped to specific product
       isGlobal: i.boolean().optional(), // Usable across all products
@@ -107,6 +108,7 @@ const _schema = i.schema({
         id: string
         name: string
         kind: 'single_color' | 'preset_pack' | 'custom_text'
+        colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
         image?: string
         priceAdd?: number
         finalPrice?: number
@@ -131,12 +133,16 @@ const _schema = i.schema({
           hex: string
           imageUrl?: string
           globalColorId?: string
+          priceAdd?: number
         }[]
+        allowedGlobalColorIds?: string[]
         parts?: {
           label: string
           grams: number
           materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-          colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+          colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+          fixedGlobalColorId?: string
+          allowedGlobalColorIds?: string[]
           requiresLithophaneProcessing?: boolean
         }[]
         customizationOptions?: {
@@ -164,7 +170,9 @@ const _schema = i.schema({
         label: string
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-        colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+        colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+        fixedGlobalColorId?: string
+        allowedGlobalColorIds?: string[]
         requiresLithophaneProcessing?: boolean
       }[]>().optional(),
       productionJobTemplates: i.json<{
@@ -253,11 +261,42 @@ const _schema = i.schema({
         productName: string
         quantity: number
         colors: string[]
+        selectedColor?: {
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+          colorPriceAdd?: number
+        }
+        selectedColors?: {
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+          colorPriceAdd?: number
+        }[]
+        selectedParts?: {
+          label: string
+          colorName: string
+          colorHex: string
+          globalColorId?: string
+          colorPriceAdd?: number
+          resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
+          grams: number
+        }[]
         selectedVariant?: {
           id?: string
           name: string
           kind?: 'single_color' | 'preset_pack' | 'custom_text'
-          colors: string[]
+          colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
+          allowedGlobalColorIds?: string[]
+          colors: {
+            name: string
+            hex: string
+            imageUrl?: string
+            globalColorId?: string
+            priceAdd?: number
+          }[]
         }
         customText?: string
         unitPrice: number
@@ -270,7 +309,7 @@ const _schema = i.schema({
       shippingCost: i.number(),
       total: i.number(),
       paymentStatus: i.string<'pending' | 'paid' | 'refunded'>(),
-      fulfillmentStatus: i.string<'new' | 'printing' | 'ready' | 'shipped' | 'completed' | 'cancelled'>(),
+      fulfillmentStatus: i.string<'new' | 'printing' | 'ready' | 'ready_for_pickup' | 'shipped' | 'completed' | 'cancelled'>(),
       notes: i.string().optional(),
       createdAt: i.date(),
       updatedAt: i.date(),
@@ -320,11 +359,13 @@ const _schema = i.schema({
       productSlug: i.string().unique().indexed(),
       activeColorNames: i.json<string[]>(),
       colorInventory: i.json<{
+        globalColorId?: string
         colorName: string
         colorHex: string
         offered: boolean
         stockQuantity: number
         gramsAvailable: number
+        priceAdd?: number
       }[]>(),
       stockQuantity: i.number(),
       stockStatus: i.string<'in_stock' | 'made_to_order' | 'sold_out'>(),
@@ -372,6 +413,7 @@ const _schema = i.schema({
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
         slotPreference?: number
+        resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
       }[]>().optional(),
       requiredColorIds: i.string().indexed().optional(), // Comma-separated
       totalGrams: i.number().optional(),

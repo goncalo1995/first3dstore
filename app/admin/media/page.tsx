@@ -279,10 +279,10 @@ export default function AdminMediaPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="instant" className="w-full">
+      <Tabs defaultValue="cloudflare" className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
-          <TabsTrigger value="instant">Instant Storage</TabsTrigger>
           <TabsTrigger value="cloudflare">Cloudflare</TabsTrigger>
+          <TabsTrigger value="instant">Instant Storage</TabsTrigger>
         </TabsList>
 
         <TabsContent value="instant" className="space-y-6 mt-6">
