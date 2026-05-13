@@ -43,25 +43,24 @@ export async function getAdminUserFromRequest(
 export async function requireAdminForAction(): Promise<User> {
   // For server actions, we need to check the session via cookies
   // InstantDB uses cookies to track sessions
-  const { cookies } = await import('next/headers')
-  const cookieStore = await cookies()
-
-  // Check if there's a session cookie (InstantDB sets this)
-  const sessionCookie = cookieStore.get('instantdb-session')
-
-  if (!sessionCookie) {
-    throw new Error('Unauthorized: No admin session found')
+  const { getUnverifiedUserFromInstantCookie } = await import('@instantdb/react/nextjs')
+  
+  const appId = process.env.NEXT_PUBLIC_INSTANT_APP_ID
+  if (!appId) {
+    throw new Error('Instant App ID not configured')
   }
 
-  // For server actions, dbAdmin doesn't have direct request access
-  // We'll need to verify the user through dbAdmin's auth system
-  // This is a simplified check - in production you'd verify the session properly
-  const adminEmailsEnv = process.env.ADMIN_EMAILS ?? ''
-  if (!adminEmailsEnv) {
-    throw new Error('Admin access not configured')
+  // Get the user from the cookie
+  const user = await getUnverifiedUserFromInstantCookie(appId)
+
+  if (!user) {
+    throw new Error('Unauthorized: No valid session found')
   }
 
-  // Note: This is a basic implementation. InstantDB server actions
-  // should ideally have better session verification
-  return { email: adminEmailsEnv.split(',')[0].trim() } as User
+  // Verify the user's email is an admin email
+  if (!isAdminEmail(user.email)) {
+    throw new Error('Forbidden: User is not authorized for admin access')
+  }
+
+  return user
 }

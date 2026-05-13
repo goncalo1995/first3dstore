@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useCart } from '@/lib/cart-context'
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const { clearCart } = useCart()
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session_id')
@@ -40,5 +41,30 @@ export default function CheckoutSuccessPage() {
         </div>
       </section>
     </main>
+  )
+}
+
+function CheckoutSuccessSkeleton() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background px-5 text-foreground">
+      <section className="max-w-xl rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+        <Skeleton className="mx-auto size-12 rounded-full" />
+        <Skeleton className="mt-5 h-10 w-64 mx-auto" />
+        <Skeleton className="mt-3 h-6 w-full" />
+        <Skeleton className="mt-3 h-6 w-3/4 mx-auto" />
+        <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+      </section>
+    </main>
+  )
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<CheckoutSuccessSkeleton />}>
+      <CheckoutSuccessContent />
+    </Suspense>
   )
 }
