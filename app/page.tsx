@@ -199,7 +199,7 @@ export default function HomePage() {
             {galleryItems.map((item) => (
               <article key={item.title} className={`group relative overflow-hidden rounded-lg border border-white/10 bg-white/8 ${item.className}`}>
                 <div className="absolute inset-0 overflow-hidden">
-                  <img src={item.image} alt={item.alt} className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-105 group-hover:opacity-100" />
+                  <Image src={item.image} alt={item.alt} fill className="object-cover opacity-80 transition duration-500 group-hover:scale-105 group-hover:opacity-100" sizes="(max-width: 768px) 100vw, 33vw" />
                 </div>
                 <div className="absolute inset-0 bg-linear-to-t from-black/86 via-black/34 to-black/5" />
                 {item.badge && (
@@ -210,7 +210,7 @@ export default function HomePage() {
                 <div className="absolute bottom-0 left-0 right-0 p-5">
                   <p className="font-serif text-2xl font-bold text-white">{item.title}</p>
                   <p className="mt-2 max-w-xl font-sans text-sm leading-6 text-white/78">{item.occasion}</p>
-                  <p className="mt-3 hidden max-w-xl font-sans text-xs leading-5 text-white/56 md:block">{item.detail}</p>
+                  {item.detail && <p className="mt-3 hidden max-w-xl font-sans text-xs leading-5 text-white/56 md:block">{item.detail}</p>}
                 </div>
               </article>
             ))}
