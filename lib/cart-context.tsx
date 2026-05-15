@@ -13,6 +13,8 @@ export interface CartItemPartColor {
   label: string
   colorName: string
   colorHex: string
+  globalColorId?: string
+  colorPriceAdd?: number
   grams: number
 }
 
@@ -20,12 +22,15 @@ export interface CartItemVariant {
   id?: string
   name: string
   kind: 'single_color' | 'preset_pack' | 'custom_text'
+  colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
   colors: {
     name: string
     hex: string
     imageUrl?: string
     globalColorId?: string
+    priceAdd?: number
   }[]
+  allowedGlobalColorIds?: string[]
   image?: string
   priceAdd?: number
   finalPrice?: number
@@ -107,6 +112,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [removeItem])
 
   const clearCart = useCallback(() => {
+    try {
+      window.localStorage.removeItem(CART_STORAGE_KEY)
+    } catch {
+      // Ignore storage failures; state is still cleared below.
+    }
     setItems([])
   }, [])
 

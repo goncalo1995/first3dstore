@@ -44,6 +44,7 @@ type CategoryRecord = {
   sortOrder: number
   visible: boolean
 }
+type DraftGlobalColor = ColorRecord & { isActive?: boolean }
 type DraftCustomizationOption = Omit<CustomizationOption, 'maxChars' | 'priceAdd'> & {
   maxChars: string
   priceAdd: string
@@ -77,12 +78,14 @@ function createDraftVariantOption(
     id: id(),
     name: kind === 'custom_text' ? `Custom text ${index + 1}` : kind === 'single_color' ? `Color ${index + 1}` : `Pack ${index + 1}`,
     kind,
+    colorMode: 'customer_choice',
+    allowedGlobalColorIds: [],
     image: '',
     priceAdd: '',
     finalPrice: '',
     stockQuantity: '0',
     estimatedPrintMinutes: '',
-    colors: color ? [{ name: color.name, hex: color.hex, globalColorId: color.id }] : [],
+    colors: color ? [{ name: color.name, hex: color.hex, globalColorId: color.id, priceAdd: color.priceAdd }] : [],
     parts: [],
     customizationOptions: kind === 'custom_text'
       ? [{ type: 'text', label: 'Text', maxChars: '12', priceAdd: '0' }]
@@ -94,6 +97,8 @@ function toDraftVariantOption(option: ProductVariantOption): DraftVariantOption 
   return {
     ...option,
     image: option.image ?? '',
+    colorMode: option.colorMode ?? (option.parts?.length ? 'multi_part' : option.colors?.length ? 'fixed' : 'customer_choice'),
+    allowedGlobalColorIds: option.allowedGlobalColorIds ?? [],
     priceAdd: option.priceAdd ? String(option.priceAdd) : '',
     finalPrice: option.finalPrice ? String(option.finalPrice) : '',
     stockQuantity: String(option.stockQuantity ?? 0),
@@ -108,6 +113,26 @@ function toDraftVariantOption(option: ProductVariantOption): DraftVariantOption 
       priceAdd: String(customization.priceAdd),
     })),
   }
+}
+
+function ensureUniqueDraftVariants(options: (ProductVariantOption | DraftVariantOption)[]): { variants: DraftVariantOption[]; idMapping: Record<string, string> } {
+  const seen = new Set<string>()
+  const idMapping: Record<string, string> = {}
+  const variants = options.map(option => {
+    const next = toDraftVariantOption(option as ProductVariantOption)
+    const oldId = next.id
+    if (!next.id || seen.has(next.id)) {
+      next.id = id()
+      if (oldId) {
+        idMapping[oldId] = next.id
+      }
+    } else {
+      idMapping[oldId!] = next.id
+    }
+    seen.add(next.id)
+    return next
+  })
+  return { variants, idMapping }
 }
 
 function slugify(value: string) {
@@ -128,10 +153,14 @@ function normalizeImageUrls(value: (string | undefined | null)[]) {
   )
 }
 
-function mergeColors(records?: ColorRecord[]) {
-  const byName = new Map(defaultGlobalColors.map(color => [color.name, color]))
-  records?.forEach(color => byName.set(color.name, color))
-  return [...byName.values()]
+function mergeColors(records?: DraftGlobalColor[]) {
+  if (records?.length) {
+    return [...records]
+      .filter(color => color.isActive !== false && color.spoolStatus !== 'archived')
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt'))
+  }
+
+  return defaultGlobalColors
 }
 
 function getCategoryIdsForSlugs(categories: CategoryRecord[], slugs: string[]) {
@@ -187,6 +216,42 @@ function getCatalogPrimaryCategoryId(catalogProduct?: CatalogRecord) {
   return catalogProduct?.primaryCategory?.id
 }
 
+async function uploadProductImageToR2(file: File, productSlug: string) {
+  const response = await fetch('/api/admin/upload-product-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      productSlug,
+      fileName: file.name,
+      fileType: file.type || 'image/png',
+    }),
+  })
+
+  if (!response.ok) {
+    let errorText = ''
+    try {
+      const payload = await response.json()
+      errorText = payload.error || ''
+    } catch {
+      errorText = await response.text().catch(() => '')
+    }
+    throw new Error(errorText || 'Failed to prepare image upload')
+  }
+
+  const payload = await response.json() as { signedUrl: string; publicUrl: string }
+  const uploadResponse = await fetch(payload.signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'image/png' },
+    body: file,
+  })
+
+  if (!uploadResponse.ok) {
+    throw new Error('Failed to upload image to R2')
+  }
+
+  return payload.publicUrl
+}
+
 export function ProductEditor({ slug }: { slug: string }) {
   const auth = db.useAuth()
 
@@ -212,7 +277,7 @@ export function ProductEditor({ slug }: { slug: string }) {
   const staticProduct = products.find(product => product.slug === slug)
   const catalogProduct = query.data?.catalogProducts?.[0] as unknown as CatalogRecord | undefined
   const inventory = query.data?.productInventory?.[0] as unknown as InventoryRecord | undefined
-  const colors = useMemo(() => mergeColors(query.data?.globalColors as ColorRecord[] | undefined), [query.data?.globalColors])
+  const colors = useMemo(() => mergeColors(query.data?.globalColors as DraftGlobalColor[] | undefined), [query.data?.globalColors])
   const categories = useMemo(() => {
     return ((query.data?.productCategories ?? []) as CategoryRecord[])
       .sort((left, right) => (left.sortOrder ?? 999) - (right.sortOrder ?? 999))
@@ -225,18 +290,42 @@ export function ProductEditor({ slug }: { slug: string }) {
   )
 
   const initialInventory = useMemo(() => {
-    const existing = new Map((inventory?.colorInventory ?? []).map(color => [color.colorName, color]))
+    const existing = new Map((inventory?.colorInventory ?? []).map(color => [color.globalColorId ?? color.colorName, color]))
+    const seen = new Set<string>()
 
-    return colors.map(color => {
-      const saved = existing.get(color.name)
+    const fromGlobalColors = colors.map(color => {
+      const saved = existing.get(color.id ?? color.name) ?? existing.get(color.name)
+      seen.add(saved?.globalColorId ?? color.id ?? color.name)
+      seen.add(saved?.colorName ?? color.name)
       return {
+        globalColorId: color.id,
         colorName: color.name,
         colorHex: color.hex,
         offered: saved?.offered ?? color.spoolStatus !== 'archived',
         stockQuantity: String(saved?.stockQuantity ?? 0),
         gramsAvailable: color.gramsAvailable,
+        priceAdd: color.priceAdd ?? saved?.priceAdd,
       }
     })
+
+    const legacySavedColors = (inventory?.colorInventory ?? [])
+      .filter(color => {
+        const key = color.globalColorId ?? color.colorName
+        if (seen.has(key) || seen.has(color.colorName)) return false
+        seen.add(key)
+        return true
+      })
+      .map(color => ({
+        globalColorId: color.globalColorId,
+        colorName: color.colorName,
+        colorHex: color.colorHex,
+        offered: color.offered,
+        stockQuantity: String(color.stockQuantity ?? 0),
+        gramsAvailable: color.gramsAvailable ?? 0,
+        priceAdd: color.priceAdd,
+      }))
+
+    return [...fromGlobalColors, ...legacySavedColors]
   }, [colors, inventory?.colorInventory])
 
   const [name, setName] = useState(product.name)
@@ -275,7 +364,7 @@ export function ProductEditor({ slug }: { slug: string }) {
   const [multiColorCount, setMultiColorCount] = useState(String(product.multiColorCount ?? 1))
   const [colorSelectionMode, setColorSelectionMode] = useState<Product['colorSelectionMode']>(product.colorSelectionMode ?? (product.variants?.length ? 'preset_options' : product.multiColor ? 'flexible_parts' : 'single'))
   const [multiColorPriceAdd, setMultiColorPriceAdd] = useState(String(product.multiColorPriceAdd ?? 0))
-  const [variants, setVariants] = useState<DraftVariantOption[]>((product.variants ?? []).map(toDraftVariantOption))
+  const [variants, setVariants] = useState<DraftVariantOption[]>(() => ensureUniqueDraftVariants(product.variants ?? []).variants)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [featured, setFeatured] = useState(Boolean(product.featured))
   const [featuredRank, setFeaturedRank] = useState(String(product.featuredRank ?? 99))
@@ -378,10 +467,7 @@ export function ProductEditor({ slug }: { slug: string }) {
     setError('')
     try {
       const cleanSlug = slugify(productSlug || name || slug)
-      const extension = file.name.split('.').pop() || 'png'
-      const storagePath = `products/${cleanSlug}/${id()}.${extension}`
-      await db.storage.uploadFile(storagePath, file)
-      const downloadUrl = await db.storage.getDownloadUrl(storagePath)
+      const downloadUrl = await uploadProductImageToR2(file, cleanSlug)
       appendMediaUrl(downloadUrl)
       if (!image.trim()) setImage(downloadUrl)
     } catch (err) {
@@ -470,22 +556,14 @@ export function ProductEditor({ slug }: { slug: string }) {
     try {
       const result = await remixExistingImage(image, inlineRemixPrompt)
       if (result?.imageUrl) {
-        // Auto upload to InstantDB
         setIsUploadingAiImage(true)
-        // 2. Convert base64/URL to a Blob
         const response = await fetch(result.imageUrl);
         const blob = await response.blob();
-        
-        // Use id() from InstantDB (works in all browsers including mobile)
         const uniqueId = id().slice(0, 8); 
         const fileName = `remix-${slug}-${uniqueId}.png`;
         const file = new File([blob], fileName, { type: blob.type || 'image/png' });
-        
-        const storagePath = `products/${slug}/${fileName}`;
-        
-        // 3. Upload to InstantDB
-        await db.storage.uploadFile(storagePath, file);
-        const downloadUrl = await db.storage.getDownloadUrl(storagePath);
+        const cleanSlug = slugify(productSlug || name || slug)
+        const downloadUrl = await uploadProductImageToR2(file, cleanSlug);
 
         appendMediaUrl(downloadUrl);
         setInlineRemixPrompt('');
@@ -506,16 +584,13 @@ export function ProductEditor({ slug }: { slug: string }) {
     try {
       const result = await generateNewImage(inlineRemixPrompt, "blurry, low quality, distorted", "1024x1024")
       if (result?.url) {
-        // Auto upload to InstantDB
         setIsUploadingAiImage(true)
         const response = await fetch(result.url)
         const blob = await response.blob()
         const fileName = `gen-${slug}-${id().slice(0, 4)}.png`
         const file = new File([blob], fileName, { type: 'image/png' })
-        
-        const storagePath = `products/${slug}/${fileName}`
-        await db.storage.uploadFile(storagePath, file)
-        const downloadUrl = await db.storage.getDownloadUrl(storagePath)
+        const cleanSlug = slugify(productSlug || name || slug)
+        const downloadUrl = await uploadProductImageToR2(file, cleanSlug)
 
         appendMediaUrl(downloadUrl)
         if (!image.trim()) setImage(downloadUrl)
@@ -619,7 +694,17 @@ export function ProductEditor({ slug }: { slug: string }) {
     setMultiColorCount(String(product.multiColorCount ?? 1))
     setColorSelectionMode(product.colorSelectionMode ?? (product.variants?.length ? 'preset_options' : product.multiColor ? 'flexible_parts' : 'single'))
     setMultiColorPriceAdd(String(product.multiColorPriceAdd ?? 0))
-    setVariants((product.variants ?? []).map(toDraftVariantOption))
+    const { variants: newVariants, idMapping } = ensureUniqueDraftVariants(product.variants ?? [])
+    setVariants(newVariants)
+    // Preserve aspect ratio texts with new IDs
+    setVariantAspectRatioTexts(current => {
+      const updated: Record<string, string> = {}
+      Object.entries(current).forEach(([oldId, text]) => {
+        const newId = idMapping[oldId] ?? oldId
+        updated[newId] = text
+      })
+      return updated
+    })
     setPreviewImageUrl('')
     setFeatured(Boolean(product.featured))
     setFeaturedRank(String(product.featuredRank ?? 99))
@@ -690,7 +775,7 @@ export function ProductEditor({ slug }: { slug: string }) {
       return {
         ...variant,
         colors: variant.colors.map((color, index) => index === colorIndex
-          ? { ...color, name: colorName, hex: globalColor?.hex ?? color.hex, globalColorId: globalColor?.id }
+          ? { ...color, name: colorName, hex: globalColor?.hex ?? color.hex, globalColorId: globalColor?.id, priceAdd: globalColor?.priceAdd }
           : color),
       }
     }))
@@ -712,8 +797,34 @@ export function ProductEditor({ slug }: { slug: string }) {
     const globalColor = colors[0]
     if (!globalColor) return
     setVariants(current => current.map(variant => variant.id === variantId
-      ? { ...variant, colors: [...variant.colors, { name: globalColor.name, hex: globalColor.hex, globalColorId: globalColor.id }] }
+      ? { ...variant, colors: [...variant.colors, { name: globalColor.name, hex: globalColor.hex, globalColorId: globalColor.id, priceAdd: globalColor.priceAdd }] }
       : variant))
+  }
+
+  const toggleVariantAllowedColor = (variantId: string, colorId: string) => {
+    setVariants(current => current.map(variant => {
+      if (variant.id !== variantId) return variant
+      const allowed = new Set(variant.allowedGlobalColorIds ?? [])
+      if (allowed.has(colorId)) allowed.delete(colorId)
+      else allowed.add(colorId)
+      return { ...variant, allowedGlobalColorIds: [...allowed] }
+    }))
+  }
+
+  const toggleVariantPartAllowedColor = (variantId: string, partIndex: number, colorId: string) => {
+    setVariants(current => current.map(variant => {
+      if (variant.id !== variantId) return variant
+      return {
+        ...variant,
+        parts: variant.parts.map((part, index) => {
+          if (index !== partIndex) return part
+          const allowed = new Set(part.allowedGlobalColorIds ?? [])
+          if (allowed.has(colorId)) allowed.delete(colorId)
+          else allowed.add(colorId)
+          return { ...part, allowedGlobalColorIds: [...allowed] }
+        }),
+      }
+    }))
   }
 
   const updateVariantPart = (variantId: string, partIndex: number, patch: Partial<DraftVariantPart>) => {
@@ -840,17 +951,33 @@ export function ProductEditor({ slug }: { slug: string }) {
         return
       }
       const gramsByColor = new Map(colors.map(color => [color.name, color.gramsAvailable]))
-      const normalizedColorInventory = colorInventory.map(color => ({
-        ...color,
-        stockQuantity: color.offered ? Number(color.stockQuantity) || 0 : 0,
-        gramsAvailable: gramsByColor.get(color.colorName) ?? 0,
-      }))
+      const normalizedColorInventory = colorInventory.map(color => {
+        const globalColor = colors.find(item => item.id === color.globalColorId || item.name === color.colorName)
+        return {
+          ...color,
+          globalColorId: color.globalColorId ?? globalColor?.id,
+          colorHex: globalColor?.hex ?? color.colorHex,
+          stockQuantity: color.offered ? Number(color.stockQuantity) || 0 : 0,
+          gramsAvailable: gramsByColor.get(color.colorName) ?? 0,
+          priceAdd: globalColor?.priceAdd ?? color.priceAdd,
+        }
+      })
       const offeredColors = normalizedColorInventory.filter(color => color.offered)
-      const normalizedVariants: ProductVariantOption[] = variants
+      const { variants: dedupedVariants, idMapping } = ensureUniqueDraftVariants(variants)
+      // Update aspect ratio texts to use new IDs after deduplication
+      const updatedAspectRatioTexts: Record<string, string> = {}
+      Object.entries(variantAspectRatioTexts).forEach(([oldId, text]) => {
+        const newId = idMapping[oldId] ?? oldId
+        updatedAspectRatioTexts[newId] = text
+      })
+      setVariantAspectRatioTexts(updatedAspectRatioTexts)
+      const normalizedVariants: ProductVariantOption[] = dedupedVariants
         .map((variant, index) => ({
           id: variant.id || id(),
           name: variant.name.trim() || `Option ${index + 1}`,
           kind: variant.kind,
+          colorMode: variant.colorMode ?? (variant.parts.length ? 'multi_part' : variant.colors.length ? 'fixed' : 'customer_choice'),
+          allowedGlobalColorIds: variant.allowedGlobalColorIds ?? [],
           image: variant.image?.trim() || undefined,
           priceAdd: variant.priceAdd.trim() ? Math.max(0, Number(variant.priceAdd) || 0) : undefined,
           finalPrice: variant.finalPrice.trim() ? Math.max(0, Number(variant.finalPrice) || 0) : undefined,
@@ -868,16 +995,19 @@ export function ProductEditor({ slug }: { slug: string }) {
               grams: Math.max(1, Number(part.grams) || 1),
               materialType: part.materialType,
               colorSource: part.colorSource,
+              fixedGlobalColorId: part.fixedGlobalColorId,
+              allowedGlobalColorIds: part.allowedGlobalColorIds ?? [],
               requiresLithophaneProcessing: Boolean(part.requiresLithophaneProcessing),
             }))
             .filter(part => part.label),
           colors: variant.colors
             .map(color => {
-              const globalColor = colors.find(item => item.name === color.name)
+              const globalColor = colors.find(item => item.id === color.globalColorId || item.name === color.name)
               return {
                 name: color.name,
                 hex: globalColor?.hex ?? color.hex ?? '#d1d5db',
-                globalColorId: color.globalColorId ?? globalColor?.id,
+                globalColorId: globalColor?.id ?? color.globalColorId,
+                priceAdd: globalColor?.priceAdd ?? color.priceAdd,
                 imageUrl: color.imageUrl?.trim() || undefined,
               }
             })
@@ -1007,7 +1137,7 @@ export function ProductEditor({ slug }: { slug: string }) {
 
   return (
     <main className="min-h-screen bg-secondary/30 pb-20">
-      <header className="sticky top-0 z-[100] border-b border-border bg-background shadow-sm backdrop-blur-md transition-all">
+      <header className="sticky top-0 z-10 border-b border-border bg-background shadow-sm backdrop-blur-md transition-all">
         <div className="container mx-auto flex min-h-16 items-center justify-between gap-4 px-4 py-3">
           <div className="flex items-center gap-4">
             <Link href="/admin/products" className="text-muted-foreground transition-colors hover:text-foreground">
@@ -1283,7 +1413,7 @@ export function ProductEditor({ slug }: { slug: string }) {
                         <div className="mt-3 flex items-center justify-center gap-3 border-t border-primary/10 py-2">
                           <Loader2 className="h-3 w-3 animate-spin text-primary" />
                           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60">
-                            {isUploadingAiImage ? 'Saving to Database...' : 'AI is creating your image...'}
+                            {isUploadingAiImage ? 'Saving to R2...' : 'AI is creating your image...'}
                           </p>
                         </div>
                       )}
@@ -1534,6 +1664,41 @@ export function ProductEditor({ slug }: { slug: string }) {
                               <Input type="number" min="0" value={variant.estimatedPrintMinutes} onChange={event => updateVariant(variant.id, { estimatedPrintMinutes: event.target.value })} className="mt-1 h-9" placeholder="mins" />
                             </div>
                             </div>
+                            <div className="mt-4 grid gap-4 md:grid-cols-[180px_1fr]">
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Color Mode</Label>
+                                <select
+                                  value={variant.colorMode ?? 'customer_choice'}
+                                  onChange={event => updateVariant(variant.id, { colorMode: event.target.value as ProductVariantOption['colorMode'] })}
+                                  className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                >
+                                  <option value="fixed">Fixed color</option>
+                                  <option value="customer_choice">Customer choice</option>
+                                  <option value="multi_part">Multi-part</option>
+                                </select>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-muted-foreground">Allowed Global Colors</Label>
+                                <div className="mt-1 flex min-h-9 flex-wrap gap-1.5 rounded-md border border-input bg-background p-1.5">
+                                  {colors.filter(globalColor => globalColor.id).map(globalColor => (
+                                    <button
+                                      key={globalColor.id}
+                                      type="button"
+                                      onClick={() => toggleVariantAllowedColor(variant.id, globalColor.id as string)}
+                                      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] ${
+                                        variant.allowedGlobalColorIds?.includes(globalColor.id as string)
+                                          ? 'border-primary bg-primary/10 text-primary'
+                                          : 'border-border text-muted-foreground hover:border-primary/50'
+                                      }`}
+                                    >
+                                      <span className="h-3 w-3 rounded-full border border-border" style={{ backgroundColor: globalColor.hex }} />
+                                      {globalColor.name}
+                                    </button>
+                                  ))}
+                                </div>
+                                <p className="mt-1 text-[10px] text-muted-foreground">Vazio = usa as cores oferecidas no inventário do produto.</p>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="mt-4 rounded-lg border border-border/60 bg-secondary/15 p-4">
@@ -1725,7 +1890,7 @@ export function ProductEditor({ slug }: { slug: string }) {
                             {variant.parts.length > 0 && (
                               <div className="space-y-2">
                                 {variant.parts.map((part, partIndex) => (
-                                  <div key={`${variant.id}-part-${partIndex}`} className="grid gap-2 rounded-lg border border-border bg-secondary/20 p-3 md:grid-cols-[1fr_90px_110px_120px_90px_auto]">
+                                  <div key={`${variant.id}-part-${partIndex}`} className="grid gap-2 rounded-lg border border-border bg-secondary/20 p-3 md:grid-cols-[1fr_80px_100px_120px_150px_auto]">
                                     <div>
                                       <Label className="text-[10px] uppercase text-muted-foreground">Label</Label>
                                       <Input value={part.label} onChange={event => updateVariantPart(variant.id, partIndex, { label: event.target.value })} className="mt-1 h-8" />
@@ -1748,8 +1913,23 @@ export function ProductEditor({ slug }: { slug: string }) {
                                       <select value={part.colorSource ?? 'partColor'} onChange={event => updateVariantPart(variant.id, partIndex, { colorSource: event.target.value as DraftVariantPart['colorSource'] })} className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
                                         <option value="variantColor">Variant</option>
                                         <option value="partColor">Part</option>
+                                        <option value="fixed">Fixed</option>
+                                        <option value="customer_choice">Choice</option>
                                         <option value="lithophane">Lithophane</option>
                                         <option value="none">None</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Fixed Color</Label>
+                                      <select
+                                        value={part.fixedGlobalColorId ?? ''}
+                                        onChange={event => updateVariantPart(variant.id, partIndex, { fixedGlobalColorId: event.target.value || undefined })}
+                                        className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                                      >
+                                        <option value="">None</option>
+                                        {colors.filter(globalColor => globalColor.id).map(globalColor => (
+                                          <option key={globalColor.id} value={globalColor.id}>{globalColor.name}</option>
+                                        ))}
                                       </select>
                                     </div>
                                     <label className="flex items-end gap-2 pb-2 text-xs text-muted-foreground">
@@ -1760,6 +1940,26 @@ export function ProductEditor({ slug }: { slug: string }) {
                                       <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => updateVariant(variant.id, { parts: variant.parts.filter((_, index) => index !== partIndex) })}>
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </Button>
+                                    </div>
+                                    <div className="md:col-span-6">
+                                      <Label className="text-[10px] uppercase text-muted-foreground">Allowed colors for this part</Label>
+                                      <div className="mt-1 flex flex-wrap gap-1.5">
+                                        {colors.filter(globalColor => globalColor.id).map(globalColor => (
+                                          <button
+                                            key={globalColor.id}
+                                            type="button"
+                                            onClick={() => toggleVariantPartAllowedColor(variant.id, partIndex, globalColor.id as string)}
+                                            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] ${
+                                              part.allowedGlobalColorIds?.includes(globalColor.id as string)
+                                                ? 'border-primary bg-primary/10 text-primary'
+                                                : 'border-border bg-background text-muted-foreground'
+                                            }`}
+                                          >
+                                            <span className="h-3 w-3 rounded-full border border-border" style={{ backgroundColor: globalColor.hex }} />
+                                            {globalColor.name}
+                                          </button>
+                                        ))}
+                                      </div>
                                     </div>
                                   </div>
                                 ))}

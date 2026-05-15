@@ -867,11 +867,9 @@ export function ProductConfigurator({
     <main className="min-h-screen bg-[#121212] px-5 py-6 text-white sm:px-8">
       <div className="mx-auto max-w-7xl">
         <nav className="flex items-center justify-between">
-          <Button asChild variant="ghost" className="px-0 font-sans text-white/70 hover:bg-transparent hover:text-white">
-            <Link href={`/produto/${displayProduct.slug}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar ao produto
-            </Link>
+          <Button variant="ghost" className="px-0 font-sans text-white/70 hover:bg-transparent hover:text-white" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar
           </Button>
           <p className="hidden font-sans text-sm text-white/50 sm:block">{displayProduct.name}</p>
         </nav>

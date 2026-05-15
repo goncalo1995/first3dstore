@@ -11,11 +11,40 @@ type OrderItem = {
   productName: string
   quantity: number
   colors: string[]
+  selectedColor?: {
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
+    colorPriceAdd?: number
+  }
+  selectedColors?: {
+    name: string
+    hex: string
+    imageUrl?: string
+    globalColorId?: string
+    colorPriceAdd?: number
+  }[]
+  selectedParts?: {
+    label: string
+    colorName: string
+    colorHex: string
+    globalColorId?: string
+    colorPriceAdd?: number
+    resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
+    grams: number
+  }[]
   selectedVariant?: {
     id?: string
     name: string
     kind?: string
-    colors: string[]
+    colors: (string | {
+      name: string
+      hex?: string
+      imageUrl?: string
+      globalColorId?: string
+      priceAdd?: number
+    })[]
   }
   customText?: string
   unitPrice: number
@@ -69,19 +98,84 @@ function normalizeColorLookupName(value: string) {
   return value.trim().toLowerCase()
 }
 
+function normalizeHex(value: string | undefined) {
+  const trimmed = String(value ?? '').trim().toLowerCase()
+  if (!trimmed) return ''
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+}
+
 function displayColorName(value: string) {
   const trimmed = value.trim()
   if (!trimmed.includes(':')) return trimmed
   return trimmed.split(':').slice(1).join(':').trim() || trimmed
 }
 
-function findGlobalColor(colorByName: Map<string, GlobalColor>, rawName: string | undefined) {
-  if (!rawName) return undefined
+function resolveGlobalColor(
+  lookups: {
+    byId: Map<string, GlobalColor>
+    byName: Map<string, GlobalColor>
+    byHex: Map<string, GlobalColor>
+  },
+  color: { globalColorId?: string; name?: string; hex?: string } | string | undefined,
+) {
+  if (!color) return { color: undefined, resolvedBy: 'unresolved' as const }
+  const rawName = typeof color === 'string' ? color : color.name
+  const globalColorId = typeof color === 'string' ? undefined : color.globalColorId
+  const hex = typeof color === 'string' ? undefined : color.hex
+  if (globalColorId) {
+    const byId = lookups.byId.get(globalColorId)
+    if (byId) return { color: byId, resolvedBy: 'globalColorId' as const }
+  }
+  if (hex) {
+    const byHex = lookups.byHex.get(normalizeHex(hex))
+    if (byHex) return { color: byHex, resolvedBy: 'hex' as const }
+  }
+  if (!rawName) return { color: undefined, resolvedBy: 'unresolved' as const }
   const readableName = displayColorName(rawName)
-  return (
-    colorByName.get(normalizeColorLookupName(rawName)) ||
-    colorByName.get(normalizeColorLookupName(readableName))
+  const byName = (
+    lookups.byName.get(normalizeColorLookupName(rawName)) ||
+    lookups.byName.get(normalizeColorLookupName(readableName))
   )
+  return byName
+    ? { color: byName, resolvedBy: 'name' as const }
+    : { color: undefined, resolvedBy: 'unresolved' as const }
+}
+
+function getItemColorChoices(item: OrderItem): { name: string; hex?: string; globalColorId?: string }[] {
+  // Prioritize customer-selected values over variant display colors
+  if (item.selectedParts?.length) {
+    return item.selectedParts.map(part => ({
+      name: `${part.label}: ${part.colorName}`,
+      hex: part.colorHex,
+      globalColorId: part.globalColorId,
+    }))
+  }
+
+  if (item.selectedColors?.length) {
+    return item.selectedColors.map(color => ({
+      name: color.name,
+      hex: color.hex,
+      globalColorId: color.globalColorId,
+    }))
+  }
+
+  if (item.selectedColor?.name) {
+    return [{
+      name: item.selectedColor.name,
+      hex: item.selectedColor.hex,
+      globalColorId: item.selectedColor.globalColorId,
+    }]
+  }
+
+  // Only fall back to variant display colors if no customer selection exists
+  if (item.selectedVariant?.colors?.length) {
+    return item.selectedVariant.colors.map(color => {
+      if (typeof color === 'string') return { name: color }
+      return { name: color.name, hex: color.hex, globalColorId: color.globalColorId }
+    })
+  }
+
+  return (item.colors ?? []).map(color => ({ name: color }))
 }
 
 function getJobRequirements(job: any) {
@@ -91,8 +185,11 @@ function getJobRequirements(job: any) {
 
   return requirements.map((req: any) => ({
     colorId: req.colorId || job.globalColor?.id || 'unassigned',
+    colorName: req.colorName || job.globalColor?.name || job.colorName || 'Unassigned',
+    colorHex: req.colorHex || job.globalColor?.hex || job.colorHex,
     materialType: req.materialType || job.materialType || 'PLA',
     grams: Number(req.grams || 0),
+    resolvedBy: req.resolvedBy,
   }))
 }
 
@@ -119,7 +216,11 @@ export async function generateProductionJobs(orderId: string) {
 
   const productById = new Map(catalogProducts.map(p => [p.id, p]))
   const productByName = new Map(catalogProducts.map(p => [p.name, p]))
-  const colorByName = new Map(globalColors.map(c => [normalizeColorLookupName(c.name), c]))
+  const colorLookups = {
+    byId: new Map(globalColors.map(c => [c.id, c])),
+    byName: new Map(globalColors.map(c => [normalizeColorLookupName(c.name), c])),
+    byHex: new Map(globalColors.map(c => [normalizeHex(c.hex), c])),
+  }
 
   const now = new Date()
   const transactions: any[] = []
@@ -139,14 +240,13 @@ export async function generateProductionJobs(orderId: string) {
       ? product.materialRecipe
       : [{ label: 'Main part', grams: product?.materialGrams ?? 25 }]
 
-    const itemColors = item.selectedVariant?.colors?.length
-      ? item.selectedVariant.colors
-      : item.colors?.length
-        ? item.colors
-        : []
+    const itemColors = getItemColorChoices(item)
 
-    recipe.forEach((part, partIndex) => {
-      const jobId = id()
+    const quantity = Math.max(1, Number(item.quantity || 1))
+
+    Array.from({ length: quantity }).forEach((_, unitIndex) => {
+      recipe.forEach((part, partIndex) => {
+        const jobId = id()
       
       // Multi-color logic:
       // For now, if a product is multiColor and we have 1 part, we assume it uses all selected colors.
@@ -154,57 +254,62 @@ export async function generateProductionJobs(orderId: string) {
       // To keep it robust, we'll populate colorRequirements.
       
       const isMultiColor = itemColors.length > 1 && recipe.length === 1
-      const partColorNames = isMultiColor ? itemColors : [itemColors[partIndex] ?? itemColors[0] ?? 'Unassigned']
+      const partColors = isMultiColor ? itemColors : [itemColors[partIndex] ?? itemColors[0] ?? { name: 'Unassigned' }]
       
       const materialType = part.materialType || 'PLA'
 
-      const colorRequirements = partColorNames.map(name => {
-        const readableName = displayColorName(name)
-        const c = findGlobalColor(colorByName, name)
+      const colorRequirements = partColors.map(color => {
+        const rawName = color.name
+        const readableName = displayColorName(rawName)
+        const resolved = resolveGlobalColor(colorLookups, color)
+        const c = resolved.color
         return {
           colorId: c?.id ?? 'unassigned',
           colorName: readableName || 'Unassigned',
-          colorHex: c?.hex,
-          grams: part.grams / partColorNames.length, // Split grams equally as a guess
+          colorHex: c?.hex ?? color.hex ?? '#888888',
+          grams: part.grams / partColors.length, // Split grams equally as a guess
           materialType,
+          resolvedBy: resolved.resolvedBy,
         }
       })
 
       const requiredColorIds = colorRequirements.map(cr => cr.colorId).join(',')
-      const primaryColor = findGlobalColor(colorByName, partColorNames[0])
+      const primaryColor = resolveGlobalColor(colorLookups, partColors[0]).color
       const primaryColorName = colorRequirements[0]?.colorName ?? 'Unassigned'
+      const primaryColorHex = primaryColor?.hex ?? colorRequirements[0]?.colorHex ?? '#888888'
 
-      const jobTx = dbAdmin.tx.productionJobs[jobId]
-        .update({
-          orderId,
-          orderItemIndex: itemIndex,
-          productId: product?.id ?? item.productId,
-          selectedVariantId: item.selectedVariant?.id,
-          selectedVariantName: item.selectedVariant?.name,
-          productName: item.productName,
-          partLabel: part.label,
-          colorName: primaryColorName,
-          colorHex: primaryColor?.hex ?? '#888888',
-          materialGrams: part.grams,
-          totalGrams: part.grams,
-          quantity: item.quantity,
-          status: 'queued',
-          isMultiColor,
-          colorRequirements,
-          requiredColorIds,
-          materialType,
-          outsourced: false,
-          customText: item.customText ?? '',
-          createdAt: now,
-          updatedAt: now,
-        })
-        .link({ order: orderId })
+        const jobTx = dbAdmin.tx.productionJobs[jobId]
+          .update({
+            orderId,
+            orderItemIndex: itemIndex,
+            productId: product?.id ?? item.productId,
+            selectedVariantId: item.selectedVariant?.id,
+            selectedVariantName: item.selectedVariant?.name,
+            productName: item.productName,
+            partLabel: quantity > 1 ? `${part.label} #${unitIndex + 1}` : part.label,
+            colorName: primaryColorName,
+            colorHex: primaryColorHex,
+            materialGrams: part.grams,
+            totalGrams: part.grams,
+            quantity: 1,
+            status: 'queued',
+            isMultiColor,
+            colorRequirements,
+            requiredColorIds,
+            materialType,
+            outsourced: false,
+            customText: item.customText ?? '',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .link({ order: orderId })
 
-      if (primaryColor) {
-        jobTx.link({ globalColor: primaryColor.id })
-      }
+        if (primaryColor) {
+          jobTx.link({ globalColor: primaryColor.id })
+        }
 
-      transactions.push(jobTx)
+        transactions.push(jobTx)
+      })
     })
   })
 
@@ -407,15 +512,18 @@ export async function startBatchPrint({
     }[] = []
 
     for (const requirement of getJobRequirements(job)) {
+      if (requirement.colorId === 'unassigned' || requirement.resolvedBy === 'unresolved') {
+        throw new Error(`Cor por resolver em ${job.productName}: ${requirement.colorName}. Corrige a cor da encomenda/job antes de imprimir.`)
+      }
       const requirementKey = getRequirementKey(requirement.colorId, requirement.materialType)
       const assignment = assignmentByKey.get(requirementKey)
       if (!assignment?.spoolId) {
-        throw new Error(`Missing spool assignment for ${job.productName}`)
+        throw new Error(`Missing spool assignment for ${job.productName}: ${requirement.colorName}`)
       }
       const spool = spoolById.get(assignment.spoolId)
       if (!spool) throw new Error('Assigned spool not found')
       if (spool.colorId !== requirement.colorId) {
-        throw new Error(`Color mismatch for ${job.productName}: requires ${requirement.colorId}`)
+        throw new Error(`Color mismatch for ${job.productName}: requires ${requirement.colorName} (${requirement.colorId})`)
       }
       jobAssignedSpoolIds.push(assignment.spoolId)
       spoolAllocations.push({
@@ -791,18 +899,32 @@ export async function syncOrderStates(orderIds: string[]) {
     const jobs = (order.productionJobs ?? []) as any[]
     if (jobs.length === 0) continue
 
+    const isSupersededFailedAttempt = (job: any) => {
+      if (!['failed', 'cancelled'].includes(job.status)) return false
+      return jobs.some(candidate =>
+        candidate.id !== job.id &&
+        candidate.orderItemIndex === job.orderItemIndex &&
+        candidate.productId === job.productId &&
+        candidate.selectedVariantId === job.selectedVariantId &&
+        candidate.partLabel === job.partLabel &&
+        ['queued', 'printing', 'printed', 'assembled'].includes(candidate.status) &&
+        new Date(candidate.createdAt ?? 0).getTime() >= new Date(job.updatedAt ?? job.createdAt ?? 0).getTime()
+      )
+    }
+    const activeJobs = jobs.filter(job => !isSupersededFailedAttempt(job) && job.status !== 'cancelled')
+    if (activeJobs.length === 0) continue
+
     // 1. Calculate overall fulfillment status
-    // 'new' | 'printing' | 'ready' | 'shipped' | 'completed' | 'cancelled'
+    // 'new' | 'printing' | 'ready' | 'ready_for_pickup' | 'shipped' | 'completed' | 'cancelled'
     let nextStatus = order.fulfillmentStatus
     
-    const allAssembled = jobs.every(j => j.status === 'assembled')
-    const somePrinting = jobs.some(j => j.status === 'printing')
-    const somePrinted = jobs.some(j => j.status === 'printed')
+    const allAssembled = activeJobs.every(j => j.status === 'assembled')
+    const somePrinting = activeJobs.some(j => j.status === 'printing')
+    const somePrinted = activeJobs.some(j => j.status === 'printed')
     
     if (allAssembled) {
-      // Only move to 'ready' if it was previously 'printing' or 'new'
-      if (['new', 'printing'].includes(order.fulfillmentStatus)) {
-        nextStatus = 'ready'
+      if (['new', 'printing', 'ready', 'ready_for_pickup'].includes(order.fulfillmentStatus)) {
+        nextStatus = order.shippingMethod === 'pickup_carcavelos' ? 'ready_for_pickup' : 'ready'
       }
     } else if (somePrinting || somePrinted) {
       if (order.fulfillmentStatus === 'new') {
@@ -812,7 +934,7 @@ export async function syncOrderStates(orderIds: string[]) {
 
     // 2. Update items status
     const newItems = (order.items ?? []).map((item: any, idx: number) => {
-      const itemJobs = jobs.filter(j => j.orderItemIndex === idx)
+      const itemJobs = activeJobs.filter(j => j.orderItemIndex === idx)
       if (itemJobs.length === 0) return item
 
       const allItemAssembled = itemJobs.every(j => j.status === 'assembled')
@@ -886,7 +1008,7 @@ async function updateJobForManualFix(jobId: string, status: Extract<JobStatus, '
   )
 
   // Sync parent order state after job status change
-+  await syncOrderStates([job.orderId])
+  await syncOrderStates([job.orderId])
 
   return { success: true }
 }
@@ -1075,6 +1197,12 @@ export async function finishPrintWithLog(params: FinishPrintParams) {
           colorRequirements: job.colorRequirements,
           requiredColorIds: job.requiredColorIds,
           totalGrams: job.totalGrams,
+          estimatedPrintMinutes: job.estimatedPrintMinutes,
+          imageUrl: job.imageUrl,
+          selectedVariantId: job.selectedVariantId,
+          selectedVariantName: job.selectedVariantName,
+          productId: job.productId,
+          productSlug: job.productSlug,
           customText: job.customText,
           notes: `Requeue from failed job ${jobId.slice(0, 8)}: ${failReason || 'No reason given'}`,
           createdAt: now,

@@ -27,11 +27,11 @@ export async function generateMetadata({
 
   if (!product) {
     return {
-      title: 'Produto não encontrado | foto3d.pt',
+      title: 'Produto não encontrado | EM3D',
     }
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://foto3d.pt').replace(/\/$/, '')
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://em3d.pt').replace(/\/$/, '')
   const productImages = product.images?.length ? product.images : [product.image]
   const absoluteImages = productImages.map(img => {
     if (img.startsWith('http')) return img
@@ -39,10 +39,10 @@ export async function generateMetadata({
   })
 
   return {
-    title: `${product.name} | foto3d.pt`,
+    title: `${product.name} | EM3D`,
     description: product.description,
     openGraph: {
-      title: `${product.name} | foto3d.pt`,
+      title: `${product.name} | EM3D`,
       description: product.description,
       images: absoluteImages.map(url => ({
         url,
@@ -55,7 +55,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${product.name} | foto3d.pt`,
+      title: `${product.name} | EM3D`,
       description: product.description,
       images: absoluteImages,
     },

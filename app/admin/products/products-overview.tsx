@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { FolderIcon, Loader2, PaletteIcon, Plus, ShoppingBasket, Sparkles, Trash2 } from 'lucide-react'
+import { Eye, FolderIcon, Loader2, PaletteIcon, Plus, ShoppingBasket, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { db, id } from '@/lib/db'
 import { getProductCategorySlugs, products, products as staticProducts, type Product } from '@/lib/products'
@@ -92,6 +92,7 @@ export function ProductsOverview({
           activeColorNames: inventory?.activeColorNames ?? [],
           colorInventory: inventory?.colorInventory?.map(color => ({
             ...color,
+            globalColorId: color.globalColorId,
             gramsAvailable: color.gramsAvailable ?? 0,
           })) ?? [],
           stockQuantity: 0,
@@ -207,7 +208,9 @@ export function ProductsOverview({
                     <Link href={`/admin/products/${product.slug}`}>Edit</Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href={`/product/${product.slug}`} target="_blank">View</Link>
+                    <Link href={`/product/${product.slug}`} target="_blank" rel="noopener noreferrer" aria-label={`View ${product.name} in new tab`}>
+                      <Eye className="h-4 w-4" />
+                    </Link>
                   </Button>
                   <Button
                     type="button"

@@ -35,7 +35,7 @@ export function HomeFeaturedProducts({ products }: HomeFeaturedProductsProps) {
             </p>
           </div>
           <Button asChild variant="ghost" className="text-primary hover:text-primary/80 self-start md:self-auto">
-            <Link href="/shop">
+            <Link href="/loja">
               Ver todos os produtos
               <ArrowRight className="ml-2 w-4 h-4" />
             </Link>

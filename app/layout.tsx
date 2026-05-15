@@ -6,16 +6,16 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'foto3d.pt | Luz de Memória',
-  description: 'Transforme uma fotografia especial numa luz 3D personalizada, feita à mão em Lisboa.',
-  keywords: ['foto 3D', 'luz personalizada', 'lithophane', 'presente personalizado', 'Lisboa', 'Portugal'],
+  title: 'EM3D · Objetos úteis, impressão 3D em Portugal',
+  description: 'Objetos úteis, personalizados e impressos em 3D em Portugal. Peças para casa, secretária, presentes e empresas.',
+  keywords: ['impressão 3D', 'objetos personalizados', 'presentes personalizados', 'produção local', 'Portugal', 'EM3D'],
   openGraph: {
-    title: 'foto3d.pt | Luz de Memória',
-    description: 'Transforme uma fotografia especial numa luz 3D personalizada, feita à mão em Lisboa.',
+    title: 'EM3D · Objetos úteis, impressão 3D em Portugal',
+    description: 'Objetos úteis, personalizados e impressos em 3D em Portugal.',
     type: 'website',
     locale: 'pt_PT',
   },
-  metadataBase: new URL('https://foto3d.pt'),
+  metadataBase: new URL('https://em3d.pt'),
 }
 
 export const viewport: Viewport = {

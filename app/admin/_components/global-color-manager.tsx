@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Paintbrush, AlertTriangle, CheckCircle2, XCircle, Search, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
+import { Plus, AlertTriangle, CheckCircle2, XCircle, Search, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,10 +24,11 @@ import { toast } from 'sonner'
 import { db, id } from '@/lib/db'
 import { archiveGlobalColor } from '@/app/admin/production/actions'
 import type { GlobalColorRecord } from '@/app/admin/types'
+import type { Product } from '@/lib/products'
 
 interface GlobalColorManagerProps {
   colors: GlobalColorRecord[]
-  products: any[]
+  products: Product[]
 }
 
 export function GlobalColorManager({ colors, products }: GlobalColorManagerProps) {
@@ -39,6 +40,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
   const [form, setForm] = useState({
     name: '',
     hex: '#000000',
+    priceAdd: '0',
   })
 
   const filteredColors = colors?.filter(c => 
@@ -53,6 +55,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
       await db.transact(
         db.tx.globalColors[colorId].update({
           ...form,
+          priceAdd: Math.max(0, Number(form.priceAdd) || 0),
           isActive: true,
           spoolStatus: editingColor?.spoolStatus ?? 'available',
           gramsAvailable: editingColor?.gramsAvailable ?? 0,
@@ -62,7 +65,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
       toast.success(editingColor ? 'Color updated' : 'Color created')
       setIsAdding(false)
       setEditingColor(null)
-      setForm({ name: '', hex: '#000000' })
+      setForm({ name: '', hex: '#000000', priceAdd: '0' })
     } catch (err: any) {
       toast.error(err.message)
     }
@@ -70,8 +73,10 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
   }
 
   const handleArchive = async (color: GlobalColorRecord) => {
-    const confirmMsg = `Are you sure you want to archive ${color.name}? 
-    It will be hidden from new product configurations but existing jobs will remain usable.`
+    const usage = getColorUsage(color)
+    const confirmMsg = usage.products.length > 0
+      ? `${color.name} is still used by ${usage.products.length} active product(s). Archive it anyway? It will be hidden from new product configurations but existing jobs will remain usable.`
+      : `Are you sure you want to archive ${color.name}? It will be hidden from new product configurations but existing jobs will remain usable.`
     
     if (!confirm(confirmMsg)) return
 
@@ -87,12 +92,60 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
     }
   }
 
-  const getProductDependencies = (colorName: string) => {
-    return products.filter(p => {
-      const usesInRecipe = p.materialRecipe?.some((r: any) => r.label.toLowerCase().includes(colorName.toLowerCase()))
-      const usesInVariants = p.variants?.some((v: any) => v.colors?.some((vc: any) => vc.colorName === colorName))
-      return usesInRecipe || usesInVariants
+  const restoreColor = async (color: GlobalColorRecord) => {
+    try {
+      await db.transact(db.tx.globalColors[color.id].update({ isActive: true, updatedAt: new Date() }))
+      toast.success(`${color.name} restored`)
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+  }
+
+  const getColorUsage = (color: GlobalColorRecord) => {
+    const colorId = color.id
+    const colorName = color.name.toLowerCase()
+    const usage = {
+      offeredProducts: 0,
+      fixedVariants: 0,
+      allowedVariantsOrParts: 0,
+      products: [] as Product[],
+    }
+
+    products.forEach(product => {
+      let used = false
+      const productColors = product.colors ?? []
+      const offered = productColors.some((candidate) =>
+        candidate.globalColorId === colorId || String(candidate.name ?? '').toLowerCase() === colorName
+      )
+      if (offered) {
+        usage.offeredProducts += 1
+        used = true
+      }
+
+      ;(product.variants ?? []).forEach((variant) => {
+        const variantUsesFixed = variant.colors?.some((candidate) =>
+          candidate.globalColorId === colorId || String(candidate.name ?? '').toLowerCase() === colorName
+        )
+        if (variant.colorMode === 'fixed' && variantUsesFixed) {
+          usage.fixedVariants += 1
+          used = true
+        }
+        if (variant.allowedGlobalColorIds?.includes(colorId)) {
+          usage.allowedVariantsOrParts += 1
+          used = true
+        }
+        ;(variant.parts ?? []).forEach((part) => {
+          if (part.fixedGlobalColorId === colorId || part.allowedGlobalColorIds?.includes(colorId)) {
+            usage.allowedVariantsOrParts += 1
+            used = true
+          }
+        })
+      })
+
+      if (used) usage.products.push(product)
     })
+
+    return usage
   }
 
   return (
@@ -128,7 +181,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredColors.map(color => {
-            const dependencies = getProductDependencies(color.name)
+            const usage = getColorUsage(color)
             const isActive = color.isActive !== false
             
             return (
@@ -154,14 +207,14 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => {
                           setEditingColor(color)
-                          setForm({ name: color.name, hex: color.hex })
+                          setForm({ name: color.name, hex: color.hex, priceAdd: String(color.priceAdd ?? 0) })
                           setIsAdding(true)
                         }}>
                           <Edit className="mr-2 h-4 w-4" /> Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           className={isActive ? 'text-destructive' : 'text-emerald-600'}
-                          onClick={() => isActive ? handleArchive(color) : handleSave()} // Simplistic toggle
+                          onClick={() => isActive ? handleArchive(color) : restoreColor(color)}
                         >
                           {isActive ? <Trash2 className="mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                           {isActive ? 'Archive' : 'Restore'}
@@ -176,23 +229,43 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
                       {isActive ? 'Active' : 'Archived'}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
-                      {dependencies.length} Products
+                      {usage.offeredProducts} offered
                     </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {usage.fixedVariants} fixed
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {usage.allowedVariantsOrParts} allowed
+                    </Badge>
+                    {(color.priceAdd ?? 0) > 0 && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        +€{color.priceAdd?.toFixed(2)}
+                      </Badge>
+                    )}
+                    {usage.products.length > 0 && isActive && (
+                      <Badge variant="outline" className="border-amber-300 text-[10px] text-amber-700">
+                        <AlertTriangle className="mr-1 h-3 w-3" />
+                        In use
+                      </Badge>
+                    )}
                   </div>
 
-                  {dependencies.length > 0 && (
+                  {usage.products.length > 0 && (
                     <div className="mt-3 border-t pt-2">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Used In</p>
                       <div className="flex flex-wrap gap-1">
-                        {dependencies.slice(0, 3).map((p: any) => (
+                        {usage.products.slice(0, 3).map((p) => (
                           <span key={p.id} className="text-[9px] bg-muted px-1.5 py-0.5 rounded truncate max-w-[80px]">
                             {p.name}
                           </span>
                         ))}
-                        {dependencies.length > 3 && (
-                          <span className="text-[9px] text-muted-foreground">+{dependencies.length - 3} more</span>
+                        {usage.products.length > 3 && (
+                          <span className="text-[9px] text-muted-foreground">+{usage.products.length - 3} more</span>
                         )}
                       </div>
+                      <p className="mt-2 text-[10px] text-muted-foreground">
+                        Products: {usage.offeredProducts} · fixed variants: {usage.fixedVariants} · allowed variants/parts: {usage.allowedVariantsOrParts}
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -206,7 +279,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
         setIsAdding(o)
         if (!o) {
           setEditingColor(null)
-          setForm({ name: '', hex: '#000000' })
+          setForm({ name: '', hex: '#000000', priceAdd: '0' })
         }
       }}>
         <DialogContent>
@@ -239,6 +312,17 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
                   onChange={e => setForm(f => ({ ...f, hex: e.target.value }))}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="priceAdd">Premium price add (€)</Label>
+              <Input
+                id="priceAdd"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.priceAdd}
+                onChange={e => setForm(f => ({ ...f, priceAdd: e.target.value }))}
+              />
             </div>
           </div>
           <DialogFooter>

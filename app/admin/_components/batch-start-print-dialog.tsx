@@ -17,6 +17,7 @@ type RequirementGroup = {
   colorHex: string
   materialType: string
   grams: number
+  resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
   jobIds: string[]
 }
 
@@ -33,6 +34,7 @@ type JobRequirement = {
   colorHex: string
   materialType: string
   grams: number
+  resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
 }
 
 interface BatchStartPrintDialogProps {
@@ -63,6 +65,7 @@ function getJobRequirements(job: any, colorById: Map<string, any>): JobRequireme
       colorHex: requirement.colorHex || color?.hex || job.colorHex || '#e5e7eb',
       materialType,
       grams: Number(requirement.grams || job.materialGrams || 0) * (job.quantity || 1),
+      resolvedBy: requirement.resolvedBy,
     }
   })
 }
@@ -86,6 +89,7 @@ function aggregateRequirements(jobs: any[], colors: GlobalColor[]) {
           colorHex: requirement.colorHex,
           materialType: requirement.materialType,
           grams: requirement.grams,
+          resolvedBy: requirement.resolvedBy,
           jobIds: [job.id],
         })
       }
@@ -240,7 +244,7 @@ export function BatchStartPrintDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] sm:max-w-xl md:max-w-2xl lg:max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
             <Play className="h-5 w-5 text-emerald-500" />
@@ -291,7 +295,19 @@ export function BatchStartPrintDialog({
                       <div className="flex items-center gap-3">
                         <div className="h-7 w-7 rounded-md border shadow-sm" style={{ backgroundColor: requirement.colorHex }} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black">{requirement.colorName}</p>
+                          <p className="truncate text-sm font-black">
+                            {requirement.colorName}
+                            {requirement.resolvedBy && requirement.resolvedBy !== 'globalColorId' && (
+                              <span
+                                className="ml-1 text-amber-500"
+                                title="Cor resolvida por nome; pode não corresponder exactamente ao material actual"
+                                role="img"
+                                aria-label="Warning: color resolved by name may not match actual material"
+                              >
+                                ⚠
+                              </span>
+                            )}
+                          </p>
                           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                             {requirement.materialType} • {Math.round(requirement.grams)}g • {requirement.jobIds.length} job{requirement.jobIds.length === 1 ? '' : 's'}
                           </p>

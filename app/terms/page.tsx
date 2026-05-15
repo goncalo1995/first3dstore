@@ -3,8 +3,8 @@ import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Termos e Condições | Foto3D.pt',
-  description: 'Termos e condições provisórios da Foto3D.pt – substituir pelos definitivos antes do lançamento.',
+  title: 'Termos e Condições | EM3D',
+  description: 'Termos e condições provisórios da EM3D.',
 }
 
 export default function TermsPage() {
@@ -24,11 +24,11 @@ export default function TermsPage() {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Identificação do Vendedor</h2>
               <p>
-                <strong>Foto3D.pt</strong><br />
+                <strong>EM3D</strong><br />
                 Travessa do Girassol, Bairro da Torre, n61 3D<br />
                 2775-811 Carcavelos<br />
                 NIF: 518493385<br />
-                geral@foto3d.pt<br />
+                geral@em3d.pt<br />
               </p>
             </div>
 
@@ -49,7 +49,7 @@ export default function TermsPage() {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Fotografias e Ficheiros</h2>
               <p>
-                O cliente declara ser o titular dos direitos das imagens e ficheiros enviados, ou ter autorização para os utilizar. A Foto3D.pt reserva-se o direito de recusar ou solicitar a substituição de ficheiros que não tenham qualidade técnica suficiente para impressão ou que violem direitos de terceiros.
+                O cliente declara ser o titular dos direitos das imagens e ficheiros enviados, ou ter autorização para os utilizar. A EM3D reserva-se o direito de recusar ou solicitar a substituição de ficheiros que não tenham qualidade técnica suficiente para impressão ou que violem direitos de terceiros.
               </p>
             </div>
 
@@ -63,14 +63,14 @@ export default function TermsPage() {
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Direito de Arrependimento e Devoluções</h2>
               <p>
-                Por se tratar de produtos personalizados, o direito de livre resolução (art.º 17.º do DL 24/2014) não se aplica após o início da produção. No entanto, em caso de defeito ou não conformidade, o cliente dispõe de 14 dias para comunicar, devendo ser fornecidas fotografias ou vídeos que evidenciem o problema. A Foto3D.pt compromete-se a reparar ou substituir o produto, ou a reembolsar o valor pago.
+                Por se tratar de produtos personalizados, o direito de livre resolução (art.º 17.º do DL 24/2014) não se aplica após o início da produção. No entanto, em caso de defeito ou não conformidade, o cliente dispõe de 14 dias para comunicar, devendo ser fornecidas fotografias ou vídeos que evidenciem o problema. A EM3D compromete-se a reparar ou substituir o produto, ou a reembolsar o valor pago.
               </p>
             </div>
 
             <div>
               <h2 className="mb-2 text-lg font-semibold text-foreground">Contacto para questões legais</h2>
               <p>
-                Para qualquer assunto relacionado com estes termos, contacte geral@foto3d.pt. Os dados completos do vendedor (NIF, morada, registo) constam da primeira secção.
+                Para qualquer assunto relacionado com estes termos, contacte geral@em3d.pt. Os dados completos do vendedor (NIF, morada, registo) constam da primeira secção.
               </p>
             </div>
           </div>

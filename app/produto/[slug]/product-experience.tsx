@@ -62,7 +62,7 @@ export function ProductExperience({ product }: { product: Product }) {
             <Button asChild variant="ghost" className="px-0 font-sans text-white/70 hover:bg-transparent hover:text-white">
               <Link href="/">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Foto3D.pt
+                EM3D
               </Link>
             </Button>
             <Button asChild className="hidden border border-white/15 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 sm:inline-flex">

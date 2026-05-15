@@ -26,6 +26,7 @@ const _schema = i.schema({
       spoolStatus: i.string<'available' | 'low' | 'archived'>(),
       supplierUrl: i.string().optional(),
       pricePerKg: i.number().optional(),
+      priceAdd: i.number().optional(),
       notes: i.string().optional(),
       productId: i.string().indexed().optional(), // Scoped to specific product
       isGlobal: i.boolean().optional(), // Usable across all products
@@ -107,6 +108,7 @@ const _schema = i.schema({
         id: string
         name: string
         kind: 'single_color' | 'preset_pack' | 'custom_text'
+        colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
         image?: string
         priceAdd?: number
         finalPrice?: number
@@ -131,12 +133,16 @@ const _schema = i.schema({
           hex: string
           imageUrl?: string
           globalColorId?: string
+          priceAdd?: number
         }[]
+        allowedGlobalColorIds?: string[]
         parts?: {
           label: string
           grams: number
           materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-          colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+          colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+          fixedGlobalColorId?: string
+          allowedGlobalColorIds?: string[]
           requiresLithophaneProcessing?: boolean
         }[]
         customizationOptions?: {
@@ -164,7 +170,9 @@ const _schema = i.schema({
         label: string
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-        colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+        colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+        fixedGlobalColorId?: string
+        allowedGlobalColorIds?: string[]
         requiresLithophaneProcessing?: boolean
       }[]>().optional(),
       productionJobTemplates: i.json<{
@@ -241,19 +249,54 @@ const _schema = i.schema({
       customerName: i.string(),
       customerEmail: i.string().optional(),
       customerPhone: i.string().optional(),
-      paymentPreference: i.string<'mbway' | 'bank_transfer' | 'cash_pickup' | 'other'>(),
+      paymentPreference: i.string<'mbway' | 'bank_transfer' | 'cash_pickup' | 'other' | 'stripe'>(),
       shippingMethod: i.string<'pickup_carcavelos' | 'mainland_portugal'>(),
       shippingAddress: i.string().optional(),
+      stripeSessionId: i.string().indexed().optional(),
+      stripePaymentIntentId: i.string().indexed().optional(),
+      paymentUrl: i.string().optional(),
+      paidAt: i.date().optional(),
       items: i.json<{
         productId?: string
         productName: string
         quantity: number
         colors: string[]
+        selectedColor?: {
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+          colorPriceAdd?: number
+        }
+        selectedColors?: {
+          name: string
+          hex: string
+          imageUrl?: string
+          globalColorId?: string
+          colorPriceAdd?: number
+        }[]
+        selectedParts?: {
+          label: string
+          colorName: string
+          colorHex: string
+          globalColorId?: string
+          colorPriceAdd?: number
+          resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
+          grams: number
+        }[]
         selectedVariant?: {
           id?: string
           name: string
           kind?: 'single_color' | 'preset_pack' | 'custom_text'
-          colors: string[]
+          colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
+          allowedGlobalColorIds?: string[]
+          colors: {
+            name: string
+            hex: string
+            imageUrl?: string
+            globalColorId?: string
+            priceAdd?: number
+          }[]
         }
         customText?: string
         unitPrice: number
@@ -266,7 +309,7 @@ const _schema = i.schema({
       shippingCost: i.number(),
       total: i.number(),
       paymentStatus: i.string<'pending' | 'paid' | 'refunded'>(),
-      fulfillmentStatus: i.string<'new' | 'printing' | 'ready' | 'shipped' | 'completed' | 'cancelled'>(),
+      fulfillmentStatus: i.string<'new' | 'printing' | 'ready' | 'ready_for_pickup' | 'shipped' | 'completed' | 'cancelled'>(),
       notes: i.string().optional(),
       createdAt: i.date(),
       updatedAt: i.date(),
@@ -297,7 +340,7 @@ const _schema = i.schema({
         [key: string]: any
       }>().optional(),
       engravingText: i.string().optional(),
-      leadType: i.string<'photo_request' | 'b2b'>().optional(),
+      leadType: i.string<'custom_idea' | 'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
       status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
@@ -308,17 +351,21 @@ const _schema = i.schema({
       eventId: i.string().unique().indexed(),
       type: i.string().indexed(),
       orderRequestId: i.string().indexed().optional(),
+      orderId: i.string().indexed().optional(),
+      stripeSessionId: i.string().indexed().optional(),
       processedAt: i.date().indexed(),
     }),
     productInventory: i.entity({
       productSlug: i.string().unique().indexed(),
       activeColorNames: i.json<string[]>(),
       colorInventory: i.json<{
+        globalColorId?: string
         colorName: string
         colorHex: string
         offered: boolean
         stockQuantity: number
         gramsAvailable: number
+        priceAdd?: number
       }[]>(),
       stockQuantity: i.number(),
       stockStatus: i.string<'in_stock' | 'made_to_order' | 'sold_out'>(),
@@ -366,6 +413,7 @@ const _schema = i.schema({
         grams: number
         materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
         slotPreference?: number
+        resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved'
       }[]>().optional(),
       requiredColorIds: i.string().indexed().optional(), // Comma-separated
       totalGrams: i.number().optional(),

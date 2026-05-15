@@ -6,12 +6,12 @@ import { ProductCard } from '@/components/product-card'
 import { db } from '@/lib/db'
 import { applyCatalogProducts, applyInventories, getProductCategorySlugs, sortProductsForCatalog, type CatalogProductRecord, type Product, type ProductCategory } from '@/lib/products'
 
-interface ShopContentProps {
+interface LojaContentProps {
   products: Product[]
   categoryLabels: Record<ProductCategory, string>
 }
 
-export function ShopContent({ products, categoryLabels }: ShopContentProps) {
+export function LojaContent({ products, categoryLabels }: LojaContentProps) {
   const inventoryQuery = db.useQuery({
     productInventory: { product: {} },
     catalogProducts: {
@@ -36,9 +36,9 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
   const handleCategoryChange = (category: ProductCategory | 'all') => {
     setActiveCategory(category)
     if (category === 'all') {
-      router.push('/shop', { scroll: false })
+      router.push('/loja', { scroll: false })
     } else {
-      router.push(`/shop?category=${category}`, { scroll: false })
+      router.push(`/loja?category=${category}`, { scroll: false })
     }
   }
 
@@ -97,7 +97,7 @@ export function ShopContent({ products, categoryLabels }: ShopContentProps) {
     if (activeCategory === 'all') return
     if (categories.includes(activeCategory)) return
     setActiveCategory('all')
-    router.replace('/shop', { scroll: false })
+    router.replace('/loja', { scroll: false })
   }, [activeCategory, categories, router])
 
   return (

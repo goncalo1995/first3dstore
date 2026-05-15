@@ -14,21 +14,21 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Foto3D Brand Colors */
+  /* EM3D Brand Colors */
   --background: #FFFFFF;
-  --foreground: #2A2A2A;
-  --card: #F5F0EB;
-  --card-foreground: #2A2A2A;
+  --foreground: #181818;
+  --card: #F5F5F4;
+  --card-foreground: #181818;
   --popover: #FFFFFF;
-  --popover-foreground: #2A2A2A;
-  --primary: #9b6b42;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F5F0EB;
-  --secondary-foreground: #2A2A2A;
-  --muted: #F5F0EB;
-  --muted-foreground: #666666;
-  --accent: #1B6B45;
-  --accent-foreground: #FFFFFF;
+  --popover-foreground: #181818;
+  --primary: #C8A45D;
+  --primary-foreground: #111111;
+  --secondary: #F5F5F4;
+  --secondary-foreground: #181818;
+  --muted: #F5F5F4;
+  --muted-foreground: #6A6A6A;
+  --accent: #C8A45D;
+  --accent-foreground: #111111;
   --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
   --border: #E5E5E5;

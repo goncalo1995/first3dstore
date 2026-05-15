@@ -103,7 +103,7 @@ const rules = {
       validShipping:
         "data.shippingMethod in ['pickup_carcavelos', 'mainland_portugal']",
       validPayment:
-        "data.paymentPreference in ['mbway', 'bank_transfer', 'cash_pickup', 'other']",
+        "data.paymentPreference in ['mbway', 'bank_transfer', 'cash_pickup', 'other', 'stripe']",
       totalsReasonable:
         "data.subtotal >= 0 && data.shippingCost >= 0 && data.total >= data.subtotal && data.total <= 1000",
       hasContact:

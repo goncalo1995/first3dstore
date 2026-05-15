@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { db } from '@/lib/db'
+import { sendAdminMagicCode } from './actions'
 
 export function LoginPanel() {
   const [email, setEmail] = useState('')
@@ -21,7 +22,7 @@ export function LoginPanel() {
 
     try {
       if (!sent) {
-        await db.auth.sendMagicCode({ email })
+        await sendAdminMagicCode(email)
         setSent(true)
       } else if (sent) {
         await db.auth.signInWithMagicCode({ email, code })

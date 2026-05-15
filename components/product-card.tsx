@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { getProductCategorySlugs, type Product, type ProductVariantOption } from '@/lib/products'
+import { getProductCategorySlugs, getSellableColors, type Product, type ProductVariantOption } from '@/lib/products'
 import { Button } from '@/components/ui/button'
 
 interface ProductCardProps {
@@ -13,7 +13,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const variants = product.variants ?? []
   const categorySlugs = getProductCategorySlugs(product)
   const isLithophane = categorySlugs.includes('lithophane')
-  const productHref = isLithophane ? `/produto/${product.slug}` : `/product/${product.slug}`
+  const productHref = `/produto/${product.slug}`
   const variantPrices = variants
     .map(variant => getVariantPrice(product, variant))
     .filter(price => Number.isFinite(price))
@@ -21,13 +21,10 @@ export function ProductCard({ product }: ProductCardProps) {
   const ctaHref = isLithophane && product.customizable && variants.length
     ? `/configurador?produto=${encodeURIComponent(product.slug)}`
     : productHref
-  const ctaLabel = !product.customizable && !variants.length
-    ? 'Brevemente'
-    : isLithophane && variants.length
+  const ctaLabel = variants.length
       ? 'Personalizar'
       : 'Ver Produto'
-  const ctaDisabled = !product.customizable && !variants.length
-  const finishSwatches = getUniqueVariantFinishes(product)
+  const finishSwatches = getSellableColors(product)
 
   return (
     <article className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-colors hover:border-primary/30">
@@ -98,15 +95,9 @@ export function ProductCard({ product }: ProductCardProps) {
             <p className="font-semibold text-primary">€{lowestPrice}</p>
           </div>
         </div>
-        {ctaDisabled ? (
-          <Button disabled variant="outline" className="mt-4 w-full border-border text-muted-foreground">
-            {ctaLabel}
-          </Button>
-        ) : (
-          <Button asChild variant="outline" className="mt-4 w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-            <Link href={ctaHref}>{ctaLabel}</Link>
-          </Button>
-        )}
+        <Button asChild variant="outline" className="mt-4 w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+          <Link href={ctaHref}>{ctaLabel}</Link>
+        </Button>
       </div>
     </article>
   )
@@ -116,19 +107,4 @@ function getVariantPrice(product: Product, variant?: ProductVariantOption) {
   const basePrice = product.salePrice ?? product.priceFrom
   if (variant?.finalPrice !== undefined) return variant.finalPrice
   return basePrice + (variant?.priceAdd ?? 0)
-}
-
-function getUniqueVariantFinishes(product: Product) {
-  const byName = new Map<string, { name: string; hex: string; imageUrl?: string }>()
-  product.variants?.forEach(variant => {
-    variant.colors.forEach(color => {
-      if (!byName.has(color.name)) {
-        byName.set(color.name, { name: color.name, hex: color.hex, imageUrl: color.imageUrl })
-      }
-    })
-  })
-  product.colors.forEach(color => {
-    if (!byName.has(color.name)) byName.set(color.name, color)
-  })
-  return [...byName.values()]
 }

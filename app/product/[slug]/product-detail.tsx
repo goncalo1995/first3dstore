@@ -9,7 +9,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useCart } from '@/lib/cart-context'
 import { db } from '@/lib/db'
-import { applyCatalogProduct, applyInventory, getProductMaterialRecipe, type CatalogProductRecord, type Product, type ProductColor } from '@/lib/products'
+import {
+  applyCatalogProduct,
+  applyInventory,
+  getProductMaterialRecipe,
+  getSellableColors,
+  normalizeProductVariants,
+  type CatalogProductRecord,
+  type GlobalColor,
+  type Product,
+  type ProductColor,
+  type ProductVariantPart,
+} from '@/lib/products'
 import { WHATSAPP_NUMBER } from '@/data/constants'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
@@ -39,6 +50,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
       categories: {},
       inventory: {},
     },
+    globalColors: {},
   })
   const displayProduct = useMemo(() => {
     const catalogProduct = inventoryQuery.data?.catalogProducts?.[0] as CatalogProductRecord | undefined
@@ -58,9 +70,21 @@ export function ProductDetail({ product }: ProductDetailProps) {
     [displayProduct.image, displayProduct.images],
   )
   const isSoldOut = displayProduct.stockStatus === 'sold_out' || displayProduct.visible === false
+  const globalColors = useMemo(
+    () => (inventoryQuery.data?.globalColors ?? []) as GlobalColor[],
+    [inventoryQuery.data?.globalColors],
+  )
+  const productColors = useMemo(() => {
+    const colors = getSellableColors(displayProduct, globalColors)
+    return colors.length ? colors : displayProduct.colors
+  }, [displayProduct, globalColors])
+  const normalizedVariants = useMemo(
+    () => normalizeProductVariants({ ...displayProduct, colors: productColors }, globalColors),
+    [displayProduct, globalColors, productColors],
+  )
 
   const [activeImage, setActiveImage] = useState(productImages[0])
-  const [selectedColors, setSelectedColors] = useState<ProductColor[]>([displayProduct.colors[0]])
+  const [selectedColors, setSelectedColors] = useState<ProductColor[]>([productColors[0]])
   const [selectedPartColors, setSelectedPartColors] = useState<Record<string, ProductColor>>({})
   const [selectedVariantId, setSelectedVariantId] = useState(displayProduct.variants?.[0]?.id ?? '')
   const [openPartKey, setOpenPartKey] = useState<string | null>(null)
@@ -79,22 +103,45 @@ export function ProductDetail({ product }: ProductDetailProps) {
   const hasCustomColorRequest = customColorHex.trim().length > 0
   const hasPersonalizedText = Object.values(customizations).some(value => value.trim().length > 0)
   const selectedVariant = useMemo(() => {
-    return displayProduct.variants?.find(variant => variant.id === selectedVariantId) ?? displayProduct.variants?.[0]
-  }, [displayProduct.variants, selectedVariantId])
+    return normalizedVariants.find(variant => variant.id === selectedVariantId) ?? normalizedVariants[0]
+  }, [normalizedVariants, selectedVariantId])
+  const selectedVariantColorMode = selectedVariant?.colorMode
+    ?? (usesPresetOptions ? 'fixed' : usesFlexibleParts ? 'multi_part' : 'customer_choice')
+  const usesVariantCustomerChoice = usesPresetOptions && selectedVariantColorMode === 'customer_choice'
+  const usesVariantMultiPart = usesPresetOptions && selectedVariantColorMode === 'multi_part'
+  const colorByGlobalId = useMemo(() => {
+    return new Map(productColors.filter(color => color.globalColorId).map(color => [color.globalColorId as string, color]))
+  }, [productColors])
+  const getAllowedColors = (allowedGlobalColorIds?: string[]) => {
+    if (!allowedGlobalColorIds?.length) return productColors
+    const allowed = allowedGlobalColorIds
+      .map(id => colorByGlobalId.get(id))
+      .filter(Boolean) as ProductColor[]
+    return allowed.length ? allowed : productColors
+  }
   const getOptionColor = (colorName: string, colorHex?: string): ProductColor => {
-    const inventoryColor = displayProduct.colors.find(color => color.name === colorName)
+    const inventoryColor = productColors.find(color => color.name === colorName)
     return inventoryColor ?? { name: colorName, hex: colorHex ?? '#d1d5db' }
   }
   const selectedOptionColors = useMemo(() => {
     return selectedVariant?.colors.map(color => getOptionColor(color.name, color.hex)) ?? []
-  }, [displayProduct.colors, selectedVariant])
+  }, [productColors, selectedVariant])
   const selectedParts = useMemo(() => {
-    if (!usesFlexibleParts) return []
+    if (!usesFlexibleParts && !usesVariantMultiPart) return []
 
-    return materialRecipe.map((part, index) => {
+    const parts = usesVariantMultiPart && selectedVariant?.parts?.length
+      ? selectedVariant.parts
+      : materialRecipe
+
+    return parts.map((part, index) => {
       const key = `${part.label}-${index}`
-      const defaultColor = displayProduct.colors[0]
-      const color = selectedPartColors[key] ?? defaultColor
+      const variantPart = part as ProductVariantPart
+      const allowedColors = getAllowedColors(variantPart.allowedGlobalColorIds)
+      const fixedColor = variantPart.fixedGlobalColorId ? colorByGlobalId.get(variantPart.fixedGlobalColorId) : undefined
+      const defaultColor = fixedColor ?? allowedColors[0] ?? productColors[0]
+      const color = variantPart.colorSource === 'none' || variantPart.colorSource === 'lithophane'
+        ? defaultColor
+        : selectedPartColors[key] ?? defaultColor
 
       return color
         ? {
@@ -105,7 +152,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
           }
         : null
     }).filter(Boolean) as { key: string; label: string; grams: number; color: ProductColor }[]
-  }, [displayProduct.colors, materialRecipe, selectedPartColors, usesFlexibleParts])
+  }, [colorByGlobalId, materialRecipe, productColors, selectedPartColors, selectedVariant?.parts, usesFlexibleParts, usesVariantMultiPart])
   const selectedFastCapacity = usesPresetOptions
     ? selectedVariant?.stockQuantity ?? 0
     : !isMultiColor && selectedColors.length === colorCount
@@ -117,46 +164,65 @@ export function ProductDetail({ product }: ProductDetailProps) {
   }, [productImages])
 
   useEffect(() => {
-    if (!displayProduct.variants?.length) return
+    if (!normalizedVariants.length) return
     setSelectedVariantId(current => {
-      if (displayProduct.variants?.some(variant => variant.id === current)) return current
-      return displayProduct.variants?.[0]?.id ?? ''
+      if (normalizedVariants.some(variant => variant.id === current)) return current
+      return normalizedVariants[0]?.id ?? ''
     })
-  }, [displayProduct.variants])
+  }, [normalizedVariants])
 
   useEffect(() => {
-    if (!displayProduct.colors.length) return
+    if (!productColors.length) return
 
     setSelectedColors(prev => {
-      const activeNames = new Set(displayProduct.colors.map(color => color.name))
-      const stillAvailable = prev.filter(color => activeNames.has(color.name))
+      const activeKeys = new Set(productColors.map(color => color.globalColorId ?? color.name))
+      const stillAvailable = prev.filter(color => activeKeys.has(color.globalColorId ?? color.name))
 
       if (stillAvailable.length) {
         return stillAvailable.slice(0, colorCount)
       }
 
-      return [displayProduct.colors[0]]
+      return [productColors[0]]
     })
-  }, [displayProduct.colors, colorCount])
+  }, [productColors, colorCount])
 
   useEffect(() => {
-    if (!displayProduct.colors.length) return
+    if (!productColors.length) return
 
     setSelectedPartColors(prev => {
-      const activeNames = new Set(displayProduct.colors.map(color => color.name))
+      const activeKeys = new Set(productColors.map(color => color.globalColorId ?? color.name))
       const next: Record<string, ProductColor> = {}
 
-      materialRecipe.forEach((part, index) => {
+      const parts = usesVariantMultiPart && selectedVariant?.parts?.length
+        ? selectedVariant.parts
+        : materialRecipe
+
+      parts.forEach((part, index) => {
         const key = `${part.label}-${index}`
         const savedColor = prev[key]
-        next[key] = savedColor && activeNames.has(savedColor.name)
+        const allowedColors = getAllowedColors((part as ProductVariantPart).allowedGlobalColorIds)
+        const fixedColor = (part as ProductVariantPart).fixedGlobalColorId
+          ? colorByGlobalId.get((part as ProductVariantPart).fixedGlobalColorId as string)
+          : undefined
+        next[key] = savedColor && activeKeys.has(savedColor.globalColorId ?? savedColor.name)
           ? savedColor
-          : displayProduct.colors[0]
+          : fixedColor ?? allowedColors[0] ?? productColors[0]
       })
 
       return next
     })
-  }, [displayProduct.colors, materialRecipe])
+  }, [colorByGlobalId, materialRecipe, productColors, selectedVariant?.parts, usesVariantMultiPart])
+
+  useEffect(() => {
+    if (!usesVariantCustomerChoice || !selectedVariant) return
+    const allowedColors = getAllowedColors(selectedVariant.allowedGlobalColorIds)
+    if (!allowedColors.length) return
+    setSelectedColors(prev => {
+      const currentKey = prev[0]?.globalColorId ?? prev[0]?.name
+      if (allowedColors.some(color => (color.globalColorId ?? color.name) === currentKey)) return prev
+      return [allowedColors[0]]
+    })
+  }, [selectedVariant, usesVariantCustomerChoice, productColors])
 
   const activeCustomizationOptions = useMemo(
     () => selectedVariant?.kind === 'custom_text'
@@ -182,17 +248,18 @@ export function ProductDetail({ product }: ProductDetailProps) {
 
   const basePrice = displayProduct.salePrice ?? displayProduct.priceFrom
   const hasSalePrice = typeof displayProduct.salePrice === 'number' && displayProduct.salePrice > 0 && displayProduct.salePrice < displayProduct.priceFrom
-  const colorPriceAdd = usesPresetOptions
-    ? selectedVariant?.finalPrice
-      ? 0
-      : selectedVariant?.priceAdd ?? 0
-    : isMultiColor
-      ? displayProduct.multiColorPriceAdd ?? 0
-      : 0
+  const variantPriceAdd = usesPresetOptions && !selectedVariant?.finalPrice ? selectedVariant?.priceAdd ?? 0 : 0
+  const colorPriceAdd = usesVariantCustomerChoice
+    ? selectedColors[0]?.priceAdd ?? 0
+    : (usesFlexibleParts || usesVariantMultiPart)
+      ? selectedParts.reduce((sum, part) => sum + (part.color.priceAdd ?? 0), 0)
+      : isMultiColor && !usesPresetOptions
+        ? displayProduct.multiColorPriceAdd ?? 0
+        : 0
   const optionBasePrice = usesPresetOptions && selectedVariant?.finalPrice
     ? selectedVariant.finalPrice
     : basePrice
-  const currentPrice = optionBasePrice + customizationPriceAdd + colorPriceAdd
+  const currentPrice = optionBasePrice + customizationPriceAdd + variantPriceAdd + colorPriceAdd
 
   // Shipping estimate based on stock and customization
   const hasFastStock = selectedFastCapacity >= quantity && !hasPersonalizedText && !hasCustomColorRequest
@@ -216,7 +283,7 @@ export function ProductDetail({ product }: ProductDetailProps) {
   }
 
   const handlePartColorChange = (partKey: string, colorName: string) => {
-    const color = displayProduct.colors.find(item => item.name === colorName)
+    const color = productColors.find(item => item.name === colorName)
     if (!color) return
     setSelectedPartColors(prev => ({ ...prev, [partKey]: color }))
     setSelectedColors([color])
@@ -254,19 +321,28 @@ export function ProductDetail({ product }: ProductDetailProps) {
       hex: getOptionColor(color.name, color.hex).hex,
       imageUrl: color.imageUrl,
       globalColorId: color.globalColorId,
+      priceAdd: color.priceAdd,
     }))
-    const primaryOptionColor = selectedOptionColors[0]
+    const primaryOptionColor = usesVariantCustomerChoice ? selectedColors[0] : selectedOptionColors[0]
 
     addItem({
       product: displayProduct,
       quantity,
       selectedColor: primaryOptionColor ?? selectedParts[0]?.color ?? selectedColors[0],
-      selectedColors: usesFlexibleParts ? selectedParts.map(part => part.color) : usesPresetOptions ? selectedOptionColors : undefined,
-      selectedParts: usesFlexibleParts
+      selectedColors: usesFlexibleParts || usesVariantMultiPart
+        ? selectedParts.map(part => part.color)
+        : usesVariantCustomerChoice
+          ? selectedColors
+          : usesPresetOptions
+            ? selectedOptionColors
+            : undefined,
+      selectedParts: usesFlexibleParts || usesVariantMultiPart
         ? selectedParts.map(part => ({
             label: part.label,
             colorName: part.color.name,
             colorHex: part.color.hex,
+            globalColorId: part.color.globalColorId,
+            colorPriceAdd: part.color.priceAdd,
             grams: part.grams,
           }))
         : undefined,
@@ -275,6 +351,8 @@ export function ProductDetail({ product }: ProductDetailProps) {
             id: selectedVariant.id,
             name: selectedVariant.name,
             kind: selectedVariant.kind,
+            colorMode: selectedVariant.colorMode,
+            allowedGlobalColorIds: selectedVariant.allowedGlobalColorIds,
             colors: selectedOptionCartColors ?? [],
             image: selectedVariant.image,
             priceAdd: selectedVariant.priceAdd,
@@ -324,9 +402,9 @@ Por favor, confirme a disponibilidade!`
   const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappMessage)}`
 
   const handleShare = async () => {
-    const shareUrl = typeof window !== 'undefined' ? window.location.href : `/product/${product.slug}`
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : `/produto/${product.slug}`
     const shareTitle = displayProduct.name
-    const shareText = `${displayProduct.name} da Foto3d.pt - ${displayProduct.benefit}`
+    const shareText = `${displayProduct.name} da EM3D - ${displayProduct.benefit}`
     
     const shareData: ShareData = {
       title: shareTitle,
@@ -374,7 +452,7 @@ Por favor, confirme a disponibilidade!`
       {/* Breadcrumb */}
       <div className="container mx-auto px-4 py-4">
         <Link
-          href="/shop"
+          href="/loja"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -551,7 +629,7 @@ Por favor, confirme a disponibilidade!`
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        {displayProduct.variants?.map(variant => {
+                        {normalizedVariants.map(variant => {
                           const selected = selectedVariant?.id === variant.id
                           const variantColors = variant.colors.map(color => getOptionColor(color.name, color.hex))
                           const variantPriceLabel = variant.finalPrice
@@ -585,7 +663,16 @@ Por favor, confirme a disponibilidade!`
                                 {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                               </div>
                               <div className="mt-3 flex -space-x-2">
-                                {variantColors.slice(0, 5).map((color, index) => (
+                                {variant.colorMode === 'customer_choice'
+                                  ? getAllowedColors(variant.allowedGlobalColorIds).slice(0, 5).map((color, index) => (
+                                    <span
+                                      key={`${variant.id}-${color.globalColorId ?? color.name}-${index}`}
+                                      className="h-7 w-7 rounded-full border-1 border-background shadow-md"
+                                      style={{ backgroundColor: color.hex }}
+                                      title={color.name}
+                                    />
+                                  ))
+                                  : variantColors.slice(0, 5).map((color, index) => (
                                   <span
                                     key={`${variant.id}-${color.name}-${index}`}
                                     className="h-7 w-7 rounded-full border-1 border-background shadow-md"
@@ -601,6 +688,84 @@ Por favor, confirme a disponibilidade!`
                           )
                         })}
                       </div>
+                      {usesVariantCustomerChoice && (
+                        <div className="space-y-3">
+                          <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Cor
+                          </Label>
+                          <div className="flex flex-wrap gap-2">
+                            {getAllowedColors(selectedVariant?.allowedGlobalColorIds).map(color => {
+                              const selected = (selectedColors[0]?.globalColorId ?? selectedColors[0]?.name) === (color.globalColorId ?? color.name)
+                              return (
+                                <button
+                                  key={color.globalColorId ?? color.name}
+                                  type="button"
+                                  onClick={() => setSelectedColors([color])}
+                                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition ${
+                                    selected ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:border-primary/50'
+                                  }`}
+                                >
+                                  <span
+                                    className="h-4 w-4 rounded-full border border-border"
+                                    style={{ backgroundColor: color.hex }}
+                                    aria-hidden="true"
+                                  />
+                                  {color.name}
+                                  {(color.priceAdd ?? 0) > 0 && (
+                                    <span className="text-xs text-muted-foreground">+€{color.priceAdd?.toFixed(2)}</span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {usesVariantMultiPart && selectedParts.length > 0 && (
+                        <div className="space-y-3">
+                          <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Cores por peça
+                          </Label>
+                          <div className="space-y-2">
+                            {selectedParts.map(part => {
+                              const variantPart = selectedVariant?.parts?.find((candidate, index) => `${candidate.label}-${index}` === part.key)
+                              const allowedColors = getAllowedColors(variantPart?.allowedGlobalColorIds)
+                              const locked = variantPart?.colorSource === 'none' || variantPart?.colorSource === 'lithophane' || Boolean(variantPart?.fixedGlobalColorId)
+                              return (
+                                <div key={part.key} className="rounded-lg border border-border bg-background p-3">
+                                  <div className="mb-2 flex items-center justify-between gap-3">
+                                    <p className="text-sm font-medium text-foreground">{part.label}</p>
+                                    <span className="text-xs text-muted-foreground">{part.grams}g</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(locked ? [part.color] : allowedColors).map(color => {
+                                      const selected = (part.color.globalColorId ?? part.color.name) === (color.globalColorId ?? color.name)
+                                      return (
+                                        <button
+                                          key={`${part.key}-${color.globalColorId ?? color.name}`}
+                                          type="button"
+                                          disabled={locked}
+                                          onClick={() => handlePartColorChange(part.key, color.name)}
+                                          className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                                            selected ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-secondary/40 text-muted-foreground hover:border-primary/50'
+                                          } ${locked ? 'cursor-default opacity-80' : ''}`}
+                                        >
+                                          <span
+                                            className="h-3.5 w-3.5 rounded-full border border-border"
+                                            style={{ backgroundColor: color.hex }}
+                                            aria-hidden="true"
+                                          />
+                                          {color.name}
+                                          {(color.priceAdd ?? 0) > 0 && <span>+€{color.priceAdd?.toFixed(2)}</span>}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                 ) : usesFlexibleParts ? (
                   <div className="space-y-4">
@@ -628,9 +793,9 @@ Por favor, confirme a disponibilidade!`
                             <Command>
                               <CommandList>
                                 <CommandGroup>
-                                  {displayProduct.colors.map(color => (
+                                  {productColors.map(color => (
                                     <CommandItem
-                                      key={color.name}
+                                      key={color.globalColorId ?? color.name}
                                       value={color.name}
                                       onSelect={() => {
                                         handlePartColorChange(part.key, color.name)
@@ -669,11 +834,11 @@ Por favor, confirme a disponibilidade!`
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {displayProduct.colors.map((color) => {
-                      const isSelected = selectedColors.some(c => c.name === color.name)
+                    {productColors.map((color) => {
+                      const isSelected = selectedColors.some(c => (c.globalColorId ?? c.name) === (color.globalColorId ?? color.name))
                       return (
                         <button
-                          key={color.name}
+                          key={color.globalColorId ?? color.name}
                           onClick={() => handleColorToggle(color)}
                           className={`relative w-10 h-10 rounded-full transition-all ${
                             isSelected

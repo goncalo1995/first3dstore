@@ -29,7 +29,7 @@ export default function AboutPage() {
               <div className="aspect-[4/3] relative rounded-lg overflow-hidden bg-secondary">
                 <Image
                   src="/about/workshop.jpg"
-                  alt="Oficina da Foto3D em Lisboa"
+                  alt="Oficina de impressão 3D em Lisboa"
                   fill
                   className="object-cover"
                   sizes="(max-width: 1024px) 100vw, 50vw"
@@ -145,7 +145,7 @@ export default function AboutPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" variant="secondary" className="bg-white text-primary hover:bg-white/90">
-                <Link href="/shop">
+                <Link href="/loja">
                   Comprar agora
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Link>

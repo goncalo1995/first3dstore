@@ -18,7 +18,7 @@ export function ProductNotFoundContent() {
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Link href="/shop">
+              <Link href="/loja">
                 <ShoppingBag className="w-4 h-4 mr-2" />
                 Ver loja
               </Link>

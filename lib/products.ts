@@ -5,6 +5,8 @@ export interface ProductColor {
   name: string
   hex: string
   imageUrl?: string
+  globalColorId?: string
+  priceAdd?: number
   stockQuantity?: number
   gramsAvailable?: number
 }
@@ -20,6 +22,7 @@ export interface ProductVariantOption {
   id: string
   name: string
   kind: 'single_color' | 'preset_pack' | 'custom_text'
+  colorMode?: 'fixed' | 'customer_choice' | 'multi_part'
   image?: string
   priceAdd?: number
   finalPrice?: number
@@ -45,7 +48,9 @@ export interface ProductVariantOption {
     hex: string
     imageUrl?: string
     globalColorId?: string
+    priceAdd?: number
   }[]
+  allowedGlobalColorIds?: string[]
   parts?: ProductVariantPart[]
   customizationOptions?: CustomizationOption[]
 }
@@ -54,7 +59,9 @@ export interface ProductVariantPart {
   label: string
   grams: number
   materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+  fixedGlobalColorId?: string
+  allowedGlobalColorIds?: string[]
   requiresLithophaneProcessing?: boolean
 }
 
@@ -109,19 +116,23 @@ export interface Product {
 
 export interface GlobalColor extends ProductColor {
   id?: string
+  isActive?: boolean
   gramsAvailable: number
   spoolStatus: 'available' | 'low' | 'archived'
   supplierUrl?: string
   pricePerKg?: number
+  priceAdd?: number
   notes?: string
 }
 
 export interface ProductColorInventory {
+  globalColorId?: string
   colorName: string
   colorHex: string
   offered: boolean
   stockQuantity: number
   gramsAvailable?: number
+  priceAdd?: number
 }
 
 export interface ProductInventory {
@@ -140,7 +151,9 @@ export interface ProductMaterialRequirement {
   colorName?: string
   grams: number
   materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
-  colorSource?: 'variantColor' | 'partColor' | 'lithophane' | 'none'
+  colorSource?: 'variantColor' | 'partColor' | 'fixed' | 'customer_choice' | 'lithophane' | 'none'
+  fixedGlobalColorId?: string
+  allowedGlobalColorIds?: string[]
   requiresLithophaneProcessing?: boolean
 }
 
@@ -237,23 +250,35 @@ export function deriveProductDisplayColors(product: {
   inventory?: Partial<ProductInventory> | null
   fallbackColors?: ProductColor[]
 }): ProductColor[] {
-  const byName = new Map<string, ProductColor>()
+  const byKey = new Map<string, ProductColor>()
 
   const inventoryColorByName = new Map<string, ProductColorInventory>()
+  const inventoryColorById = new Map<string, ProductColorInventory>()
   product.inventory?.colorInventory?.forEach(color => {
     const name = color.colorName?.trim()
     if (name) inventoryColorByName.set(name, color)
+    if (color.globalColorId) inventoryColorById.set(color.globalColorId, color)
   })
+
+  const addColor = (color: ProductColor | undefined) => {
+    if (!color?.name) return
+    const key = color.globalColorId ?? color.name.toLowerCase().trim()
+    if (byKey.has(key)) return
+    byKey.set(key, color)
+  }
 
   product.variants?.forEach(variant => {
     variant.colors?.forEach(color => {
       const name = color.name?.trim()
-      if (!name || byName.has(name)) return
-      const inventoryColor = inventoryColorByName.get(name)
-      byName.set(name, {
+      if (!name) return
+      const inventoryColor = (color.globalColorId ? inventoryColorById.get(color.globalColorId) : undefined)
+        ?? inventoryColorByName.get(name)
+      addColor({
         name,
         hex: color.hex ?? inventoryColor?.colorHex ?? '#d1d5db',
         imageUrl: color.imageUrl,
+        globalColorId: color.globalColorId ?? inventoryColor?.globalColorId,
+        priceAdd: color.priceAdd ?? inventoryColor?.priceAdd,
         stockQuantity: inventoryColor?.stockQuantity,
         gramsAvailable: inventoryColor?.gramsAvailable,
       })
@@ -262,17 +287,123 @@ export function deriveProductDisplayColors(product: {
 
   product.inventory?.colorInventory?.forEach(color => {
     const name = color.colorName?.trim()
-    if (!name || byName.has(name) || !color.offered) return
-    byName.set(name, {
+    if (!name || !color.offered) return
+    addColor({
       name,
       hex: color.colorHex,
+      globalColorId: color.globalColorId,
+      priceAdd: color.priceAdd,
       stockQuantity: color.stockQuantity,
       gramsAvailable: color.gramsAvailable,
     })
   })
 
-  if (byName.size > 0) return [...byName.values()]
+  if (byKey.size > 0) return [...byKey.values()]
   return product.fallbackColors ?? []
+}
+
+function normalizeColorName(value: string | undefined) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function colorKey(color: Pick<ProductColor, 'name' | 'globalColorId'>) {
+  return color.globalColorId ?? normalizeColorName(color.name)
+}
+
+function colorFromGlobal(globalColor: GlobalColor): ProductColor {
+  return {
+    name: globalColor.name,
+    hex: globalColor.hex,
+    imageUrl: globalColor.imageUrl,
+    globalColorId: globalColor.id ?? globalColor.globalColorId,
+    priceAdd: globalColor.priceAdd,
+    stockQuantity: globalColor.stockQuantity,
+    gramsAvailable: globalColor.gramsAvailable,
+  }
+}
+
+export function getSellableColors(product: Product, globalColors: GlobalColor[] = []): ProductColor[] {
+  const byKey = new Map<string, ProductColor>()
+  const globalById = new Map<string, ProductColor>()
+  const globalByName = new Map<string, ProductColor>()
+
+  const add = (color: ProductColor | undefined) => {
+    if (!color?.name) return
+    const key = colorKey(color)
+    if (byKey.has(key)) return
+    byKey.set(key, color)
+  }
+
+  globalColors
+    .filter(color => color.isActive !== false && color.spoolStatus !== 'archived')
+    .forEach(color => {
+      const normalized = colorFromGlobal(color)
+      if (normalized.globalColorId) globalById.set(normalized.globalColorId, normalized)
+      globalByName.set(normalizeColorName(normalized.name), normalized)
+    })
+
+  product.colors?.forEach(color => {
+    const global = color.globalColorId ? globalById.get(color.globalColorId) : globalByName.get(normalizeColorName(color.name))
+    add({ ...color, priceAdd: color.priceAdd ?? global?.priceAdd })
+  })
+
+  product.variants?.forEach(variant => {
+    variant.colors?.forEach(color => {
+      const global = color.globalColorId ? globalById.get(color.globalColorId) : globalByName.get(normalizeColorName(color.name))
+      add({
+        name: color.name,
+        hex: color.hex,
+        imageUrl: color.imageUrl,
+        globalColorId: color.globalColorId ?? global?.globalColorId,
+        priceAdd: color.priceAdd ?? global?.priceAdd,
+      })
+    })
+
+    variant.allowedGlobalColorIds?.forEach(id => {
+      add(globalById.get(id))
+    })
+
+    variant.parts?.forEach(part => {
+      if (part.fixedGlobalColorId) add(globalById.get(part.fixedGlobalColorId))
+      part.allowedGlobalColorIds?.forEach(id => add(globalById.get(id)))
+    })
+  })
+
+  return [...byKey.values()]
+}
+
+export function normalizeProductVariants(
+  product: Product,
+  globalColors: GlobalColor[] = [],
+): ProductVariantOption[] {
+  const sellableColors = getSellableColors(product, globalColors)
+  const byId = new Map(sellableColors.filter(color => color.globalColorId).map(color => [color.globalColorId as string, color]))
+
+  return (product.variants ?? []).map(variant => {
+    const colorMode = variant.colorMode
+      ?? (variant.parts?.length || variant.requiresPartColorSelection ? 'multi_part' : variant.colors?.length ? 'fixed' : 'customer_choice')
+    const colors = (variant.colors ?? []).map(color => {
+      const globalColor = color.globalColorId ? byId.get(color.globalColorId) : undefined
+      return {
+        ...color,
+        name: color.name || globalColor?.name || 'Cor',
+        hex: color.hex || globalColor?.hex || '#d1d5db',
+        imageUrl: color.imageUrl ?? globalColor?.imageUrl,
+        priceAdd: color.priceAdd ?? globalColor?.priceAdd,
+      }
+    })
+
+    return {
+      ...variant,
+      colorMode,
+      colors: colors.length ? colors : colorMode === 'fixed' ? sellableColors.slice(0, 1) : colors,
+      allowedGlobalColorIds: variant.allowedGlobalColorIds ?? [],
+      parts: variant.parts?.map(part => ({
+        ...part,
+        colorSource: part.colorSource ?? (colorMode === 'multi_part' ? 'customer_choice' : 'variantColor'),
+      })),
+    }
+  })
 }
 
 // All available colors with their hex values

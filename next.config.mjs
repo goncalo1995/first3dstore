@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  allowedDevOrigins: ['192.168.1.7'],
+  allowedDevOrigins: ['192.168.1.7', '192.168.1.11'],
   images: {
     //   unoptimized: true,
     remotePatterns: [
@@ -28,6 +28,10 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'i.etsystatic.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
       },
     ],
   },

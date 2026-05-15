@@ -609,7 +609,19 @@ export function ProductionSchedule({ jobs, printers }: ProductionScheduleProps) 
                                 style={{ backgroundColor: req.colorHex || startDialogJob.colorHex || '#e5e7eb', borderColor: req.colorHex || startDialogJob.colorHex || '#e5e7eb' }}
                               />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-black truncate">{req.colorName || startDialogJob.colorName}</p>
+                                <p className="text-sm font-black truncate">
+                                  {req.colorName || startDialogJob.colorName}
+                                  {req.resolvedBy && req.resolvedBy !== 'globalColorId' && (
+                                    <span
+                                      className="ml-1 text-amber-500"
+                                      title="Cor resolvida por nome; pode não corresponder exactamente ao material actual"
+                                      role="img"
+                                      aria-label="Warning: color resolved by name; may not match current material"
+                                    >
+                                      ⚠
+                                    </span>
+                                  )}
+                                </p>
                                 <p className="text-[9px] text-muted-foreground font-bold uppercase">
                                   {suggestedMaterial} • {req.grams || startDialogJob.materialGrams}g
                                 </p>

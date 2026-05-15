@@ -5,14 +5,14 @@ import { Footer } from '@/components/footer'
 import { WhatsAppButton } from '@/components/whatsapp-button'
 import { getCatalogProductsForBuild } from '@/lib/catalog'
 import { categoryLabels } from '@/lib/products'
-import { ShopContent } from './shop-content'
+import { LojaContent } from './loja-content'
 
 export const metadata: Metadata = {
-  title: 'Loja | foto3d.pt',
-  description: 'Loja de produtos personalizados, impressos em 3D. Produção Local em Lisboa',
+  title: 'Loja | EM3D',
+  description: 'Loja de objetos úteis e personalizados, impressos em 3D em Portugal.',
 }
 
-export default async function ShopPage() {
+export default async function LojaPage() {
   const products = await getCatalogProductsForBuild()
 
   return (
@@ -21,23 +21,23 @@ export default async function ShopPage() {
       <main className="min-h-screen bg-background">
         <section className="border-b border-border bg-[#121212] text-white">
           <div className="container mx-auto px-4 py-10 md:py-14">
-            <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-primary">Impressão 3D local</p>
+            <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-primary">Impressão 3D em Portugal</p>
             <h1 className="mt-3 font-serif text-4xl font-bold tracking-tight md:text-5xl">
-              Loja foto3d
+              Loja EM3D
             </h1>
             <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-white/68">
-              Presentes personalizados, lithophanes e pequenas séries produzidas em Portugal, com revisão humana antes da produção.
+              Objetos úteis, presentes personalizados e pequenas séries produzidas em Portugal, com revisão humana antes da produção.
             </p>
             <div className="mt-6 flex flex-wrap gap-2 font-sans text-xs text-white/58">
-              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Lithophanes</span>
-              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Brindes</span>
+              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Casa</span>
+              <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Secretária</span>
               <span className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5">Peças por encomenda</span>
             </div>
           </div>
         </section>
 
         <Suspense fallback={<ShopSkeleton />}>
-          <ShopContent products={products} categoryLabels={categoryLabels} />
+          <LojaContent products={products} categoryLabels={categoryLabels} />
         </Suspense>
       </main>
       <Footer />
