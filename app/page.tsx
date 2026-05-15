@@ -179,12 +179,20 @@ export default function HomePage() {
               Preview 2D leve, preço em tempo real e compra direta.
             </p>
           </div>
-          <Button asChild size="lg" className="h-14 bg-primary px-7 text-base font-bold text-primary-foreground hover:bg-primary/90">
-            <Link href="/criar/headset-stand">
-              Configurar agora
-              <ArrowRight className="size-5" />
-            </Link>
-          </Button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg" className="h-14 bg-primary px-7 text-base font-bold text-primary-foreground hover:bg-primary/90">
+              <Link href="/criar/headset-stand">
+                Configurar agora
+                <ArrowRight className="size-5" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-14 border-white/15 bg-white/6 px-7 text-base font-bold text-white hover:bg-white hover:text-[#09090b]">
+              <Link href="/criar/desk">
+                Criar o meu setup
+                <ArrowRight className="size-5" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </section>
 

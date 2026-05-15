@@ -2,6 +2,7 @@ import { DESK_SCHEMA_VERSION, getDeskProduct } from './products'
 import type { DeskItem, DeskRotation, DeskSetup, ValidationResult } from './types'
 
 const rotations = new Set<DeskRotation>([0, 90, 180, 270])
+export const MAX_DESK_ITEMS = 20
 
 export const deskDimensionLimits = {
   width: { min: 80, max: 200 },
@@ -10,6 +11,20 @@ export const deskDimensionLimits = {
 
 function isNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isAllowedBaseColor(item: DeskItem) {
+  const product = getDeskProduct(item.productId)
+  if (!product) return false
+  if (!item.colorBase) return true
+  return product.allowedColors.base.includes(item.colorBase as any)
+}
+
+function isAllowedAccentColor(item: DeskItem) {
+  const product = getDeskProduct(item.productId)
+  if (!product) return false
+  if (!item.colorAccent) return true
+  return product.allowedColors.accent.includes(item.colorAccent as any)
 }
 
 export function getItemFootprint(item: Pick<DeskItem, 'productId' | 'rotation'>) {
@@ -46,6 +61,34 @@ export function snapItemToGrid(item: DeskItem, desk: DeskSetup['desk']) {
     xCm: snapValue(item.xCm, desk.snapSizeCm),
     yCm: snapValue(item.yCm, desk.snapSizeCm),
   }, desk)
+}
+
+export function normalizeDeskSetupColors(setup: DeskSetup): { setup: DeskSetup; warnings: string[] } {
+  const warnings: string[] = []
+
+  const items = setup.items.map((item) => {
+    const product = getDeskProduct(item.productId)
+    if (!product) return item
+
+    const next: DeskItem = { ...item }
+    if (next.colorBase && !product.allowedColors.base.includes(next.colorBase as any)) {
+      next.colorBase = product.defaultColors.base
+      warnings.push(`A cor principal de ${product.name} já não estava disponível e foi reposta.`)
+    }
+    if (next.colorAccent && !product.allowedColors.accent.includes(next.colorAccent as any)) {
+      next.colorAccent = product.defaultColors.accent
+      warnings.push(`A cor de detalhe de ${product.name} já não estava disponível e foi reposta.`)
+    }
+    return next
+  })
+
+  return {
+    setup: {
+      ...setup,
+      items,
+    },
+    warnings,
+  }
 }
 
 function itemsOverlap(a: DeskItem, b: DeskItem) {
@@ -94,6 +137,10 @@ export function validateDeskSetup(setup: unknown): ValidationResult {
   if (!Array.isArray(candidate.items)) {
     errors.push('Lista de produtos inválida.')
   } else if (candidate.desk) {
+    if (candidate.items.length > MAX_DESK_ITEMS) {
+      errors.push(`O setup permite no máximo ${MAX_DESK_ITEMS} produtos.`)
+    }
+
     const counts = new Map<string, number>()
 
     candidate.items.forEach((item, index) => {
@@ -116,6 +163,14 @@ export function validateDeskSetup(setup: unknown): ValidationResult {
 
       if (!rotations.has(item.rotation)) {
         errors.push(`${product.name} tem uma rotação inválida.`)
+      }
+
+      if (!isAllowedBaseColor(item)) {
+        errors.push(`${product.name} tem uma cor principal inválida.`)
+      }
+
+      if (!isAllowedAccentColor(item)) {
+        errors.push(`${product.name} tem uma cor de detalhe inválida.`)
       }
 
       if (!isNumber(item.xCm) || !isNumber(item.yCm)) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Box,
@@ -13,6 +13,7 @@ import {
   Plus,
   RotateCw,
   Save,
+  Send,
   Smartphone,
   Trash2,
   Undo2,
@@ -20,6 +21,13 @@ import {
 } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Drawer,
   DrawerContent,
@@ -30,6 +38,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import {
   DESK_SCHEMA_VERSION,
@@ -44,10 +53,12 @@ import type { DeskColorName, DeskItem, DeskProductDefinition, DeskRotation, Desk
 import {
   clampItemToDesk,
   deskDimensionLimits,
-  getItemFootprint,
+  normalizeDeskSetupColors,
   snapItemToGrid,
   validateDeskSetup,
 } from '@/lib/desk/validation'
+
+const ONBOARDING_STORAGE_KEY = 'em3d-desk-onboarding-dismissed-v1'
 
 const defaultSetup = (): DeskSetup => {
   const now = new Date().toISOString()
@@ -164,6 +175,18 @@ export default function DeskBuilderPage() {
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
+  const [quoteOpen, setQuoteOpen] = useState(false)
+  const [isSubmittingQuote, setIsSubmittingQuote] = useState(false)
+  const [quoteError, setQuoteError] = useState('')
+  const [quoteSuccess, setQuoteSuccess] = useState('')
+  const [quoteForm, setQuoteForm] = useState({
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    shippingAddress: '',
+    notes: '',
+  })
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{
     itemId: string
@@ -185,15 +208,20 @@ export default function DeskBuilderPage() {
 
   useEffect(() => {
     try {
+      setShowOnboarding(window.localStorage.getItem(ONBOARDING_STORAGE_KEY) !== 'true')
       const saved = window.localStorage.getItem(DESK_STORAGE_KEY)
       if (!saved) return
       const parsed = JSON.parse(saved) as DeskSetup
-      const result = validateDeskSetup(parsed)
+      const normalized = normalizeDeskSetupColors(parsed)
+      const result = validateDeskSetup(normalized.setup)
       if (!result.valid) {
         setLoadWarning('O setup guardado já não é compatível. Começámos com uma secretária limpa.')
         return
       }
-      setSetup(parsed)
+      if (normalized.warnings.length) {
+        setLoadWarning(normalized.warnings.join(' '))
+      }
+      setSetup(normalized.setup)
     } catch {
       setLoadWarning('Não foi possível carregar o setup guardado. Começámos com uma secretária limpa.')
     }
@@ -214,6 +242,54 @@ export default function DeskBuilderPage() {
     return () => observer.disconnect()
   }, [])
 
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false
+      const tagName = target.tagName.toLowerCase()
+      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (setup.mode === 'focus') {
+          closeFocus()
+          return
+        }
+        mutateSetup((current) => ({ ...current, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))
+        return
+      }
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedItem && setup.mode === 'edit') {
+        event.preventDefault()
+        removeSelected()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'r' && selectedItem && setup.mode !== 'view') {
+        event.preventDefault()
+        rotateSelected()
+        return
+      }
+
+      if (event.key.toLowerCase() === 'g') {
+        event.preventDefault()
+        updateDesk({ showGrid: !setup.desk.showGrid })
+        return
+      }
+
+      if (event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        saveSetup()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedItem, setup.desk.showGrid, setup.mode, setup])
+
   function mutateSetup(updater: (current: DeskSetup) => DeskSetup) {
     setSetup((current) => {
       const next = updater(current)
@@ -233,6 +309,57 @@ export default function DeskBuilderPage() {
       window.localStorage.removeItem(DESK_STORAGE_KEY)
     } catch {
       // localStorage can fail in private modes; state reset still works.
+    }
+  }
+
+  function dismissOnboarding() {
+    setShowOnboarding(false)
+    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true')
+  }
+
+  function exportDebugJson() {
+    const payload = JSON.stringify({ setup, validation, pricing }, null, 2)
+    const blob = new Blob([payload], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `em3d-desk-setup-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function submitQuote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (isSubmittingQuote) return
+
+    setQuoteError('')
+    setQuoteSuccess('')
+    setIsSubmittingQuote(true)
+
+    try {
+      const response = await fetch('/api/desk/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...quoteForm,
+          setup,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || payload.success !== true) {
+        const fieldMessage = payload.fieldErrors
+          ? Object.values(payload.fieldErrors as Record<string, string>).join(' ')
+          : ''
+        throw new Error(fieldMessage || payload.message || 'Não foi possível enviar o pedido.')
+      }
+
+      saveSetup()
+      setQuoteSuccess(payload.message || 'Pedido enviado para revisão.')
+    } catch (error) {
+      setQuoteError(error instanceof Error ? error.message : 'Não foi possível enviar o pedido.')
+    } finally {
+      setIsSubmittingQuote(false)
     }
   }
 
@@ -601,6 +728,10 @@ export default function DeskBuilderPage() {
                 <Save className="size-4" />
                 Guardar setup
               </Button>
+              <Button type="button" onClick={() => setQuoteOpen(true)} className="h-10 bg-white font-bold text-[#09090b] hover:bg-white/90">
+                <Send className="size-4" />
+                Pedir orçamento
+              </Button>
               <Button type="button" variant="outline" onClick={resetSetup} className="hidden h-10 border-white/10 bg-white/6 text-white hover:bg-white hover:text-[#09090b] sm:inline-flex">
                 <Undo2 className="size-4" />
                 Repor
@@ -618,6 +749,29 @@ export default function DeskBuilderPage() {
                 <div key={warning} className="max-w-sm rounded-md border border-sky-300/30 bg-sky-500/12 px-3 py-2 text-xs text-sky-100">{warning}</div>
               ))}
             </div>
+
+            {showOnboarding && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute right-4 top-4 z-30 max-w-sm rounded-lg border border-primary/20 bg-[#111116]/92 p-4 shadow-2xl backdrop-blur-xl"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">Como funciona</p>
+                    <p className="mt-2 text-sm leading-6 text-white/62">
+                      Escolhe o tamanho da secretária, adiciona produtos, arrasta para reorganizar, clica para personalizar e pede orçamento quando estiver pronto.
+                    </p>
+                  </div>
+                  <button type="button" onClick={dismissOnboarding} className="text-white/42 hover:text-white" aria-label="Fechar ajuda">
+                    <X className="size-5" />
+                  </button>
+                </div>
+                <Button type="button" onClick={dismissOnboarding} className="mt-4 h-10 w-full bg-primary font-bold text-primary-foreground">
+                  Entendido
+                </Button>
+              </motion.div>
+            )}
 
             <div className="flex h-full min-h-[500px] items-center justify-center">
               <motion.div
@@ -647,6 +801,14 @@ export default function DeskBuilderPage() {
                   />
                 )}
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-linear-to-b from-white/18 to-transparent" />
+
+                {setup.mode === 'focus' && selectedItem && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="pointer-events-none absolute inset-0 z-[5] border-2 border-primary/40 bg-black/24 backdrop-blur-[1px]"
+                  />
+                )}
 
                 <AnimatePresence>
                   {setup.items.map((item) => {
@@ -681,7 +843,7 @@ export default function DeskBuilderPage() {
                           top: item.yCm * scale,
                           width: dimensions.width * scale,
                           height: dimensions.depth * scale,
-                          zIndex: (item.zIndex ?? 0) + (selected ? 100 : 0),
+                          zIndex: 10 + (item.zIndex ?? 0) + (selected ? 100 : 0),
                         }}
                       >
                         <DeskProductShape item={item} product={product} selected={selected} focused={focused} />
@@ -690,9 +852,6 @@ export default function DeskBuilderPage() {
                   })}
                 </AnimatePresence>
 
-                {setup.mode === 'focus' && selectedItem && (
-                  <div className="pointer-events-none absolute inset-0 border-2 border-primary/40 bg-black/20 backdrop-blur-[1px]" />
-                )}
               </motion.div>
             </div>
           </div>
@@ -751,6 +910,105 @@ export default function DeskBuilderPage() {
         </aside>
       </section>
 
+      <Dialog open={quoteOpen} onOpenChange={(open) => {
+        setQuoteOpen(open)
+        if (open) {
+          setQuoteError('')
+          setQuoteSuccess('')
+        }
+      }}>
+        <DialogContent className="border-white/10 bg-[#111116] text-white sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Pedir orçamento</DialogTitle>
+            <DialogDescription className="text-white/58">
+              Envia o teu setup para revisão. Respondemos por email com confirmação final antes de produção.
+            </DialogDescription>
+          </DialogHeader>
+
+          {quoteSuccess ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/12 p-5">
+              <p className="font-black text-primary">{quoteSuccess}</p>
+              <p className="mt-2 text-sm leading-6 text-white/64">
+                Mantivemos o setup guardado neste dispositivo para poderes continuar a ajustar depois.
+              </p>
+              <Button type="button" onClick={() => setQuoteOpen(false)} className="mt-5 h-11 w-full bg-primary font-bold text-primary-foreground">
+                Fechar
+              </Button>
+            </div>
+          ) : (
+            <form className="space-y-4" onSubmit={submitQuote}>
+              {quoteError && (
+                <div className="rounded-md border border-red-300/30 bg-red-500/12 px-3 py-2 text-sm text-red-100">
+                  {quoteError}
+                </div>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Label htmlFor="quote-name" className="text-white/78">Nome</Label>
+                  <Input
+                    id="quote-name"
+                    value={quoteForm.customerName}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, customerName: event.target.value.slice(0, 120) }))}
+                    maxLength={120}
+                    required
+                    className="mt-2 border-white/10 bg-black/30 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="quote-email" className="text-white/78">Email</Label>
+                  <Input
+                    id="quote-email"
+                    type="email"
+                    value={quoteForm.customerEmail}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, customerEmail: event.target.value.slice(0, 180) }))}
+                    maxLength={180}
+                    required
+                    className="mt-2 border-white/10 bg-black/30 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="quote-phone" className="text-white/78">Telemóvel</Label>
+                  <Input
+                    id="quote-phone"
+                    value={quoteForm.customerPhone}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, customerPhone: event.target.value.slice(0, 40) }))}
+                    maxLength={40}
+                    className="mt-2 border-white/10 bg-black/30 text-white"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="quote-address" className="text-white/78">Morada</Label>
+                  <Input
+                    id="quote-address"
+                    value={quoteForm.shippingAddress}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, shippingAddress: event.target.value.slice(0, 500) }))}
+                    maxLength={500}
+                    className="mt-2 border-white/10 bg-black/30 text-white"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="quote-notes" className="text-white/78">Notas</Label>
+                  <Textarea
+                    id="quote-notes"
+                    value={quoteForm.notes}
+                    onChange={(event) => setQuoteForm((current) => ({ ...current, notes: event.target.value.slice(0, 1000) }))}
+                    maxLength={1000}
+                    className="mt-2 min-h-24 border-white/10 bg-black/30 text-white"
+                  />
+                </div>
+              </div>
+              <div className="rounded-md border border-white/10 bg-black/24 p-3 text-sm text-white/64">
+                Total estimado: <span className="font-black text-white">{formatPrice(pricing.totalPrice)}</span>
+              </div>
+              <Button type="submit" disabled={isSubmittingQuote} className="h-12 w-full bg-primary font-black text-primary-foreground hover:bg-primary/90">
+                <Send className="size-4" />
+                {isSubmittingQuote ? 'A enviar...' : 'Enviar pedido'}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {process.env.NODE_ENV !== 'production' && (
         <section className="mx-auto max-w-[1800px] px-4 pb-8 lg:px-5">
           <button
@@ -762,9 +1020,16 @@ export default function DeskBuilderPage() {
             <span>{debugOpen ? 'Fechar' : 'Abrir'}</span>
           </button>
           {debugOpen && (
-            <pre className="mt-3 max-h-96 overflow-auto rounded-lg border border-white/10 bg-black/40 p-4 text-xs text-white/68">
-              {JSON.stringify({ setup, validation, pricing }, null, 2)}
-            </pre>
+            <div className="mt-3 rounded-lg border border-white/10 bg-black/40">
+              <div className="flex justify-end border-b border-white/10 p-3">
+                <Button type="button" variant="outline" onClick={exportDebugJson} className="h-9 border-white/10 bg-white/6 text-white hover:bg-white hover:text-[#09090b]">
+                  Exportar JSON
+                </Button>
+              </div>
+              <pre className="max-h-96 overflow-auto p-4 text-xs text-white/68">
+                {JSON.stringify({ setup, validation, pricing }, null, 2)}
+              </pre>
+            </div>
           )}
         </section>
       )}
