@@ -114,7 +114,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
     products.forEach(product => {
       let used = false
       const productColors = product.colors ?? []
-      const offered = productColors.some((candidate: any) =>
+      const offered = productColors.some((candidate) =>
         candidate.globalColorId === colorId || String(candidate.name ?? '').toLowerCase() === colorName
       )
       if (offered) {
@@ -122,8 +122,8 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
         used = true
       }
 
-      ;(product.variants ?? []).forEach((variant: any) => {
-        const variantUsesFixed = variant.colors?.some((candidate: any) =>
+      ;(product.variants ?? []).forEach((variant) => {
+        const variantUsesFixed = variant.colors?.some((candidate) =>
           candidate.globalColorId === colorId || String(candidate.name ?? '').toLowerCase() === colorName
         )
         if (variant.colorMode === 'fixed' && variantUsesFixed) {
@@ -134,7 +134,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
           usage.allowedVariantsOrParts += 1
           used = true
         }
-        ;(variant.parts ?? []).forEach((part: any) => {
+        ;(variant.parts ?? []).forEach((part) => {
           if (part.fixedGlobalColorId === colorId || part.allowedGlobalColorIds?.includes(colorId)) {
             usage.allowedVariantsOrParts += 1
             used = true
@@ -254,7 +254,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
                     <div className="mt-3 border-t pt-2">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Used In</p>
                       <div className="flex flex-wrap gap-1">
-                        {usage.products.slice(0, 3).map((p: any) => (
+                        {usage.products.slice(0, 3).map((p) => (
                           <span key={p.id} className="text-[9px] bg-muted px-1.5 py-0.5 rounded truncate max-w-[80px]">
                             {p.name}
                           </span>
