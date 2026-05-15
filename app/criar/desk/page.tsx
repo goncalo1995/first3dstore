@@ -3,18 +3,17 @@
 import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Box,
+  AlertTriangle,
   Bug,
   Check,
   Grid3X3,
-  Headphones,
+  Info,
+  Layers3,
   Maximize2,
-  PenLine,
   Plus,
   RotateCw,
   Save,
   Send,
-  Smartphone,
   Trash2,
   Undo2,
   X,
@@ -54,6 +53,7 @@ import {
   deskPresets,
   deskProducts,
   getDefaultCustomConfig,
+  getDeskItemCustomOptionSummaries,
   getDeskItemFootprint,
   getDeskProduct,
 } from '@/lib/desk/products'
@@ -108,36 +108,25 @@ function colorHex(value: string | undefined, fallback: DeskColorName) {
   return deskColors[colorName].hex
 }
 
-function ProductGlyph({
-  product,
-  baseHex,
-  accentHex,
-  selected,
-}: {
-  product: DeskProductDefinition
-  baseHex: string
-  accentHex: string
-  selected: boolean
-}) {
-  if (product.preview.icon === 'smartphone') {
-    return (
-      <Smartphone className={cn('size-5', selected ? 'text-[#09090b]' : 'text-white')} style={{ color: selected ? '#09090b' : accentHex }} />
-    )
-  }
-  if (product.preview.icon === 'pen') {
-    return <PenLine className="size-5" style={{ color: accentHex }} />
-  }
-  if (product.preview.icon === 'headphones') {
-    return <Headphones className="size-5" style={{ color: accentHex }} />
-  }
-  return <Box className="size-5" style={{ color: accentHex || baseHex }} />
-}
-
 function getCustomValue(item: DeskItem, field: DeskCustomFieldDefinition) {
   if (!item.customConfig || typeof item.customConfig !== 'object' || Array.isArray(item.customConfig)) {
     return field.defaultValue
   }
   return item.customConfig[field.key] ?? field.defaultValue
+}
+
+function hasCustomPriceOptions(product: DeskProductDefinition) {
+  return (product.customFields ?? []).some((field) => (
+    field.type === 'number'
+      ? Boolean(field.priceAdd)
+      : field.type !== 'boolean' && field.options.some((option) => Boolean(option.priceAdd))
+  ))
+}
+
+function optionSummaryText(item: DeskItem) {
+  return getDeskItemCustomOptionSummaries(item)
+    .map((option) => `${option.label}: ${option.valueLabel}`)
+    .join(' · ')
 }
 
 function previewItem(product: DeskProductDefinition): DeskItem {
@@ -151,40 +140,81 @@ function previewItem(product: DeskProductDefinition): DeskItem {
   }
 }
 
-function DeskProductShape({
+function ProductVisual({
   item,
   product,
   selected,
   focused,
+  compact = false,
 }: {
   item: DeskItem
   product: DeskProductDefinition
   selected: boolean
   focused: boolean
+  compact?: boolean
 }) {
   const baseHex = colorHex(item.colorBase, product.defaultColors.base)
   const accentHex = colorHex(item.colorAccent, product.defaultColors.accent)
-  const isCircle = product.preview.shape === 'circle'
+  const shellClass = cn(
+    'relative h-full w-full overflow-hidden border transition-[border-color,box-shadow,filter] duration-200',
+    product.preview.shape === 'circle' ? 'rounded-full' : 'rounded-md',
+    selected ? 'border-primary shadow-[0_0_0_2px_rgba(163,255,18,0.34),0_16px_42px_rgba(0,0,0,0.45)]' : 'border-white/18 shadow-[0_16px_36px_rgba(0,0,0,0.35)]',
+    focused && 'shadow-[0_0_0_3px_rgba(163,255,18,0.28),0_24px_70px_rgba(163,255,18,0.14)]',
+  )
+  const detailScale = compact ? 'scale-90' : 'scale-100'
+
+  if (product.preview.shape === 'circle') {
+    return (
+      <div className={shellClass} style={{ background: `radial-gradient(circle at 42% 34%, rgba(255,255,255,0.26), transparent 18%), radial-gradient(circle at center, ${baseHex} 0%, ${baseHex} 52%, rgba(0,0,0,0.55) 100%)` }}>
+        <div className="absolute inset-[12%] rounded-full border border-white/26 bg-black/18 shadow-inner" />
+        <div className="absolute inset-[28%] rounded-full border border-black/30" style={{ background: `radial-gradient(circle, ${accentHex} 0 9%, transparent 10% 100%)` }} />
+        <div className={cn('absolute left-[30%] top-[20%] h-[42%] w-[10%] rounded-full bg-white/70 shadow-sm', detailScale)} />
+        <div className={cn('absolute left-[48%] top-[18%] h-[48%] w-[10%] rounded-full shadow-sm', detailScale)} style={{ backgroundColor: accentHex }} />
+        <div className={cn('absolute left-[62%] top-[26%] h-[34%] w-[8%] rounded-full bg-white/45 shadow-sm', detailScale)} />
+      </div>
+    )
+  }
+
+  if (product.preview.shape === 'tray') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))` }}>
+        <div className="absolute inset-[9%] rounded-[inherit] border border-black/36 bg-black/22 shadow-[inset_0_3px_12px_rgba(0,0,0,0.42)]" />
+        <div className="absolute inset-x-[18%] top-[22%] h-px bg-white/30" />
+        <div className="absolute inset-x-[18%] bottom-[22%] h-px bg-black/36" />
+        <div className="absolute right-[12%] top-[16%] h-[68%] w-[8%] rounded-full" style={{ background: `linear-gradient(${accentHex}, rgba(255,255,255,0.18))` }} />
+      </div>
+    )
+  }
+
+  if (product.preview.shape === 'hook') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.06))` }}>
+        <div className="absolute left-[20%] top-[18%] h-[64%] w-[18%] rounded-full bg-white/12 shadow-inner" />
+        <div className="absolute left-[29%] top-[20%] h-[58%] w-[16%] rounded-full" style={{ backgroundColor: accentHex }} />
+        <div className="absolute bottom-[18%] left-[34%] h-[18%] w-[44%] rounded-full border border-white/18 bg-black/32" />
+        <div className="absolute bottom-[26%] right-[18%] h-[34%] w-[26%] rounded-br-full rounded-tr-full border-b-[5px] border-r-[5px]" style={{ borderColor: accentHex }} />
+      </div>
+    )
+  }
 
   return (
-    <div
-      className={cn(
-        'flex h-full w-full items-center justify-center border shadow-[0_18px_45px_rgba(0,0,0,0.32)] transition-colors',
-        isCircle ? 'rounded-full' : 'rounded-md',
-        selected ? 'border-primary bg-primary/90' : 'border-white/16 bg-black/30',
-        focused && 'ring-4 ring-primary/30',
-      )}
-      style={{
-        background: selected
-          ? `linear-gradient(135deg, ${accentHex}, #a3ff12)`
-          : `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))`,
-      }}
-    >
-      <div className={cn('flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.08em]', selected ? 'text-[#09090b]' : 'text-white/88')}>
-        <ProductGlyph product={product} baseHex={baseHex} accentHex={accentHex} selected={selected} />
-      </div>
+    <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.09))` }}>
+      <div className="absolute inset-[16%] rounded-[inherit] border border-white/18 bg-black/18" />
+      <div className="absolute left-[20%] top-[22%] h-[58%] w-[36%] rounded-sm border border-white/30 bg-black/28 shadow-[inset_0_0_12px_rgba(255,255,255,0.12)]" />
+      <div className="absolute left-[29%] top-[34%] h-[28%] w-[18%] rounded-full border-2" style={{ borderColor: accentHex }} />
+      <div className="absolute left-[58%] top-[18%] h-[64%] w-[18%] rounded-full bg-white/14" />
+      <div className="absolute left-[66%] top-[30%] h-[40%] w-[6%] rounded-full" style={{ backgroundColor: accentHex }} />
     </div>
   )
+}
+
+function DeskProductShape(props: {
+  item: DeskItem
+  product: DeskProductDefinition
+  selected: boolean
+  focused: boolean
+}) {
+  return <ProductVisual {...props} />
 }
 
 export default function DeskBuilderPage() {
@@ -223,6 +253,29 @@ export default function DeskBuilderPage() {
   const validation = useMemo(() => validateDeskSetup(setup), [setup])
   const pricing = useMemo(() => calculateDeskPricing(setup), [setup])
   const maxZ = useMemo(() => Math.max(0, ...setup.items.map((item) => item.zIndex ?? 0)), [setup.items])
+  const productGroups = useMemo(() => (
+    Array.from(
+      deskProducts.reduce((groups, product) => {
+        const products = groups.get(product.category) ?? []
+        products.push(product)
+        groups.set(product.category, products)
+        return groups
+      }, new Map<string, DeskProductDefinition[]>()),
+    )
+  ), [])
+  const setupItemSummaries = useMemo(() => (
+    setup.items.map((item) => {
+      const product = getDeskProduct(item.productId)
+      const footprint = getDeskItemFootprint(item)
+      return {
+        item,
+        product,
+        footprint,
+        price: getDeskItemPrice(item),
+        options: optionSummaryText(item),
+      }
+    })
+  ), [setup.items])
   const scale = Math.min(canvasSize.width / setup.desk.widthCm, canvasSize.height / setup.desk.depthCm)
   const deskWidthPx = setup.desk.widthCm * scale
   const deskDepthPx = setup.desk.depthCm * scale
@@ -545,37 +598,64 @@ export default function DeskBuilderPage() {
   }
 
   const productCatalog = (
-    <div className="space-y-3">
-      {deskProducts.map((product) => {
-        const quantity = setup.items.filter((item) => item.productId === product.productId).length
-        const disabled = Boolean(product.validation.maxQuantity && quantity >= product.validation.maxQuantity)
-        const itemPreview = previewItem(product)
-        const footprint = getDeskItemFootprint(itemPreview)
-        return (
-          <article key={product.productId} className="rounded-lg border border-white/10 bg-white/7 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{product.category}</p>
-                <h3 className="mt-2 text-base font-black text-white">{product.name}</h3>
-                <p className="mt-2 text-sm leading-5 text-white/56">{product.description}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-black text-white">{formatPrice(getDeskItemPrice(itemPreview))}</p>
-                <p className="mt-1 text-xs text-white/40">{footprint?.width ?? 0} x {footprint?.depth ?? 0}cm</p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              onClick={() => addProduct(product)}
-              disabled={disabled}
-              className="mt-4 h-10 w-full bg-primary font-bold text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="size-4" />
-              {disabled ? 'Limite atingido' : 'Adicionar'}
-            </Button>
-          </article>
-        )
-      })}
+    <div className="space-y-5">
+      {productGroups.map(([category, products]) => (
+        <section key={category} className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-xs font-black uppercase tracking-[0.18em] text-primary">{category}</h3>
+            <span className="h-px flex-1 bg-white/10" />
+          </div>
+          {products.map((product) => {
+            const quantity = setup.items.filter((item) => item.productId === product.productId).length
+            const disabled = Boolean(product.validation.maxQuantity && quantity >= product.validation.maxQuantity)
+            const itemPreview = previewItem(product)
+            const footprint = getDeskItemFootprint(itemPreview)
+            const fromPrice = hasCustomPriceOptions(product)
+            const defaultOptions = optionSummaryText(itemPreview)
+            return (
+              <article key={product.productId} className="rounded-lg border border-white/10 bg-linear-to-br from-white/10 to-white/4 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+                <div className="flex gap-3">
+                  <div className="h-16 w-20 shrink-0 rounded-md border border-white/10 bg-black/24 p-2" aria-hidden="true">
+                    <ProductVisual item={itemPreview} product={product} selected={false} focused={false} compact />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="text-base font-black text-white">{product.name}</h4>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/42">{fromPrice ? 'A partir de' : 'Preço'}</p>
+                        <p className="text-sm font-black text-white">{formatPrice(getDeskItemPrice(itemPreview))}</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-5 text-white/58">{product.description}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-white/58">
+                  <span className="rounded-full border border-white/10 bg-black/22 px-2 py-1">{footprint?.width ?? 0} x {footprint?.depth ?? 0}cm</span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/22 px-2 py-1">
+                    <span className="size-2.5 rounded-full" style={{ backgroundColor: deskColors[product.defaultColors.base].hex }} />
+                    {product.defaultColors.base}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/22 px-2 py-1">
+                    <span className="size-2.5 rounded-full" style={{ backgroundColor: deskColors[product.defaultColors.accent].hex }} />
+                    {product.defaultColors.accent}
+                  </span>
+                </div>
+                {defaultOptions && <p className="mt-2 text-xs leading-5 text-white/42">{defaultOptions}</p>}
+                <Button
+                  type="button"
+                  onClick={() => addProduct(product)}
+                  disabled={disabled}
+                  className="mt-4 h-10 w-full bg-primary font-bold text-primary-foreground hover:bg-primary/90"
+                  aria-label={`${disabled ? 'Limite atingido para' : 'Adicionar'} ${product.name}`}
+                >
+                  <Plus className="size-4" />
+                  {disabled ? 'Limite atingido' : 'Adicionar'}
+                </Button>
+              </article>
+            )
+          })}
+        </section>
+      ))}
     </div>
   )
 
@@ -658,9 +738,55 @@ export default function DeskBuilderPage() {
       </section>
 
       <section className="rounded-lg border border-white/10 bg-white/7 p-4">
-        <p className="text-sm font-black text-white">Resumo</p>
-        <div className="mt-3 space-y-2 text-sm text-white/62">
-          <div className="flex justify-between"><span>Produtos</span><span>{setup.items.length}</span></div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-black text-white">Resumo</p>
+          <span className="rounded-full border border-white/10 bg-black/24 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/52">{setup.items.length} produtos</span>
+        </div>
+        <div className="mt-3 space-y-2">
+          {setupItemSummaries.length === 0 ? (
+            <div className="rounded-md border border-dashed border-white/14 bg-black/18 p-3 text-sm leading-5 text-white/54">
+              Ainda não há produtos na secretária.
+            </div>
+          ) : (
+            setupItemSummaries.map(({ item, product, footprint, price, options }) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => bringToFront(item.id, setup.mode === 'view' ? 'edit' : setup.mode)}
+                className={cn(
+                  'w-full rounded-md border p-3 text-left transition',
+                  item.id === setup.selectedItemId ? 'border-primary bg-primary/10' : 'border-white/10 bg-black/18 hover:border-white/22',
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-white">{product?.name ?? item.productId}</p>
+                    <p className="mt-1 text-xs text-white/45">{footprint?.width ?? 0} x {footprint?.depth ?? 0}cm · x {item.xCm.toFixed(0)} / y {item.yCm.toFixed(0)}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-black text-white">{formatPrice(price)}</p>
+                </div>
+                {options && <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/48">{options}</p>}
+              </button>
+            ))
+          )}
+        </div>
+        {(validation.errors.length > 0 || validation.warnings.length > 0) && (
+          <div className="mt-3 space-y-2">
+            {validation.errors.map((error) => (
+              <div key={error} className="flex gap-2 rounded-md border border-red-300/24 bg-red-500/10 p-2 text-xs leading-5 text-red-100">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                {error}
+              </div>
+            ))}
+            {validation.warnings.map((warning) => (
+              <div key={warning} className="flex gap-2 rounded-md border border-sky-300/24 bg-sky-500/10 p-2 text-xs leading-5 text-sky-100">
+                <Info className="mt-0.5 size-3.5 shrink-0" />
+                {warning}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-3 space-y-2 border-t border-white/10 pt-3 text-sm text-white/62">
           <div className="flex justify-between"><span>Subtotal</span><span>{formatPrice(pricing.itemsPrice)}</span></div>
           <div className="flex justify-between"><span>Desconto</span><span>{formatPrice(pricing.setupDiscount)}</span></div>
           <div className="flex justify-between text-lg font-black text-white"><span>Total</span><span>{formatPrice(pricing.totalPrice)}</span></div>
@@ -871,12 +997,23 @@ export default function DeskBuilderPage() {
 
           <div ref={canvasRef} className="relative min-h-[520px] flex-1 overflow-hidden p-4">
             <div className="absolute left-4 top-4 z-30 flex flex-col gap-2">
-              {loadWarning && <div className="max-w-sm rounded-md border border-amber-300/30 bg-amber-400/12 px-3 py-2 text-xs text-amber-100">{loadWarning}</div>}
+              {loadWarning && (
+                <div className="flex max-w-sm gap-2 rounded-md border border-amber-300/30 bg-amber-400/12 px-3 py-2 text-xs leading-5 text-amber-100">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  {loadWarning}
+                </div>
+              )}
               {validation.errors.map((error) => (
-                <div key={error} className="max-w-sm rounded-md border border-red-300/30 bg-red-500/12 px-3 py-2 text-xs text-red-100">{error}</div>
+                <div key={error} className="flex max-w-sm gap-2 rounded-md border border-red-300/30 bg-red-500/12 px-3 py-2 text-xs leading-5 text-red-100">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  {error}
+                </div>
               ))}
               {validation.warnings.map((warning) => (
-                <div key={warning} className="max-w-sm rounded-md border border-sky-300/30 bg-sky-500/12 px-3 py-2 text-xs text-sky-100">{warning}</div>
+                <div key={warning} className="flex max-w-sm gap-2 rounded-md border border-sky-300/30 bg-sky-500/12 px-3 py-2 text-xs leading-5 text-sky-100">
+                  <Info className="mt-0.5 size-3.5 shrink-0" />
+                  {warning}
+                </div>
               ))}
             </div>
 
@@ -940,6 +1077,30 @@ export default function DeskBuilderPage() {
                   />
                 )}
 
+                {setup.items.length === 0 && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center p-6">
+                    <div className="max-w-sm rounded-lg border border-white/14 bg-[#111116]/86 p-5 text-center shadow-2xl backdrop-blur-xl">
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/12 text-primary">
+                        <Layers3 className="size-5" />
+                      </div>
+                      <p className="mt-4 text-lg font-black text-white">Arrasta ou clica para adicionar</p>
+                      <p className="mt-2 text-sm leading-6 text-white/58">Começa com um módulo compacto e ajusta tudo com medidas reais.</p>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const starter = getDeskProduct('magsafe_dock_v1')
+                          if (starter) addProduct(starter)
+                        }}
+                        className="mt-4 h-10 bg-primary font-bold text-primary-foreground hover:bg-primary/90"
+                        aria-label="Adicionar Suporte MagSafe como primeiro produto"
+                      >
+                        <Plus className="size-4" />
+                        Adicionar primeiro produto
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 <AnimatePresence>
                   {setup.items.map((item) => {
                     const product = getDeskProduct(item.productId)
@@ -951,7 +1112,6 @@ export default function DeskBuilderPage() {
                     return (
                       <motion.div
                         key={item.id}
-                        layout
                         initial={{ opacity: 0, scale: 0.78 }}
                         animate={{ opacity: setup.mode === 'focus' && !selected ? 0.28 : 1, scale: focused ? 1.08 : 1 }}
                         exit={{ opacity: 0, scale: 0.72 }}
@@ -978,6 +1138,12 @@ export default function DeskBuilderPage() {
                         }}
                       >
                         <DeskProductShape item={item} product={product} selected={selected} focused={focused} />
+                        {selected && (
+                          <div className="pointer-events-none absolute -top-9 left-0 z-20 max-w-[220px] rounded-md border border-primary/28 bg-[#09090b]/90 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-[0_12px_34px_rgba(0,0,0,0.38)] backdrop-blur-md" aria-hidden="true">
+                            <span className="block truncate">{product.name}</span>
+                            <span className="block text-primary">{formatPrice(getDeskItemPrice(item))}</span>
+                          </div>
+                        )}
                       </motion.div>
                     )
                   })}
