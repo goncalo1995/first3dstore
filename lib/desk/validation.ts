@@ -1,5 +1,11 @@
-import { DESK_SCHEMA_VERSION, getDeskProduct } from './products'
-import type { DeskItem, DeskRotation, DeskSetup, ValidationResult } from './types'
+import {
+  DESK_SCHEMA_VERSION,
+  getDefaultCustomConfig,
+  getDeskItemFootprint,
+  getDeskProduct,
+  getCustomFieldOption,
+} from './products'
+import type { DeskCustomFieldDefinition, DeskCustomFieldValue, DeskItem, DeskRotation, DeskSetup, ValidationResult } from './types'
 
 const rotations = new Set<DeskRotation>([0, 90, 180, 270])
 export const MAX_DESK_ITEMS = 20
@@ -9,8 +15,12 @@ export const deskDimensionLimits = {
   depth: { min: 50, max: 100 },
 }
 
-function isNumber(value: unknown) {
+function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function isAllowedBaseColor(item: DeskItem) {
@@ -27,19 +37,8 @@ function isAllowedAccentColor(item: DeskItem) {
   return product.allowedColors.accent.includes(item.colorAccent as any)
 }
 
-export function getItemFootprint(item: Pick<DeskItem, 'productId' | 'rotation'>) {
-  const product = getDeskProduct(item.productId)
-  if (!product) return null
-
-  const rotated = item.rotation === 90 || item.rotation === 270
-  return {
-    width: rotated ? product.footprintCm.depth : product.footprintCm.width,
-    depth: rotated ? product.footprintCm.width : product.footprintCm.depth,
-  }
-}
-
 export function clampItemToDesk(item: DeskItem, desk: DeskSetup['desk']): DeskItem {
-  const footprint = getItemFootprint(item)
+  const footprint = getDeskItemFootprint(item)
   if (!footprint) return item
 
   return {
@@ -63,14 +62,101 @@ export function snapItemToGrid(item: DeskItem, desk: DeskSetup['desk']) {
   }, desk)
 }
 
-export function normalizeDeskSetupColors(setup: DeskSetup): { setup: DeskSetup; warnings: string[] } {
+function isValidCustomFieldValue(field: DeskCustomFieldDefinition, value: unknown) {
+  if (field.type === 'boolean') return typeof value === 'boolean'
+  if (field.type === 'number') {
+    if (!isNumber(value)) return false
+    return value >= field.min && value <= field.max
+  }
+  return Boolean(getCustomFieldOption(field, value))
+}
+
+export function validateDeskCustomConfig(productId: string, value: unknown): ValidationResult {
+  const product = getDeskProduct(productId)
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!product) return { valid: false, errors: ['Produto desconhecido.'], warnings }
+  const fields = product.customFields ?? []
+
+  if (!fields.length) {
+    if (value !== undefined && (!isRecord(value) || Object.keys(value).length > 0)) {
+      errors.push(`${product.name} tem personalização inválida.`)
+    }
+    return { valid: errors.length === 0, errors, warnings }
+  }
+
+  if (!isRecord(value)) {
+    return {
+      valid: false,
+      errors: [`${product.name} tem personalização inválida.`],
+      warnings,
+    }
+  }
+
+  const allowedKeys = new Set(fields.map((field) => field.key))
+  Object.keys(value).forEach((key) => {
+    if (!allowedKeys.has(key)) errors.push(`${product.name} tem uma opção de personalização desconhecida: ${key}.`)
+  })
+
+  fields.forEach((field) => {
+    if (!(field.key in value)) {
+      errors.push(`${product.name} não tem a opção ${field.label} definida.`)
+      return
+    }
+    if (!isValidCustomFieldValue(field, value[field.key])) {
+      errors.push(`${product.name} tem um valor inválido em ${field.label}.`)
+    }
+  })
+
+  return { valid: errors.length === 0, errors, warnings }
+}
+
+export function sanitizeDeskCustomConfig(item: DeskItem): { item: DeskItem; warnings: string[] } {
+  const product = getDeskProduct(item.productId)
+  if (!product) return { item, warnings: [] }
+  const fields = product.customFields ?? []
+  if (!fields.length) return { item, warnings: [] }
+
+  const warnings: string[] = []
+  const source = isRecord(item.customConfig) ? item.customConfig : {}
+  if (!isRecord(item.customConfig)) warnings.push(`A personalização de ${product.name} foi reposta.`)
+
+  const allowedKeys = new Set(fields.map((field) => field.key))
+  Object.keys(source).forEach((key) => {
+    if (!allowedKeys.has(key)) warnings.push(`A opção ${key} de ${product.name} já não é válida e foi removida.`)
+  })
+
+  const customConfig = getDefaultCustomConfig(product)
+  fields.forEach((field) => {
+    const value = source[field.key]
+    if (isValidCustomFieldValue(field, value)) {
+      customConfig[field.key] = value as DeskCustomFieldValue
+    } else if (field.key in source) {
+      warnings.push(`A opção ${field.label} de ${product.name} foi reposta.`)
+    }
+  })
+
+  return {
+    item: {
+      ...item,
+      customConfig,
+    },
+    warnings,
+  }
+}
+
+export function normalizeDeskSetupForLocalStorage(setup: DeskSetup): { setup: DeskSetup; warnings: string[] } {
   const warnings: string[] = []
 
   const items = setup.items.map((item) => {
     const product = getDeskProduct(item.productId)
     if (!product) return item
 
-    const next: DeskItem = { ...item }
+    const custom = sanitizeDeskCustomConfig(item)
+    const next: DeskItem = { ...custom.item }
+    warnings.push(...custom.warnings)
+
     if (next.colorBase && !product.allowedColors.base.includes(next.colorBase as any)) {
       next.colorBase = product.defaultColors.base
       warnings.push(`A cor principal de ${product.name} já não estava disponível e foi reposta.`)
@@ -91,9 +177,11 @@ export function normalizeDeskSetupColors(setup: DeskSetup): { setup: DeskSetup; 
   }
 }
 
+export const normalizeDeskSetupColors = normalizeDeskSetupForLocalStorage
+
 function itemsOverlap(a: DeskItem, b: DeskItem) {
-  const aFootprint = getItemFootprint(a)
-  const bFootprint = getItemFootprint(b)
+  const aFootprint = getDeskItemFootprint(a)
+  const bFootprint = getDeskItemFootprint(b)
   if (!aFootprint || !bFootprint) return false
 
   return (
@@ -178,7 +266,10 @@ export function validateDeskSetup(setup: unknown): ValidationResult {
         return
       }
 
-      const footprint = getItemFootprint(item)
+      const customValidation = validateDeskCustomConfig(item.productId, item.customConfig)
+      errors.push(...customValidation.errors)
+
+      const footprint = getDeskItemFootprint(item)
       if (!footprint) return
 
       if (

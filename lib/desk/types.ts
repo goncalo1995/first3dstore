@@ -20,6 +20,49 @@ export type DeskProductId =
 
 export type DeskProductCategory = 'Carregamento' | 'Organização' | 'Arrumação' | 'Áudio'
 
+export type DeskCustomFieldValue = string | number | boolean
+
+export type DeskCustomFieldOption = {
+  value: string
+  label: string
+  priceAdd?: number
+  footprintCm?: {
+    width: number
+    depth: number
+  }
+}
+
+export type DeskCustomFieldBase = {
+  key: string
+  label: string
+  defaultValue: DeskCustomFieldValue
+}
+
+export type DeskChoiceCustomField = DeskCustomFieldBase & {
+  type: 'select' | 'segmented'
+  defaultValue: string
+  options: DeskCustomFieldOption[]
+}
+
+export type DeskBooleanCustomField = DeskCustomFieldBase & {
+  type: 'boolean'
+  defaultValue: boolean
+}
+
+export type DeskNumberCustomField = DeskCustomFieldBase & {
+  type: 'number'
+  defaultValue: number
+  min: number
+  max: number
+  step?: number
+  priceAdd?: number
+}
+
+export type DeskCustomFieldDefinition =
+  | DeskChoiceCustomField
+  | DeskBooleanCustomField
+  | DeskNumberCustomField
+
 export type DeskItem = {
   id: string
   productId: string
@@ -83,6 +126,7 @@ export type DeskProductDefinition = {
     allowedSurfaces: DeskSurface[]
     maxQuantity?: number
   }
+  customFields?: DeskCustomFieldDefinition[]
   generator: {
     type: 'openscad'
     moduleId: string

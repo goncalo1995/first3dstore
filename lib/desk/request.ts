@@ -1,5 +1,5 @@
-import { getDeskProduct } from './products'
-import { calculateDeskPricing } from './pricing'
+import { getDeskItemCustomOptionSummaries, getDeskItemFootprint, getDeskProduct } from './products'
+import { calculateDeskPricing, getDeskItemPrice } from './pricing'
 import type { DeskItem, DeskPricing, DeskSetup, ValidationResult } from './types'
 import { MAX_DESK_ITEMS, validateDeskSetup } from './validation'
 
@@ -116,7 +116,13 @@ function itemSummary(item: DeskItem) {
   const label = product?.name ?? item.productId
   const base = item.colorBase ? `base ${item.colorBase}` : `base ${product?.defaultColors.base ?? 'n/d'}`
   const accent = item.colorAccent ? `detalhe ${item.colorAccent}` : `detalhe ${product?.defaultColors.accent ?? 'n/d'}`
-  return `- ${label}: x ${item.xCm.toFixed(1)}cm, y ${item.yCm.toFixed(1)}cm, rotação ${item.rotation}°, ${base}, ${accent}`
+  const footprint = getDeskItemFootprint(item)
+  const footprintLabel = footprint ? `, pegada ${footprint.width} x ${footprint.depth}cm` : ''
+  const options = getDeskItemCustomOptionSummaries(item)
+  const optionLabel = options.length
+    ? `, opções: ${options.map((option) => `${option.label}: ${option.valueLabel}${option.priceAdd ? ` (+${option.priceAdd.toFixed(2)}€)` : ''}`).join('; ')}`
+    : ''
+  return `- ${label}: x ${item.xCm.toFixed(1)}cm, y ${item.yCm.toFixed(1)}cm, rotação ${item.rotation}°, ${base}, ${accent}${footprintLabel}${optionLabel}, preço ${getDeskItemPrice(item).toFixed(2)}€`
 }
 
 export function buildDeskRequestNotes(params: {

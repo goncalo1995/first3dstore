@@ -37,6 +37,13 @@ import {
 } from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -46,10 +53,12 @@ import {
   deskColors,
   deskPresets,
   deskProducts,
+  getDefaultCustomConfig,
+  getDeskItemFootprint,
   getDeskProduct,
 } from '@/lib/desk/products'
-import { calculateDeskPricing } from '@/lib/desk/pricing'
-import type { DeskColorName, DeskItem, DeskProductDefinition, DeskRotation, DeskSetup } from '@/lib/desk/types'
+import { calculateDeskPricing, getDeskItemPrice } from '@/lib/desk/pricing'
+import type { DeskColorName, DeskCustomFieldDefinition, DeskItem, DeskProductDefinition, DeskRotation, DeskSetup } from '@/lib/desk/types'
 import {
   clampItemToDesk,
   deskDimensionLimits,
@@ -99,14 +108,6 @@ function colorHex(value: string | undefined, fallback: DeskColorName) {
   return deskColors[colorName].hex
 }
 
-function itemDimensions(item: DeskItem, product: DeskProductDefinition) {
-  const rotated = item.rotation === 90 || item.rotation === 270
-  return {
-    width: rotated ? product.footprintCm.depth : product.footprintCm.width,
-    depth: rotated ? product.footprintCm.width : product.footprintCm.depth,
-  }
-}
-
 function ProductGlyph({
   product,
   baseHex,
@@ -130,6 +131,24 @@ function ProductGlyph({
     return <Headphones className="size-5" style={{ color: accentHex }} />
   }
   return <Box className="size-5" style={{ color: accentHex || baseHex }} />
+}
+
+function getCustomValue(item: DeskItem, field: DeskCustomFieldDefinition) {
+  if (!item.customConfig || typeof item.customConfig !== 'object' || Array.isArray(item.customConfig)) {
+    return field.defaultValue
+  }
+  return item.customConfig[field.key] ?? field.defaultValue
+}
+
+function previewItem(product: DeskProductDefinition): DeskItem {
+  return {
+    id: `preview-${product.productId}`,
+    productId: product.productId,
+    xCm: 0,
+    yCm: 0,
+    rotation: 0,
+    customConfig: getDefaultCustomConfig(product),
+  }
 }
 
 function DeskProductShape({
@@ -199,6 +218,8 @@ export default function DeskBuilderPage() {
 
   const selectedItem = setup.items.find((item) => item.id === setup.selectedItemId)
   const selectedProduct = selectedItem ? getDeskProduct(selectedItem.productId) : undefined
+  const selectedFootprint = selectedItem ? getDeskItemFootprint(selectedItem) : null
+  const selectedPrice = selectedItem ? getDeskItemPrice(selectedItem) : 0
   const validation = useMemo(() => validateDeskSetup(setup), [setup])
   const pricing = useMemo(() => calculateDeskPricing(setup), [setup])
   const maxZ = useMemo(() => Math.max(0, ...setup.items.map((item) => item.zIndex ?? 0)), [setup.items])
@@ -245,8 +266,10 @@ export default function DeskBuilderPage() {
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
       if (!(target instanceof HTMLElement)) return false
-      const tagName = target.tagName.toLowerCase()
-      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable
+      return Boolean(
+        target.isContentEditable ||
+        target.closest('input, textarea, select, [contenteditable="true"], [role="switch"], [role="combobox"], [data-ignore-shortcuts]'),
+      )
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -386,15 +409,26 @@ export default function DeskBuilderPage() {
     const quantity = setup.items.filter((item) => item.productId === product.productId).length
     if (product.validation.maxQuantity && quantity >= product.validation.maxQuantity) return
 
+    const customConfig = getDefaultCustomConfig(product)
+    const footprint = getDeskItemFootprint({
+      id: 'new',
+      productId: product.productId,
+      xCm: 0,
+      yCm: 0,
+      rotation: 0,
+      customConfig,
+    }) ?? { width: 0, depth: 0 }
+
     const item: DeskItem = {
       id: newId(),
       productId: product.productId,
-      xCm: setup.desk.widthCm / 2 - product.footprintCm.width / 2,
-      yCm: setup.desk.depthCm / 2 - product.footprintCm.depth / 2,
+      xCm: setup.desk.widthCm / 2 - footprint.width / 2,
+      yCm: setup.desk.depthCm / 2 - footprint.depth / 2,
       rotation: 0,
       zIndex: maxZ + 1,
       colorBase: product.defaultColors.base,
       colorAccent: product.defaultColors.accent,
+      customConfig,
     }
 
     const placedItem = snapItemToGrid(clampItemToDesk(item, setup.desk), setup.desk)
@@ -423,6 +457,16 @@ export default function DeskBuilderPage() {
         item.id === selectedItem.id ? clampItemToDesk({ ...item, ...patch }, current.desk) : item
       )),
     }))
+  }
+
+  function updateSelectedCustomField(key: string, value: unknown) {
+    if (!selectedItem) return
+    updateSelectedItem({
+      customConfig: {
+        ...(selectedItem.customConfig ?? {}),
+        [key]: value,
+      },
+    })
   }
 
   function rotateSelected() {
@@ -505,6 +549,8 @@ export default function DeskBuilderPage() {
       {deskProducts.map((product) => {
         const quantity = setup.items.filter((item) => item.productId === product.productId).length
         const disabled = Boolean(product.validation.maxQuantity && quantity >= product.validation.maxQuantity)
+        const itemPreview = previewItem(product)
+        const footprint = getDeskItemFootprint(itemPreview)
         return (
           <article key={product.productId} className="rounded-lg border border-white/10 bg-white/7 p-4">
             <div className="flex items-start justify-between gap-3">
@@ -514,8 +560,8 @@ export default function DeskBuilderPage() {
                 <p className="mt-2 text-sm leading-5 text-white/56">{product.description}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-black text-white">{formatPrice(product.price)}</p>
-                <p className="mt-1 text-xs text-white/40">{product.footprintCm.width} x {product.footprintCm.depth}cm</p>
+                <p className="text-sm font-black text-white">{formatPrice(getDeskItemPrice(itemPreview))}</p>
+                <p className="mt-1 text-xs text-white/40">{footprint?.width ?? 0} x {footprint?.depth ?? 0}cm</p>
               </div>
             </div>
             <Button
@@ -632,11 +678,11 @@ export default function DeskBuilderPage() {
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-md bg-black/24 p-3">
             <p className="text-white/42">Preço</p>
-            <p className="font-black text-white">{formatPrice(selectedProduct.price)}</p>
+            <p className="font-black text-white">{formatPrice(selectedPrice)}</p>
           </div>
           <div className="rounded-md bg-black/24 p-3">
             <p className="text-white/42">Pegada</p>
-            <p className="font-black text-white">{selectedProduct.footprintCm.width} x {selectedProduct.footprintCm.depth}cm</p>
+            <p className="font-black text-white">{selectedFootprint?.width ?? 0} x {selectedFootprint?.depth ?? 0}cm</p>
           </div>
         </div>
       </section>
@@ -678,6 +724,90 @@ export default function DeskBuilderPage() {
           ))}
         </div>
       </section>
+
+      {Boolean(selectedProduct.customFields?.length) && (
+        <section className="rounded-lg border border-white/10 bg-white/7 p-4">
+          <p className="text-sm font-black text-white">Personalização</p>
+          <div className="mt-4 space-y-4">
+            {selectedProduct.customFields?.map((field) => {
+              const value = getCustomValue(selectedItem, field)
+
+              if (field.type === 'boolean') {
+                return (
+                  <div key={field.key} className="flex items-center justify-between gap-4 rounded-md border border-white/10 bg-black/20 p-3">
+                    <Label htmlFor={`custom-${field.key}`} className="text-white/72">{field.label}</Label>
+                    <Switch
+                      id={`custom-${field.key}`}
+                      checked={value === true}
+                      onCheckedChange={(checked) => updateSelectedCustomField(field.key, checked)}
+                    />
+                  </div>
+                )
+              }
+
+              if (field.type === 'number') {
+                return (
+                  <div key={field.key}>
+                    <Label htmlFor={`custom-${field.key}`} className="text-white/72">{field.label}</Label>
+                    <Input
+                      id={`custom-${field.key}`}
+                      type="number"
+                      min={field.min}
+                      max={field.max}
+                      step={field.step ?? 1}
+                      value={typeof value === 'number' ? value : field.defaultValue}
+                      onChange={(event) => updateSelectedCustomField(field.key, Number(event.target.value))}
+                      className="mt-2 border-white/10 bg-black/30 text-white"
+                    />
+                  </div>
+                )
+              }
+
+              if (field.type === 'segmented') {
+                return (
+                  <div key={field.key}>
+                    <p className="text-sm font-medium text-white/72">{field.label}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {field.options.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateSelectedCustomField(field.key, option.value)}
+                          className={cn(
+                            'min-h-11 rounded-md border px-3 text-sm font-bold transition',
+                            value === option.value ? 'border-primary bg-primary/12 text-white' : 'border-white/10 bg-black/20 text-white/62 hover:border-white/24',
+                          )}
+                        >
+                          {option.label}
+                          {option.priceAdd ? <span className="ml-1 text-xs text-primary">+{formatPrice(option.priceAdd)}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+
+              return (
+                <div key={field.key}>
+                  <Label className="text-white/72">{field.label}</Label>
+                  <Select value={String(value)} onValueChange={(nextValue) => updateSelectedCustomField(field.key, nextValue)}>
+                    <SelectTrigger className="mt-2 w-full border-white/10 bg-black/30 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-white/10 bg-[#111116] text-white">
+                      {field.options.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}{option.priceAdd ? ` (+${formatPrice(option.priceAdd)})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Button type="button" variant="outline" onClick={rotateSelected} className="h-11 border-white/10 bg-white/6 text-white hover:bg-white hover:text-[#09090b]">
@@ -814,7 +944,8 @@ export default function DeskBuilderPage() {
                   {setup.items.map((item) => {
                     const product = getDeskProduct(item.productId)
                     if (!product) return null
-                    const dimensions = itemDimensions(item, product)
+                    const dimensions = getDeskItemFootprint(item)
+                    if (!dimensions) return null
                     const selected = item.id === setup.selectedItemId
                     const focused = selected && setup.mode === 'focus'
                     return (

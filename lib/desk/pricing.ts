@@ -1,10 +1,15 @@
-import { getDeskProduct } from './products'
-import type { DeskPricing, DeskSetup } from './types'
+import { getDeskItemCustomPriceAdd, getDeskProduct } from './products'
+import type { DeskItem, DeskPricing, DeskSetup } from './types'
+
+export function getDeskItemPrice(item: DeskItem) {
+  const product = getDeskProduct(item.productId)
+  if (!product) return 0
+  return Math.round((product.price + getDeskItemCustomPriceAdd(item)) * 100) / 100
+}
 
 export function calculateDeskPricing(setup: Pick<DeskSetup, 'items'>): DeskPricing {
   const itemsPrice = setup.items.reduce((sum, item) => {
-    const product = getDeskProduct(item.productId)
-    return sum + (product?.price ?? 0)
+    return sum + getDeskItemPrice(item)
   }, 0)
   const setupDiscount = 0
 
