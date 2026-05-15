@@ -455,9 +455,61 @@ const colorsToSeed = [
     isActive: true,
     priceAdd: 0,
   },
+  {
+    name: 'Carbon Black',
+    hex: '#0B0D10',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Cyber White',
+    hex: '#F4F7FB',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Neon Lime',
+    hex: '#A3FF12',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Pulse Blue',
+    hex: '#38BDF8',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Signal Red',
+    hex: '#FF3B5C',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
 ]
 
-type SeedColorMap = Map<string, { id: string; name: string; hex: string; priceAdd?: number }>
+type SeedColorMap = Map<string, {
+  id: string
+  name: string
+  hex: string
+  gramsAvailable?: number
+  spoolStatus?: 'available' | 'low' | 'archived'
+  priceAdd?: number
+}>
 
 async function seedGlobalColors(): Promise<SeedColorMap> {
   console.log('\n🎨 Seeding global colors...')
@@ -510,6 +562,8 @@ async function seedGlobalColors(): Promise<SeedColorMap> {
       id: color.id,
       name: color.name,
       hex: color.hex,
+      gramsAvailable: color.gramsAvailable,
+      spoolStatus: color.spoolStatus,
       priceAdd: color.priceAdd,
     })
   })
@@ -536,7 +590,7 @@ function createInventory(slug: string, colorMap: SeedColorMap, names: string[]) 
         colorHex: color.hex,
         offered: true,
         stockQuantity: 0,
-        gramsAvailable: 0,
+        gramsAvailable: color.gramsAvailable ?? 0,
         priceAdd: color.priceAdd ?? 0,
       }
     }),
@@ -555,8 +609,89 @@ function createExampleProducts(colorMap: SeedColorMap) {
   const branco = colorRef(colorMap, 'Branco')
   const amarelo = colorRef(colorMap, 'Amarelo')
   const azul = colorRef(colorMap, 'Azul')
+  const carbonBlack = colorRef(colorMap, 'Carbon Black')
+  const cyberWhite = colorRef(colorMap, 'Cyber White')
+  const neonLime = colorRef(colorMap, 'Neon Lime')
+  const pulseBlue = colorRef(colorMap, 'Pulse Blue')
+  const signalRed = colorRef(colorMap, 'Signal Red')
+  const headsetStandMainColorIds = [carbonBlack.id, cyberWhite.id]
+  const headsetStandAccentColorIds = [neonLime.id, pulseBlue.id, signalRed.id, cyberWhite.id]
 
   return [
+    {
+      slug: 'headset-stand',
+      name: 'Suporte de Auscultadores Personalizado',
+      priceFrom: 24.90,
+      priceTo: 34.90,
+      description: 'Suporte de auscultadores premium para setups gaming e trabalho, com estrutura à escolha, detalhe colorido e gamertag opcional.',
+      benefit: 'Eleva o setup com um suporte feito à medida em Portugal',
+      image: '/placeholder.svg',
+      featured: true,
+      featuredRank: 1,
+      visible: true,
+      isModular: true,
+      colorSelectionMode: 'preset_options' as const,
+      customizable: true,
+      customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
+      multiColor: true,
+      multiColorCount: 2,
+      category: 'secretaria',
+      categorySlugs: ['secretaria', 'gaming', 'headset-stand'],
+      variants: [
+        {
+          id: 'stealth',
+          name: 'Oculto (3M)',
+          kind: 'preset_pack' as const,
+          colorMode: 'multi_part' as const,
+          finalPrice: 24.90,
+          formatLabel: 'Por baixo da mesa',
+          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
+          colors: [],
+          parts: [
+            { label: 'Estrutura', grams: 85, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
+            { label: 'Detalhe/Texto', grams: 10, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
+          ],
+          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
+        },
+        {
+          id: 'tower',
+          name: 'De Mesa',
+          kind: 'preset_pack' as const,
+          colorMode: 'multi_part' as const,
+          finalPrice: 29.90,
+          formatLabel: 'Base de mesa',
+          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
+          colors: [],
+          parts: [
+            { label: 'Estrutura', grams: 130, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
+            { label: 'Detalhe/Texto', grams: 12, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
+          ],
+          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
+        },
+        {
+          id: 'clamp',
+          name: 'Aperto (Rosca)',
+          kind: 'preset_pack' as const,
+          colorMode: 'multi_part' as const,
+          finalPrice: 34.90,
+          formatLabel: 'Aperto com rosca',
+          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
+          colors: [],
+          parts: [
+            { label: 'Estrutura', grams: 155, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
+            { label: 'Detalhe/Texto', grams: 14, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
+          ],
+          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
+        },
+      ],
+      materialRecipe: [
+        { label: 'Estrutura', grams: 130, materialType: 'PLA' as const, colorSource: 'partColor' as const, allowedGlobalColorIds: headsetStandMainColorIds },
+        { label: 'Detalhe/Texto', grams: 12, materialType: 'PLA' as const, colorSource: 'partColor' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
+      ],
+      materialGrams: 142,
+      sortOrder: 1,
+      inventoryColors: ['Carbon Black', 'Cyber White', 'Neon Lime', 'Pulse Blue', 'Signal Red'],
+    },
     {
       slug: 'suporte-telemovel-simples',
       name: 'Suporte de Telemóvel Simples',
@@ -726,10 +861,10 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
   let updated = 0
 
   for (const product of exampleProductsToSeed) {
-    const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
+    const existingProduct = (existingProducts.catalogProducts || []).find((p) => p.slug === product.slug)
 
     const productId = existingProduct?.id || id()
-    const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productId === productId)
+    const existingInventory = (existingProducts.productInventory || []).find((inv) => inv.id === productId)
     const inventoryId = existingInventory?.id || id()
     const now = new Date()
 
@@ -759,10 +894,11 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
         images,
         visible: product.visible,
         featured: product.featured,
-        featuredRank: (product as any).featuredRank,
+        featuredRank: product.featuredRank,
         sortOrder: product.sortOrder,
+        isModular: (product as any).isModular ?? false,
         customizable: product.customizable,
-        customizationOptions: [],
+        customizationOptions: (product as any).customizationOptions ?? [],
         multiColor: product.multiColor,
         multiColorCount: product.multiColorCount,
         colorSelectionMode: product.colorSelectionMode,

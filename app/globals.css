@@ -14,26 +14,26 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* EM3D Brand Colors */
-  --background: #FFFFFF;
-  --foreground: #181818;
-  --card: #F5F5F4;
-  --card-foreground: #181818;
-  --popover: #FFFFFF;
-  --popover-foreground: #181818;
-  --primary: #C8A45D;
-  --primary-foreground: #111111;
-  --secondary: #F5F5F4;
-  --secondary-foreground: #181818;
-  --muted: #F5F5F4;
-  --muted-foreground: #6A6A6A;
-  --accent: #C8A45D;
-  --accent-foreground: #111111;
-  --destructive: #DC2626;
-  --destructive-foreground: #FFFFFF;
-  --border: #E5E5E5;
-  --input: #E5E5E5;
-  --ring: #1B6B45;
+  /* EM3D Phase 1 dark launch system */
+  --background: #09090b;
+  --foreground: #f8fafc;
+  --card: #111116;
+  --card-foreground: #f8fafc;
+  --popover: #111116;
+  --popover-foreground: #f8fafc;
+  --primary: #20991baf;
+  --primary-foreground: #09090b;
+  --secondary: #18181f;
+  --secondary-foreground: #f8fafc;
+  --muted: #18181f;
+  --muted-foreground: #a1a1aa;
+  --accent: #38bdf8;
+  --accent-foreground: #020617;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #27272f;
+  --input: #27272f;
+  --ring: #25D366;
   --radius: 0.5rem;
   
   /* WhatsApp Green */

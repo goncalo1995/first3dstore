@@ -18,6 +18,10 @@ function getDedicatedConfiguratorHref(product: Product) {
   const categorySlugs = getProductCategorySlugs(product)
   const normalizedSlug = product.slug.toLowerCase()
 
+  if (normalizedSlug === 'headset-stand') {
+    return '/criar/headset-stand'
+  }
+
   if (
     product.isModular === true
     || categorySlugs.includes('hexa-memoria')

@@ -51,12 +51,12 @@ export default function ContactPage() {
                 href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho uma questão sobre a EM3D.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-4 rounded-lg bg-primary p-4 text-primary-foreground transition-colors hover:bg-primary/90"
+                className="flex items-center gap-4 rounded-lg bg-secondary p-4 text-foreground transition-colors hover:bg-secondary/80"
               >
                 <MessageCircle className="h-6 w-6" />
                 <div>
                   <p className="font-semibold">Conversar no WhatsApp</p>
-                  <p className="text-sm text-white/80">Ideal para dúvidas rápidas ou acompanhamento de pedidos.</p>
+                  <p className="text-sm text-muted-foreground">Ideal para dúvidas rápidas ou acompanhamento de pedidos.</p>
                 </div>
               </a>
               <a
