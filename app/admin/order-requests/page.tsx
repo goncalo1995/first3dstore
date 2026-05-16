@@ -15,6 +15,7 @@ import { buildPuzzleGridPath } from '@/lib/puzzle/preview'
 import type { SvgPuzzleConfig } from '@/lib/puzzle/types'
 import { getDeskItemCustomOptionSummaries, getDeskItemFootprint, getDeskProduct } from '@/lib/desk/products'
 import { getDeskItemPrice } from '@/lib/desk/pricing'
+import { buildDeskGeneratorPayload, DeskGeneratorValidationError, formatDeskGeneratorCall } from '@/lib/desk/generator'
 import type { DeskItem } from '@/lib/desk/types'
 import { approveOrderRequestForProduction, approveOrderRequestPhoto, sendPuzzlePaymentApproval, updateOrderRequestPaymentReceived, updateOrderRequestStatus } from './actions'
 
@@ -295,6 +296,24 @@ function DeskSetupRequestSummary({
   const storedPrice = request.selectedPrice ?? request.estimatedPrice
   const priceMismatch = isNumber(requestPrice) && isNumber(storedPrice) && Math.abs(requestPrice - storedPrice) >= 0.01
   const canPreview = isNumber(config.desk?.widthCm) && isNumber(config.desk?.depthCm)
+  const generatorPreview = useMemo(() => {
+    try {
+      const payload = buildDeskGeneratorPayload(config)
+      return {
+        payload,
+        call: formatDeskGeneratorCall(payload),
+        errors: null,
+      }
+    } catch (error) {
+      return {
+        payload: null,
+        call: null,
+        errors: error instanceof DeskGeneratorValidationError
+          ? error.errors
+          : ['Não foi possível gerar os dados para o gerador.'],
+      }
+    }
+  }, [config])
 
   return (
     <div className="space-y-4">
@@ -387,6 +406,38 @@ function DeskSetupRequestSummary({
           })
         )}
       </div>
+
+      <details className="rounded-lg border border-border bg-secondary/35">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Dados para gerador</summary>
+        <div className="space-y-3 border-t border-border p-3">
+          {generatorPreview.errors ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              <p className="font-semibold">Payload indisponível</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {generatorPreview.errors.map((error) => <li key={error}>{error}</li>)}
+              </ul>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payload determinístico</p>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-muted-foreground">
+                  {JSON.stringify(generatorPreview.payload, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chamada OpenSCAD de pré-visualização</p>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-muted-foreground">
+                  {generatorPreview.call}
+                </pre>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pré-visualização apenas textual. Não executa OpenSCAD nem gera ficheiros STL.
+              </p>
+            </>
+          )}
+        </div>
+      </details>
 
       <details className="rounded-lg border border-border bg-secondary/35">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">JSON bruto</summary>
