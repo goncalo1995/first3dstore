@@ -76,6 +76,17 @@ const surfaceLabels: Record<DeskSurface, string> = {
   under: 'Por baixo da secretária',
 }
 const categoryFilters: Array<DeskProductCategory | 'Todos'> = ['Todos', 'Carregamento', 'Organização', 'Arrumação', 'Áudio', 'Gestão de cabos']
+const quoteTrustPoints = [
+  'Sem pagamento automático',
+  'Revemos o teu setup antes da produção',
+  'Recebes confirmação de preço e prazo',
+]
+const quoteNextSteps = [
+  'Pedido recebido',
+  'Revisão manual do setup',
+  'Confirmação de preço/prazo',
+  'Produção após aprovação',
+]
 
 const defaultSetup = (): DeskSetup => {
   const now = new Date().toISOString()
@@ -156,6 +167,11 @@ const starterTemplates = [
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value)
+}
+
+function trackDeskStudioEvent(event: string, details?: Record<string, string | number | boolean | undefined>) {
+  if (process.env.NODE_ENV !== 'development') return
+  console.info('[Desk Studio]', event, details ?? {})
 }
 
 function newId() {
@@ -399,7 +415,7 @@ export default function DeskBuilderPage() {
       const normalized = normalizeDeskSetupColors(parsed)
       const result = validateDeskSetup(normalized.setup)
       if (!result.valid) {
-        setLoadWarning('O setup guardado já não é compatível. Começámos com uma secretária limpa.')
+        setLoadWarning('Encontrámos um setup antigo ou inválido. Começámos com uma secretária limpa para proteger o teu pedido.')
         return
       }
       if (normalized.warnings.length) {
@@ -408,7 +424,7 @@ export default function DeskBuilderPage() {
       setSetup(normalized.setup)
       window.localStorage.setItem(DESK_STORAGE_KEY, JSON.stringify(normalized.setup))
     } catch {
-      setLoadWarning('Não foi possível carregar o setup guardado. Começámos com uma secretária limpa.')
+      setLoadWarning('Não foi possível recuperar o setup guardado neste dispositivo. Começámos com uma secretária limpa.')
     }
   }, [])
 
@@ -515,12 +531,48 @@ export default function DeskBuilderPage() {
     URL.revokeObjectURL(url)
   }
 
+  function openQuoteModal() {
+    trackDeskStudioEvent('quote_modal_opened', {
+      topItems: setup.topItems.length,
+      underItems: setup.underItems.length,
+      warnings: validation.warnings.length,
+      hasErrors: validation.errors.length > 0,
+    })
+    setQuoteOpen(true)
+  }
+
+  function switchSurface(surface: DeskSurface) {
+    trackDeskStudioEvent('surface_switched', { surface })
+    mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))
+  }
+
+  function quoteFailureMessage(error: unknown) {
+    if (error instanceof TypeError) {
+      return 'Falha de ligação. O teu setup continua guardado neste ecrã; tenta novamente dentro de momentos.'
+    }
+    if (error instanceof Error && error.message) return error.message
+    return 'Não foi possível enviar o pedido. O teu setup não foi perdido; tenta novamente.'
+  }
+
   async function submitQuote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isSubmittingQuote) return
 
     setQuoteError('')
     setQuoteSuccess('')
+
+    if (allItems.length === 0) {
+      setQuoteError('Adiciona pelo menos uma peça antes de pedir orçamento. O teu setup continua guardado.')
+      trackDeskStudioEvent('quote_failed', { reason: 'empty_setup' })
+      return
+    }
+
+    if (validation.errors.length > 0) {
+      setQuoteError('Há detalhes do setup para rever antes do pedido. Corrige os avisos assinalados e tenta novamente.')
+      trackDeskStudioEvent('quote_failed', { reason: 'invalid_setup', errors: validation.errors.length })
+      return
+    }
+
     setIsSubmittingQuote(true)
 
     try {
@@ -538,13 +590,23 @@ export default function DeskBuilderPage() {
         const fieldMessage = payload.fieldErrors
           ? Object.values(payload.fieldErrors as Record<string, string>).join(' ')
           : ''
-        throw new Error(fieldMessage || payload.message || 'Não foi possível enviar o pedido.')
+        throw new Error(fieldMessage || payload.message || 'Não foi possível enviar o pedido. O teu setup não foi perdido; tenta novamente.')
       }
 
       saveSetup()
       setQuoteSuccess(payload.message || 'Pedido enviado para revisão.')
+      trackDeskStudioEvent('quote_submitted_successfully', {
+        topItems: setup.topItems.length,
+        underItems: setup.underItems.length,
+        total: pricing.totalPrice,
+      })
     } catch (error) {
-      setQuoteError(error instanceof Error ? error.message : 'Não foi possível enviar o pedido.')
+      setQuoteError(quoteFailureMessage(error))
+      trackDeskStudioEvent('quote_failed', {
+        hasValidationErrors: validation.errors.length > 0,
+        topItems: setup.topItems.length,
+        underItems: setup.underItems.length,
+      })
     } finally {
       setIsSubmittingQuote(false)
     }
@@ -613,6 +675,7 @@ export default function DeskBuilderPage() {
       mode: 'edit',
       selectedItemId: placedItem.id,
     }))
+    trackDeskStudioEvent('product_added', { productId: product.productId, surface })
     setCatalogOpen(false)
   }
 
@@ -640,6 +703,10 @@ export default function DeskBuilderPage() {
 
   function updateSelectedCustomField(key: string, value: unknown) {
     if (!selectedItem) return
+    trackDeskStudioEvent('product_customized', {
+      productId: selectedItem.productId,
+      field: key,
+    })
     updateSelectedItem({
       customConfig: {
         ...(selectedItem.customConfig ?? {}),
@@ -768,6 +835,7 @@ export default function DeskBuilderPage() {
       topItems,
       underItems,
     }))
+    trackDeskStudioEvent('template_applied', { templateId: template.id, topItems: topItems.length, underItems: underItems.length })
   }
 
   function startFromZero() {
@@ -877,7 +945,7 @@ export default function DeskBuilderPage() {
             <button
               key={surface}
               type="button"
-              onClick={() => mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))}
+              onClick={() => switchSurface(surface)}
               className={cn(
                 'min-h-11 rounded-md border px-3 text-left text-sm font-bold transition',
                 setup.surface === surface ? 'border-primary bg-primary text-primary-foreground' : 'border-white/10 bg-black/20 text-white/66 hover:border-white/24',
@@ -988,10 +1056,18 @@ export default function DeskBuilderPage() {
             <p className="text-lg font-black text-primary">{formatPrice(pricing.totalPrice)}</p>
           </div>
         </div>
-        <Button type="button" onClick={() => setQuoteOpen(true)} className="mt-3 h-10 w-full bg-white font-bold text-[#09090b] hover:bg-white/90">
+        <Button type="button" onClick={openQuoteModal} className="mt-3 h-10 w-full bg-white font-bold text-[#09090b] hover:bg-white/90">
           <Send className="size-4" />
           Pedir orçamento
         </Button>
+        <div className="mt-3 grid gap-2 text-xs leading-5 text-white/58">
+          {quoteTrustPoints.map((point) => (
+            <div key={point} className="flex items-center gap-2 rounded-md border border-white/10 bg-black/18 px-2.5 py-2">
+              <Check className="size-3.5 shrink-0 text-primary" />
+              {point}
+            </div>
+          ))}
+        </div>
         <div className="mt-3 space-y-2">
           {setupItemSummaries.length === 0 ? (
             <div className="rounded-md border border-dashed border-white/14 bg-black/18 p-3 text-sm leading-5 text-white/54">
@@ -1209,8 +1285,8 @@ export default function DeskBuilderPage() {
   return (
     <main className="min-h-screen bg-[#09090b] text-white">
       <Header />
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-[1800px] flex-col px-4 py-5 lg:grid lg:grid-cols-[320px_minmax(0,1fr)_360px] lg:gap-5 lg:px-5">
-        <aside className="hidden min-h-0 space-y-5 overflow-y-auto lg:block">
+      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-[1800px] flex-col px-4 pb-28 pt-5 lg:grid lg:h-[calc(100svh-4rem)] lg:min-h-0 lg:grid-cols-[320px_minmax(0,1fr)_360px] lg:gap-5 lg:overflow-hidden lg:px-5 lg:pb-5">
+        <aside className="hidden min-h-0 space-y-5 overflow-y-auto lg:block lg:h-full">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.22em] text-primary">EM3D Desk Studio</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight">Constrói a tua secretária ideal.</h1>
@@ -1219,7 +1295,7 @@ export default function DeskBuilderPage() {
           {setupControls}
         </aside>
 
-        <section className="flex min-h-[620px] flex-col rounded-lg border border-white/10 bg-[#0f0f14] shadow-2xl lg:min-h-0">
+        <section className="flex min-h-[620px] flex-col rounded-lg border border-white/10 bg-[#0f0f14] shadow-2xl lg:h-full lg:min-h-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/42">{surfaceLabels[setup.surface]}</p>
@@ -1231,7 +1307,7 @@ export default function DeskBuilderPage() {
                   <button
                     key={surface}
                     type="button"
-                    onClick={() => mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))}
+                    onClick={() => switchSurface(surface)}
                     className={cn(
                       'rounded px-3 py-2 text-xs font-black transition',
                       setup.surface === surface ? 'bg-primary text-primary-foreground' : 'text-white/58 hover:text-white',
@@ -1249,7 +1325,7 @@ export default function DeskBuilderPage() {
                 <Save className="size-4" />
                 Guardar setup
               </Button>
-              <Button type="button" onClick={() => setQuoteOpen(true)} className="h-10 bg-white font-bold text-[#09090b] hover:bg-white/90">
+              <Button type="button" onClick={openQuoteModal} className="h-10 bg-white font-bold text-[#09090b] hover:bg-white/90">
                 <Send className="size-4" />
                 Pedir orçamento
               </Button>
@@ -1260,7 +1336,7 @@ export default function DeskBuilderPage() {
             </div>
           </div>
 
-          <div ref={canvasRef} className="relative min-h-[520px] flex-1 overflow-hidden p-4">
+          <div ref={canvasRef} className="relative min-h-[520px] flex-1 overflow-hidden p-4 lg:min-h-0">
             <div className="absolute left-4 top-4 z-30 flex flex-col gap-2">
               {loadWarning && (
                 <div className="flex max-w-sm gap-2 rounded-md border border-amber-300/30 bg-amber-400/12 px-3 py-2 text-xs leading-5 text-amber-100">
@@ -1305,7 +1381,7 @@ export default function DeskBuilderPage() {
               </motion.div>
             )}
 
-            <div className="flex h-full min-h-[500px] items-center justify-center">
+            <div className="flex h-full min-h-[500px] items-center justify-center lg:min-h-0">
               <motion.div
                 layout
                 className="relative overflow-hidden rounded-lg border border-white/14 bg-[#2d2118] shadow-[0_40px_120px_rgba(0,0,0,0.5)]"
@@ -1461,11 +1537,11 @@ export default function DeskBuilderPage() {
           </div>
         </section>
 
-        <aside className="hidden min-h-0 space-y-5 overflow-y-auto lg:block">
+        <aside className="hidden min-h-0 space-y-5 overflow-y-auto lg:block lg:h-full">
           <section>
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-black">Produtos</h2>
-              <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">Top desk</span>
+              <span className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">{setup.surface === 'top' ? 'Em cima' : 'Por baixo'}</span>
             </div>
             {productCatalog}
           </section>
@@ -1483,35 +1559,82 @@ export default function DeskBuilderPage() {
         </aside>
       </section>
 
+      {!quoteOpen && (
+        <div className="fixed inset-x-3 bottom-3 z-40 rounded-lg border border-white/10 bg-[#111116]/94 p-3 shadow-[0_18px_70px_rgba(0,0,0,0.5)] backdrop-blur-xl lg:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/42">Pronto para orçamento</p>
+              <p className="mt-1 truncate text-sm font-black text-white">{allItems.length} produtos · {formatPrice(pricing.totalPrice)}</p>
+            </div>
+            <Button type="button" onClick={openQuoteModal} aria-label="Pedir orçamento" className="h-11 shrink-0 bg-primary px-4 font-black text-primary-foreground hover:bg-primary/90">
+              <Send className="size-4" />
+              Pedir
+            </Button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-white/54">
+            <span className="rounded-full border border-white/10 bg-black/24 px-2 py-1">Sem pagamento automático</span>
+            <span className="rounded-full border border-white/10 bg-black/24 px-2 py-1">{validation.warnings.length} avisos</span>
+          </div>
+        </div>
+      )}
+
       <Dialog open={quoteOpen} onOpenChange={(open) => {
         setQuoteOpen(open)
         if (open) {
+          trackDeskStudioEvent('quote_modal_opened', {
+            topItems: setup.topItems.length,
+            underItems: setup.underItems.length,
+            warnings: validation.warnings.length,
+            hasErrors: validation.errors.length > 0,
+          })
           setQuoteError('')
           setQuoteSuccess('')
         }
       }}>
-        <DialogContent className="border-white/10 bg-[#111116] text-white sm:max-w-xl">
+        <DialogContent className="max-h-[92dvh] overflow-y-auto border-white/10 bg-[#111116] text-white sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black">Pedir orçamento</DialogTitle>
             <DialogDescription className="text-white/58">
-              Envia o teu setup para revisão. Respondemos por email com confirmação final antes de produção.
+              Envia o teu setup para revisão manual. Respondemos por email com confirmação de preço e prazo antes da produção.
             </DialogDescription>
           </DialogHeader>
 
           {quoteSuccess ? (
             <div className="rounded-lg border border-primary/20 bg-primary/12 p-5">
-              <p className="font-black text-primary">{quoteSuccess}</p>
+              <p className="font-black text-primary">Pedido enviado para revisão</p>
               <p className="mt-2 text-sm leading-6 text-white/64">
                 Mantivemos o setup guardado neste dispositivo para poderes continuar a ajustar depois.
               </p>
+              <div className="mt-4 space-y-2">
+                {quoteNextSteps.map((step, index) => (
+                  <div key={step} className="flex items-center gap-3 rounded-md border border-white/10 bg-black/18 px-3 py-2 text-sm text-white/74">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">{index + 1}</span>
+                    <span className="font-bold">{step}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs leading-5 text-white/52">{quoteSuccess}</p>
               <Button type="button" onClick={() => setQuoteOpen(false)} className="mt-5 h-11 w-full bg-primary font-bold text-primary-foreground">
                 Fechar
               </Button>
             </div>
           ) : (
             <form className="space-y-4" onSubmit={submitQuote}>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {quoteTrustPoints.map((point) => (
+                  <div key={point} className="rounded-md border border-white/10 bg-black/24 p-3 text-xs leading-5 text-white/66">
+                    <Check className="mb-2 size-4 text-primary" />
+                    {point}
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-md border border-primary/18 bg-primary/10 p-3 text-sm leading-6 text-white/70">
+                <p className="font-black text-white">Peças feitas por encomenda</p>
+                <p className="mt-1">Sem pagamento automático nesta fase. Podes ajustar antes de avançar.</p>
+              </div>
               {quoteError && (
-                <div className="rounded-md border border-red-300/30 bg-red-500/12 px-3 py-2 text-sm text-red-100">
+                <div className="flex gap-2 rounded-md border border-red-300/30 bg-red-500/12 px-3 py-2 text-sm leading-6 text-red-100">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   {quoteError}
                 </div>
               )}
