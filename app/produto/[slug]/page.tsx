@@ -6,6 +6,7 @@ import { Footer } from '@/components/footer'
 import { WhatsAppButton } from '@/components/whatsapp-button'
 import { getProductCategorySlugs, type Product } from '@/lib/products'
 import { ProductDetail } from '@/app/product/[slug]/product-detail'
+import { CinematicProductExperience } from '@/components/product-cinematic/CinematicProductExperience'
 
 export async function generateStaticParams() {
   const products = await getCatalogProductsForBuild()
@@ -89,14 +90,27 @@ export async function generateMetadata({
 
 export default async function ProdutoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { slug } = await params
+  const resolvedSearchParams = searchParams ? await searchParams : {}
   const product = await getCatalogProductBySlugForBuild(slug)
 
   if (!product || product.visible === false) {
     notFound()
+  }
+
+  const isHeadsetStand = product.slug.toLowerCase() === 'headset-stand'
+  const cinematicParam = resolvedSearchParams.cinematic
+  const showCinematicPreview = isHeadsetStand && (
+    Array.isArray(cinematicParam) ? cinematicParam.includes('1') : cinematicParam === '1'
+  )
+
+  if (showCinematicPreview) {
+    return <CinematicProductExperience product={product} fallbackHref="/criar/headset-stand" />
   }
 
   const dedicatedConfiguratorHref = getDedicatedConfiguratorHref(product)
