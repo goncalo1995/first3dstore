@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertTriangle,
@@ -69,6 +70,19 @@ import {
   snapItemToGrid,
   validateDeskSetup,
 } from '@/lib/desk/validation'
+import type { DeskViewMode } from '@/components/desk-3d/Desk3DScene'
+
+const Desk3DScene = dynamic(
+  () => import('@/components/desk-3d/Desk3DScene').then((mod) => mod.Desk3DScene),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full min-h-[360px] items-center justify-center rounded-lg border border-white/10 bg-[#111116] text-sm font-bold text-white/58">
+        A preparar estúdio 3D...
+      </div>
+    ),
+  },
+)
 
 const ONBOARDING_STORAGE_KEY = 'em3d-desk-onboarding-dismissed-v1'
 const surfaceLabels: Record<DeskSurface, string> = {
@@ -345,6 +359,8 @@ export default function DeskBuilderPage() {
   const [focusOpen, setFocusOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
   const [quoteOpen, setQuoteOpen] = useState(false)
+  const [deskViewMode, setDeskViewMode] = useState<DeskViewMode>('overview')
+  const [use2DFallback, setUse2DFallback] = useState(false)
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [quoteSuccess, setQuoteSuccess] = useState('')
@@ -543,6 +559,7 @@ export default function DeskBuilderPage() {
 
   function switchSurface(surface: DeskSurface) {
     trackDeskStudioEvent('surface_switched', { surface })
+    setDeskViewMode(surface)
     mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))
   }
 
@@ -701,6 +718,20 @@ export default function DeskBuilderPage() {
     }))
   }
 
+  function moveItemIn3D(itemId: string, xCm: number, yCm: number) {
+    if (setup.mode === 'view') return
+    setSetup((current) => ({
+      ...current,
+      updatedAt: new Date().toISOString(),
+      topItems: current.topItems.map((item) => (
+        item.id === itemId ? clampItemToDesk({ ...item, xCm, yCm }, current.desk) : item
+      )),
+      underItems: current.underItems.map((item) => (
+        item.id === itemId ? clampItemToDesk({ ...item, xCm, yCm }, current.desk) : item
+      )),
+    }))
+  }
+
   function updateSelectedCustomField(key: string, value: unknown) {
     if (!selectedItem) return
     trackDeskStudioEvent('product_customized', {
@@ -736,11 +767,13 @@ export default function DeskBuilderPage() {
 
   function startFocus(itemId: string) {
     bringToFront(itemId, 'focus')
+    setDeskViewMode('focus')
     setFocusOpen(true)
   }
 
   function closeFocus() {
     mutateSetup((current) => ({ ...current, mode: 'edit' }))
+    setDeskViewMode(setup.surface)
     setFocusOpen(false)
   }
 
@@ -1317,6 +1350,26 @@ export default function DeskBuilderPage() {
                   </button>
                 ))}
               </div>
+              <div className="flex rounded-md border border-white/10 bg-black/20 p-1">
+                {([
+                  ['overview', 'Vista geral'],
+                  ['top', 'Em cima'],
+                  ['under', 'Por baixo'],
+                  ['focus', 'Foco'],
+                ] as Array<[DeskViewMode, string]>).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDeskViewMode(mode)}
+                    className={cn(
+                      'rounded px-3 py-2 text-xs font-black transition',
+                      deskViewMode === mode ? 'bg-white text-[#09090b]' : 'text-white/58 hover:text-white',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <Button type="button" variant="outline" onClick={() => setMode(setup.mode === 'view' ? 'edit' : 'view')} className="h-10 border-white/10 bg-white/6 text-white hover:bg-white hover:text-[#09090b]">
                 <Grid3X3 className="size-4" />
                 {setup.mode === 'view' ? 'Modo edição' : 'Voltar ao overview'}
@@ -1381,6 +1434,52 @@ export default function DeskBuilderPage() {
               </motion.div>
             )}
 
+            {!use2DFallback ? (
+              <>
+                <Desk3DScene
+                  setup={setup}
+                  selectedItemId={setup.selectedItemId}
+                  viewMode={deskViewMode}
+                  className="h-full min-h-[500px] lg:min-h-0"
+                  onFallback={() => setUse2DFallback(true)}
+                  onSelectItem={(itemId) => bringToFront(itemId, setup.mode === 'focus' ? 'focus' : 'edit')}
+                  onMoveItem={moveItemIn3D}
+                />
+                {activeItems.length === 0 && (
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+                    <div className="pointer-events-auto max-w-2xl rounded-lg border border-white/14 bg-[#111116]/88 p-5 text-center shadow-2xl backdrop-blur-xl">
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/12 text-primary">
+                        <Layers3 className="size-5" />
+                      </div>
+                      <p className="mt-4 text-lg font-black text-white">Começa com um objetivo</p>
+                      <p className="mt-2 text-sm leading-6 text-white/58">Escolhe um ponto de partida ou começa do zero. Podes editar tudo depois.</p>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        {starterTemplates.map((template) => (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => applyTemplate(template)}
+                            className="rounded-md border border-white/10 bg-white/7 p-3 text-left hover:border-primary/40"
+                          >
+                            <span className="block text-sm font-black text-white">{template.label}</span>
+                            <span className="mt-1 block text-xs leading-5 text-white/52">{template.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={startFromZero}
+                        variant="outline"
+                        className="mt-4 h-10 border-white/10 bg-white/6 font-bold text-white hover:bg-white hover:text-[#09090b]"
+                        aria-label="Começar setup do zero"
+                      >
+                        Começar do zero
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
             <div className="flex h-full min-h-[500px] items-center justify-center lg:min-h-0">
               <motion.div
                 layout
@@ -1503,6 +1602,7 @@ export default function DeskBuilderPage() {
 
               </motion.div>
             </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 border-t border-white/10 p-3 lg:hidden">

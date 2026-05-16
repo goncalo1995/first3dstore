@@ -2,11 +2,21 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { motion } from 'framer-motion'
 import { ArrowRight, Check, Cpu, Gauge, Headphones, PackageCheck, Printer, Ruler, ShieldCheck, Sparkles } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
+import { DeskFallbackTeaser } from '@/components/desk-3d/DeskFallbackTeaser'
+
+const HomeDeskHero3D = dynamic(
+  () => import('@/components/desk-3d/HomeDeskHero3D').then((mod) => mod.HomeDeskHero3D),
+  {
+    ssr: false,
+    loading: () => <DeskFallbackTeaser className="h-auto w-full max-w-[560px]" />,
+  },
+)
 
 const variants = [
   {
@@ -35,7 +45,7 @@ const variants = [
 const trustPoints = [
   { icon: ShieldCheck, title: 'Feito em Portugal', text: 'Produção local, sem séries anónimas.' },
   { icon: Gauge, title: 'Configuração rápida', text: 'Escolhe formato, cores e texto em minutos.' },
-  { icon: Cpu, title: '2D rápido, 3D opcional', text: 'Preview leve no telemóvel, visualização 3D quando quiseres.' },
+  { icon: Cpu, title: 'Estúdio 3D imersivo', text: 'Explora o setup como uma experiência visual, com fallback leve quando necessário.' },
 ]
 
 const valueProps = [
@@ -161,7 +171,7 @@ export default function HomePage() {
             <div className="absolute -inset-10 bg-[radial-gradient(circle,rgba(163,255,18,0.18),transparent_58%)] blur-2xl" />
             <div className="relative overflow-hidden rounded-lg border border-white/12 bg-white/8 p-4 shadow-2xl backdrop-blur-xl">
               <div className="rounded-md border border-white/10 bg-[#111116] p-3 sm:p-5">
-                <DeskBuilderTeaser />
+                  <HomeDeskHero3D />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-xs text-white/58">
                 <div className="rounded-md border border-white/10 bg-black/22 p-3">
@@ -174,7 +184,7 @@ export default function HomePage() {
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/22 p-3">
                   <p className="font-black text-white">Preview</p>
-                  <p className="mt-1">2D leve</p>
+                  <p className="mt-1">3D imersivo</p>
                 </div>
               </div>
             </div>
@@ -269,7 +279,7 @@ export default function HomePage() {
             <h2 className="mt-3 text-3xl font-black tracking-tight">Desenha o setup antes de pedir orçamento.</h2>
             <p className="mt-3 flex items-center gap-2 text-sm text-white/66">
               <Check className="size-4 text-primary" />
-              Preview 2D leve, módulos personalizáveis e pedido revisto pela equipa EM3D.
+              Preview 3D imersivo, módulos personalizáveis e pedido revisto pela equipa EM3D.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
