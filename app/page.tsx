@@ -137,7 +137,7 @@ export default function HomePage() {
               Constrói a tua secretária ideal.
             </motion.h1>
             <motion.p variants={fadeUp} className="mt-7 max-w-2xl text-lg leading-8 text-white/68 sm:text-xl">
-              Organizadores modulares impressos em 3D, feitos para o teu setup.
+              Organiza a tua secretária por cima e por baixo com peças modulares impressas em 3D, feitas para o teu setup.
             </motion.p>
             <motion.div variants={fadeUp} className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-14 bg-primary px-7 text-base font-bold text-primary-foreground shadow-[0_0_34px_rgba(163,255,18,0.24)] hover:bg-primary/90">

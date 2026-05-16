@@ -11,7 +11,7 @@ export const DESK_GENERATOR_VERSION = 'desk-openscad-v1'
 export type DeskGeneratorPayload = {
   type: 'desk-openscad-payload'
   generatorVersion: typeof DESK_GENERATOR_VERSION
-  sourceSchemaVersion: 1
+  sourceSchemaVersion: 1 | 2
   desk: {
     widthMm: number
     depthMm: number
@@ -49,6 +49,8 @@ type GeneratorDeskInput = {
   surface?: unknown
   desk?: unknown
   items?: unknown
+  topItems?: unknown
+  underItems?: unknown
 }
 
 type GeneratorDesk = {
@@ -138,12 +140,14 @@ function getGeneratorDesk(input: GeneratorDeskInput, errors: string[]): Generato
 }
 
 function getValidatedGeneratorItems(input: GeneratorDeskInput, desk: GeneratorDesk | null, errors: string[]) {
-  if (!Array.isArray(input.items)) {
+  const sourceItems = Array.isArray(input.topItems) ? input.topItems : input.items
+
+  if (!Array.isArray(sourceItems)) {
     errors.push('Lista de produtos inválida.')
     return []
   }
 
-  return input.items.flatMap((rawItem, index): DeskGeneratorItem[] => {
+  return sourceItems.flatMap((rawItem, index): DeskGeneratorItem[] => {
     if (!isRecord(rawItem)) {
       errors.push(`Produto ${index + 1} inválido.`)
       return []
@@ -235,8 +239,8 @@ export function buildDeskGeneratorPayload(input: unknown): DeskGeneratorPayload 
 
   const candidate = input as GeneratorDeskInput | DeskSetup
   if (candidate.type !== 'desk-setup') errors.push('Tipo de setup inválido.')
-  if (candidate.schemaVersion !== DESK_SCHEMA_VERSION) errors.push('Versão do setup incompatível.')
-  if (candidate.surface !== 'top') errors.push('Superfície do setup inválida.')
+  if (candidate.schemaVersion !== DESK_SCHEMA_VERSION && candidate.schemaVersion !== 1) errors.push('Versão do setup incompatível.')
+  if (candidate.surface !== 'top' && candidate.surface !== 'under') errors.push('Superfície do setup inválida.')
 
   const desk = getGeneratorDesk(candidate, errors)
   const items = getValidatedGeneratorItems(candidate, desk, errors)

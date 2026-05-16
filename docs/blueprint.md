@@ -49,7 +49,23 @@ Future UI can add:
 
 ## Current Implemented State
 
-Phase 1A/1B/1C is implemented as a top-of-desk MVP.
+Implemented phases:
+
+- Phase 1A — Spatial Foundation: implemented.
+- Phase 1B — Commerce Foundation / quote request: implemented.
+- Phase 1C — UX polish: implemented.
+- Phase 2A — Product-specific customization: implemented.
+- Phase 2B — Premium product visuals and catalog polish: implemented.
+- Phase 2C — Homepage-to-builder polish: implemented.
+- Phase 2D — Admin desk setup request review: implemented.
+- Phase 3A — OpenSCAD payload mapping: implemented.
+
+Still not implemented:
+
+- STL generation;
+- OpenSCAD execution;
+- production queues/jobs for desk setups;
+- file writing/storage for generated geometry.
 
 Current route:
 
@@ -57,11 +73,13 @@ Current route:
 /criar/desk
 ```
 
-The homepage includes a CTA to:
+The homepage now leads with:
 
 ```text
 /criar/desk
 ```
+
+The headset stand remains visible as a secondary product/configurator, not the main desk-builder narrative.
 
 Current localStorage keys:
 
@@ -82,7 +100,7 @@ Current quote CTA copy:
 Pedir orçamento
 ```
 
-The current flow is quote/review-first. It does not use the cart, does not use Stripe, and does not generate STL files.
+The current flow is quote/review-first. It does not use the cart, does not use Stripe, does not execute OpenSCAD, and does not generate STL files.
 
 ## Current DeskSetup Shape
 
@@ -132,9 +150,31 @@ Rules:
 
 - Persist all item positions in centimetres.
 - UI may render in pixels, but saved state is always centimetres.
-- Do not store footprint on `DeskItem`; derive dimensions from `productId`.
+- Do not store footprint on `DeskItem`; derive dimensions from `productId` and `customConfig`.
 - `surface` is currently only `'top'`, but the model is prepared for future `top | under`.
-- `customConfig` exists but Phase 1 does not yet render product-specific fields.
+- `customConfig` is actively used.
+- New products receive default `customConfig`.
+- Invalid saved localStorage `customConfig` falls back to product defaults with PT-PT warnings.
+- Server submission rejects invalid `customConfig`.
+- Quote notes include selected custom options.
+
+## Current Footprint Rules
+
+Current footprint source of truth:
+
+```text
+getDeskItemFootprint(item)
+```
+
+Rules:
+
+- Footprint is always derived with `getDeskItemFootprint(item)`.
+- Do not read static `product.footprintCm` directly for placement, bounds, collision, display, summaries, or generator mapping.
+- `desk_tray_v1.size` can override footprint:
+  - `S`: `12cm x 8cm`;
+  - `M`: `16cm x 10cm`;
+  - `L`: `20cm x 12cm`.
+- Bounds, collision warnings, visual size, summaries, quote notes, admin review, and generator mapping must use the derived footprint.
 
 ## Current Quote Request Flow
 
@@ -232,6 +272,7 @@ Rules:
 - Items must remain within desk bounds.
 - Product max quantity rules are enforced.
 - Selected base/accent colors must be allowed by the product definition.
+- Submitted `customConfig` must only contain known keys and valid values for that product.
 - Quote submission rejects empty setups.
 - Quote submission allows at most `20` items.
 - Overlap is a warning only: `Alguns produtos parecem estar sobrepostos.`
@@ -251,11 +292,14 @@ Rules:
 
 - Server recalculates pricing.
 - Client/localStorage pricing is not trusted.
-- `itemsPrice = sum(product.price)`.
+- Pricing uses `getDeskItemPrice(item)`.
+- `itemsPrice = sum(getDeskItemPrice(item))`.
 - `setupDiscount = 0`.
 - `totalPrice = itemsPrice`.
-
-Phase 2 can add price modifiers from product-specific custom fields.
+- Option price adjustments are included.
+- Current option price adjustments:
+  - `desk_tray_v1.size = M`: `+3€`;
+  - `desk_tray_v1.size = L`: `+6€`.
 
 ## Current Product Definitions
 
@@ -270,11 +314,14 @@ lib/desk/products.ts
 - Name: `Suporte MagSafe`
 - Category: `Carregamento`
 - Price: `15`
-- Footprint: `14cm x 7cm`
+- Base footprint: `14cm x 7cm`
 - Allowed base colors: `Preto Fosco`, `Branco Stormtrooper`
 - Allowed accent colors: `Madeira Walnut`, `Neon Lime`, `Pulse Blue`
 - Max quantity: `2`
-- Future generator metadata:
+- Custom fields:
+  - `cableExit`: `back | left | right`, default `back`;
+  - `phoneSide`: `left | right`, default `right`.
+- Generator metadata:
   - type: `openscad`
   - moduleId: `magsafe_v1`
   - moduleName: `magsafe_dock_v1`
@@ -285,10 +332,13 @@ lib/desk/products.ts
 - Name: `Copo de Canetas`
 - Category: `Organização`
 - Price: `8`
-- Footprint: `7cm x 7cm`
+- Base footprint: `7cm x 7cm`
 - Allowed base colors: `Preto Fosco`, `Branco Stormtrooper`
 - Allowed accent colors: `Madeira Walnut`, `Neon Lime`, `Pulse Blue`
-- Future generator metadata:
+- Custom fields:
+  - `heightPreset`: `low | standard | tall`, default `standard`;
+  - `dividers`: boolean, default `false`.
+- Generator metadata:
   - type: `openscad`
   - moduleId: `pen_holder_v1`
   - moduleName: `pen_holder_v1`
@@ -299,10 +349,15 @@ lib/desk/products.ts
 - Name: `Bandeja Modular`
 - Category: `Arrumação`
 - Price: `5`
-- Footprint: `12cm x 8cm`
+- Base footprint: `12cm x 8cm`
 - Allowed base colors: `Preto Fosco`, `Branco Stormtrooper`
 - Allowed accent colors: `Madeira Walnut`, `Neon Lime`, `Pulse Blue`
-- Future generator metadata:
+- Custom fields:
+  - `size`: `S | M | L`, default `S`;
+  - `S`: `12cm x 8cm`, current price;
+  - `M`: `16cm x 10cm`, `+3€`;
+  - `L`: `20cm x 12cm`, `+6€`.
+- Generator metadata:
   - type: `openscad`
   - moduleId: `desk_tray_v1`
   - moduleName: `desk_tray_v1`
@@ -313,16 +368,19 @@ lib/desk/products.ts
 - Name: `Suporte de Auscultadores`
 - Category: `Áudio`
 - Price: `24.90`
-- Footprint: `12cm x 10cm`
+- Base footprint: `12cm x 10cm`
 - Allowed base colors: `Preto Fosco`, `Branco Stormtrooper`
 - Allowed accent colors: `Madeira Walnut`, `Neon Lime`, `Pulse Blue`
-- Future generator metadata:
+- Custom fields:
+  - `hookSide`: `left | right`, default `right`;
+  - `heightPreset`: `standard | tall`, default `standard`.
+- Generator metadata:
   - type: `openscad`
   - moduleId: `headphone_stand_v1`
   - moduleName: `headphone_stand_v1`
   - version: `v1`
 
-Generator metadata is future-facing only. Phase 1 does not execute OpenSCAD and does not generate STL files.
+Generator metadata is now used by the Phase 3A payload mapper. It is still preview/debug-only: the app does not execute OpenSCAD and does not generate STL files.
 
 ## Current UX Capabilities
 
@@ -350,6 +408,89 @@ Implemented:
   - `S`: save setup;
 - development-only Debug JSON and export.
 
+Current visual/UI polish:
+
+- `/criar/desk` has premium CSS/DOM-only visuals for MagSafe, pen holder, tray, and headphone stand.
+- Product catalog is grouped by category.
+- Selected/focus badges show product name and computed item price.
+- Setup summary includes selected custom options, per-item prices, warnings, and totals.
+- Empty desk state suggests adding a starter item through the normal add-product path.
+- Mobile drawers remain part of the active workflow.
+
+Homepage state:
+
+- Homepage now introduces `/criar/desk` as the main experience.
+- It includes an inline SVG desk-builder teaser.
+- It includes value props for custom spatial fit, 3D-printed parts, and one-request setup creation.
+- Headset stand messaging remains visible but secondary.
+
+## Current Admin Review State
+
+Admin desk setup request review lives in:
+
+```text
+app/admin/order-requests/page.tsx
+```
+
+For `canvasConfig.type === 'desk-setup'`, the admin renderer shows:
+
+- desk dimensions;
+- surface;
+- item count;
+- warnings;
+- `Preço no pedido` from `canvasConfig.pricing.totalPrice`;
+- `Preço guardado` from `request.selectedPrice` / `request.estimatedPrice`;
+- explicit price mismatch warning when stored/request prices differ;
+- each item with product name, position in cm, rotation, colors, selected custom options, derived footprint, and derived item price;
+- compact read-only top-down preview;
+- collapsible raw JSON.
+
+Unknown, malformed, or stale products/configs are handled gracefully instead of crashing the admin drawer.
+
+## Current Generator Mapping State
+
+Generator mapping lives in:
+
+```text
+lib/desk/generator.ts
+```
+
+It provides:
+
+- `buildDeskGeneratorPayload(input)`;
+- `formatDeskGeneratorCall(payload)`;
+- `DeskGeneratorPayload`;
+- `DeskGeneratorValidationError`.
+
+The mapper builds a deterministic payload:
+
+```ts
+{
+  type: 'desk-openscad-payload',
+  generatorVersion: 'desk-openscad-v1',
+  sourceSchemaVersion: 1,
+  desk: {
+    widthMm,
+    depthMm,
+    surface: 'top',
+    grid?
+  },
+  items: [...]
+}
+```
+
+Rules:
+
+- Converts centimetres to integer millimetres with `Math.round(cm * 10)`.
+- Uses `generatorVersion: 'desk-openscad-v1'`.
+- Maps each item to product generator metadata, mm position, rotation, derived `footprintMm`, colors, and validated `customConfig`.
+- Validates only generation-relevant data: type, schema version, surface, desk dimensions, known products, rotation, bounds, colors, and `customConfig`.
+- Ignores request-only fields such as pricing, warnings, `submittedAt`, notes, and customer data.
+- Formats a safe OpenSCAD-style preview string for admin/debug display.
+- Escapes string values including quotes, backslashes, newlines, carriage returns, tabs, and other control characters.
+
+Important: this is preview/debug only. It does not shell out, write files, create queues/jobs, execute OpenSCAD, or generate STL files.
+
 ## Historical / Superseded Notes
 
 The following ideas are preserved for context but are not the current implementation target.
@@ -370,70 +511,45 @@ Superseded for Phase 1. The current desk builder uses `Pedir orçamento` and sav
 
 Superseded. Use `schemaVersion: 1` for `DeskSetup`. Existing non-desk `canvasConfig.version` payloads remain part of older flows, but desk setup payloads should not add a separate `version` field.
 
-## Phase 2 Direction
+## Completed Phase Notes
 
-Phase 2 starts turning products from generic shapes into configurable product systems.
+Phase 2A is completed. Product-specific fields are now defined in `lib/desk/products.ts`, rendered generically in `/criar/desk`, persisted into `DeskItem.customConfig`, validated locally/server-side, included in quote notes, and included in generator payload mapping.
 
-When the user focuses a product, the side panel should render controls based on the product definition. Do not hardcode a separate UI for each product. Use a generic field system.
+Phase 2B, 2C, 2D, and 3A are also completed as described above.
 
 Still defer:
 
 - STL generation;
 - OpenSCAD execution;
-- cart integration;
+- cart integration for desk setups;
 - Three.js/WebGL;
 - under-desk surface.
 
-Phase 2 should first make `customConfig` meaningful and validated.
+## Next Recommended Phase
 
-## Next Implementation Prompt: Phase 2A
-
-Copy-paste-ready prompt:
-
-```text
-Phase 2A: Add product-specific customization fields to the existing /criar/desk focus panel.
+### Phase 3B — OpenSCAD module contract/spec and generator fixtures
 
 Goal:
-When a user focuses a product, show fields based on that product’s definition and persist values into DeskItem.customConfig.
 
-Do not add STL generation, OpenSCAD execution, cart, or Three.js.
+Define the actual SCAD module interface expected by the generated Phase 3A payload and create deterministic fixture examples for each product/custom option. Keep this docs/helper-level unless explicitly asked to implement STL generation.
 
-Tasks:
-1. Extend lib/desk/products.ts with customFields definitions.
-2. Add a generic custom field renderer in /criar/desk:
-   - select
-   - boolean/toggle
-   - segmented choice
-   - number only if bounded by min/max
-3. Save field values into DeskItem.customConfig.
-4. Validate customConfig on client and server.
-5. Recalculate pricing if a field changes price.
-6. Show selected options in the quote notes.
-7. Keep canvasConfig self-contained and PII-free.
-8. Keep /criar/headset-stand untouched.
+Recommended tasks:
 
-Initial fields:
-- magsafe_dock_v1:
-  - cableExit: back | left | right
-  - phoneSide: left | right
-- pen_holder_v1:
-  - heightPreset: low | standard | tall
-  - dividers: true | false
-- desk_tray_v1:
-  - size: S | M | L
-- headphone_stand_v1:
-  - hookSide: left | right
-  - heightPreset: standard | tall
-
-Validation:
-- reject unknown customConfig keys;
-- reject invalid option values;
-- fallback invalid localStorage values to defaults with warning;
-- server rejects invalid submitted values.
-
-Run:
-- npx tsc --noEmit --pretty false
-- npm run build
-
-Report changed files and whether API/schema changed.
-```
+- Document the `generate_desk_setup(...)` OpenSCAD module contract.
+- Define the item tuple/object contract expected by the SCAD side.
+- Create fixture payload examples for:
+  - `magsafe_dock_v1` cable exit and phone side combinations;
+  - `pen_holder_v1` height presets and dividers;
+  - `desk_tray_v1` sizes `S`, `M`, `L`;
+  - `headphone_stand_v1` hook side and height presets.
+- Add fixture examples that demonstrate:
+  - mm coordinate mapping;
+  - rotation;
+  - derived footprint override for tray sizes;
+  - color names;
+  - sorted `customConfig`.
+- Keep it deterministic and reviewable.
+- Do not execute OpenSCAD.
+- Do not generate STL files.
+- Do not add queues/jobs/storage.
+- Do not modify checkout/cart behavior.

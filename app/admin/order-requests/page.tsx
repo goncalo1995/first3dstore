@@ -66,6 +66,8 @@ type DeskSetupCanvasConfig = {
     surfaceColor?: string
   }
   items?: unknown[]
+  topItems?: unknown[]
+  underItems?: unknown[]
   pricing?: {
     itemsPrice?: number
     setupDiscount?: number
@@ -238,7 +240,7 @@ function toDeskItem(value: unknown): DeskItem | null {
 function DeskSetupPreview({ config }: { config: DeskSetupCanvasConfig }) {
   const widthCm = config.desk?.widthCm
   const depthCm = config.desk?.depthCm
-  const items = (config.items ?? []).map(toDeskItem).filter(Boolean) as DeskItem[]
+  const items = getDeskConfigItems(config, 'top')
 
   if (!isNumber(widthCm) || !isNumber(depthCm) || widthCm <= 0 || depthCm <= 0) {
     return (
@@ -283,6 +285,13 @@ function DeskSetupPreview({ config }: { config: DeskSetupCanvasConfig }) {
   )
 }
 
+function getDeskConfigItems(config: DeskSetupCanvasConfig, surface: 'top' | 'under') {
+  const source = surface === 'top'
+    ? (config.topItems ?? config.items ?? [])
+    : (config.underItems ?? [])
+  return source.map(toDeskItem).filter(Boolean) as DeskItem[]
+}
+
 function DeskSetupRequestSummary({
   request,
   config,
@@ -290,7 +299,9 @@ function DeskSetupRequestSummary({
   request: OrderRequest
   config: DeskSetupCanvasConfig
 }) {
-  const items = (config.items ?? []).map((item, index) => ({ index, raw: item, item: toDeskItem(item) }))
+  const topItems = (config.topItems ?? config.items ?? []).map((item, index) => ({ index, raw: item, item: toDeskItem(item) }))
+  const underItems = (config.underItems ?? []).map((item, index) => ({ index, raw: item, item: toDeskItem(item) }))
+  const itemCount = topItems.length + underItems.length
   const warnings = Array.isArray(config.warnings) ? config.warnings.filter((warning): warning is string => typeof warning === 'string') : []
   const requestPrice = isNumber(config.pricing?.totalPrice) ? config.pricing.totalPrice : undefined
   const storedPrice = request.selectedPrice ?? request.estimatedPrice
@@ -325,7 +336,7 @@ function DeskSetupRequestSummary({
         </div>
         <div className="rounded-lg border border-border bg-secondary/35 p-3">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Produtos</p>
-          <p className="mt-1 font-semibold">{Array.isArray(config.items) ? config.items.length : 0}</p>
+          <p className="mt-1 font-semibold">{itemCount}</p>
           <p className="mt-1 text-xs text-muted-foreground">Submetido: {config.submittedAt ? formatDate(config.submittedAt) : '-'}</p>
         </div>
       </div>
@@ -362,10 +373,16 @@ function DeskSetupRequestSummary({
 
       <div className="space-y-2">
         <p className="font-semibold">Produtos configurados</p>
-        {items.length === 0 ? (
+        {itemCount === 0 ? (
           <p className="rounded-lg border border-border bg-secondary/35 p-3 text-sm text-muted-foreground">Sem produtos no canvasConfig.</p>
         ) : (
-          items.map(({ index, raw, item }) => {
+          ([
+            ['Em cima da secretária', topItems],
+            ['Por baixo da secretária', underItems],
+          ] as const).map(([surfaceLabel, surfaceItems]) => surfaceItems.length > 0 && (
+            <div key={surfaceLabel} className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{surfaceLabel}</p>
+              {surfaceItems.map(({ index, raw, item }) => {
             const product = item ? getDeskProduct(item.productId) : undefined
             const footprint = item ? getDeskItemFootprint(item) : null
             const itemPrice = item ? getDeskItemPrice(item) : undefined
@@ -403,9 +420,17 @@ function DeskSetupRequestSummary({
                 )}
               </div>
             )
-          })
+              })}
+            </div>
+          ))
         )}
       </div>
+
+      {underItems.length > 0 && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+          O payload OpenSCAD atual cobre apenas a superfície superior. Produtos por baixo da secretária ainda não têm suporte de gerador.
+        </div>
+      )}
 
       <details className="rounded-lg border border-border bg-secondary/35">
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Dados para gerador</summary>

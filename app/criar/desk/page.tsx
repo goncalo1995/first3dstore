@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Bug,
   Check,
+  Cable,
   Grid3X3,
   Info,
   Layers3,
@@ -58,16 +59,23 @@ import {
   getDeskProduct,
 } from '@/lib/desk/products'
 import { calculateDeskPricing, getDeskItemPrice } from '@/lib/desk/pricing'
-import type { DeskColorName, DeskCustomFieldDefinition, DeskItem, DeskProductDefinition, DeskRotation, DeskSetup } from '@/lib/desk/types'
+import type { DeskColorName, DeskCustomFieldDefinition, DeskItem, DeskProductCategory, DeskProductDefinition, DeskRotation, DeskSetup, DeskSurface } from '@/lib/desk/types'
 import {
   clampItemToDesk,
   deskDimensionLimits,
+  getAllDeskSetupItems,
+  getDeskItemsForSurface,
   normalizeDeskSetupColors,
   snapItemToGrid,
   validateDeskSetup,
 } from '@/lib/desk/validation'
 
 const ONBOARDING_STORAGE_KEY = 'em3d-desk-onboarding-dismissed-v1'
+const surfaceLabels: Record<DeskSurface, string> = {
+  top: 'Em cima da secretária',
+  under: 'Por baixo da secretária',
+}
+const categoryFilters: Array<DeskProductCategory | 'Todos'> = ['Todos', 'Carregamento', 'Organização', 'Arrumação', 'Áudio', 'Gestão de cabos']
 
 const defaultSetup = (): DeskSetup => {
   const now = new Date().toISOString()
@@ -84,11 +92,67 @@ const defaultSetup = (): DeskSetup => {
       snapToGrid: true,
       snapSizeCm: 5,
     },
-    items: [],
+    topItems: [],
+    underItems: [],
     createdAt: now,
     updatedAt: now,
   }
 }
+
+const starterTemplates = [
+  {
+    id: 'gaming',
+    label: 'Setup Gaming',
+    description: 'Auscultadores, carregamento e cabos escondidos.',
+    items: [
+      { productId: 'magsafe_dock_v1', surface: 'top', xCm: 8, yCm: 8 },
+      { productId: 'headphone_stand_v1', surface: 'top', xCm: 95, yCm: 10 },
+      { productId: 'cable_tray_v1', surface: 'under', xCm: 36, yCm: 8 },
+      { productId: 'headphone_hook_under_v1', surface: 'under', xCm: 104, yCm: 8 },
+    ],
+  },
+  {
+    id: 'creator',
+    label: 'Criador de Conteúdo',
+    description: 'Organização visível com cabos e transformadores controlados.',
+    items: [
+      { productId: 'magsafe_dock_v1', surface: 'top', xCm: 10, yCm: 10 },
+      { productId: 'pen_holder_v1', surface: 'top', xCm: 30, yCm: 10 },
+      { productId: 'desk_tray_v1', surface: 'top', xCm: 45, yCm: 10 },
+      { productId: 'power_brick_mount_v1', surface: 'under', xCm: 52, yCm: 14 },
+    ],
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    description: 'Poucas peças, muito controlo visual.',
+    items: [
+      { productId: 'magsafe_dock_v1', surface: 'top', xCm: 14, yCm: 12 },
+      { productId: 'cable_clip_v1', surface: 'under', xCm: 48, yCm: 12 },
+    ],
+  },
+  {
+    id: 'home-office',
+    label: 'Home Office',
+    description: 'Arrumação discreta para trabalho diário.',
+    items: [
+      { productId: 'pen_holder_v1', surface: 'top', xCm: 14, yCm: 12 },
+      { productId: 'desk_tray_v1', surface: 'top', xCm: 28, yCm: 12 },
+      { productId: 'under_desk_drawer_v1', surface: 'under', xCm: 18, yCm: 10 },
+      { productId: 'cable_tray_v1', surface: 'under', xCm: 60, yCm: 10 },
+    ],
+  },
+  {
+    id: 'cable-management',
+    label: 'Gestão de Cabos',
+    description: 'Começa por limpar tudo o que fica por baixo.',
+    items: [
+      { productId: 'cable_tray_v1', surface: 'under', xCm: 34, yCm: 8 },
+      { productId: 'cable_clip_v1', surface: 'under', xCm: 18, yCm: 20 },
+      { productId: 'power_brick_mount_v1', surface: 'under', xCm: 74, yCm: 18 },
+    ],
+  },
+] as const
 
 function formatPrice(value: number) {
   return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value)
@@ -186,6 +250,46 @@ function ProductVisual({
     )
   }
 
+  if (product.preview.shape === 'rail') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))` }}>
+        <div className="absolute inset-x-[8%] top-[28%] h-[44%] rounded-full border border-white/18 bg-black/28 shadow-inner" />
+        <div className="absolute left-[13%] top-[42%] h-[16%] w-[74%] rounded-full" style={{ backgroundColor: accentHex }} />
+        <div className="absolute left-[8%] top-[18%] h-[64%] w-px bg-white/25" />
+        <div className="absolute right-[8%] top-[18%] h-[64%] w-px bg-white/25" />
+      </div>
+    )
+  }
+
+  if (product.preview.shape === 'clip') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))` }}>
+        <div className="absolute inset-[18%] rounded-full border-[4px] border-white/18 border-r-transparent" />
+        <div className="absolute inset-y-[28%] right-[18%] w-[18%] rounded-full" style={{ backgroundColor: accentHex }} />
+      </div>
+    )
+  }
+
+  if (product.preview.shape === 'brick') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))` }}>
+        <div className="absolute inset-[15%] rounded-md border border-white/22 bg-black/28" />
+        <div className="absolute left-[22%] top-[30%] h-[40%] w-[56%] rounded-sm border border-white/14 bg-black/22" />
+        <div className="absolute left-[18%] top-[45%] h-[10%] w-[64%] rounded-full" style={{ backgroundColor: accentHex }} />
+      </div>
+    )
+  }
+
+  if (product.preview.shape === 'drawer') {
+    return (
+      <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.08))` }}>
+        <div className="absolute inset-[10%] rounded-md border border-white/22 bg-black/22 shadow-inner" />
+        <div className="absolute inset-x-[22%] top-[24%] h-px bg-white/24" />
+        <div className="absolute left-[42%] bottom-[22%] h-[12%] w-[16%] rounded-full" style={{ backgroundColor: accentHex }} />
+      </div>
+    )
+  }
+
   if (product.preview.shape === 'hook') {
     return (
       <div className={shellClass} style={{ background: `linear-gradient(135deg, ${baseHex}, rgba(255,255,255,0.06))` }}>
@@ -235,6 +339,7 @@ export default function DeskBuilderPage() {
     shippingAddress: '',
     notes: '',
   })
+  const [categoryFilter, setCategoryFilter] = useState<DeskProductCategory | 'Todos'>('Todos')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{
@@ -246,25 +351,30 @@ export default function DeskBuilderPage() {
     startY: number
   } | null>(null)
 
-  const selectedItem = setup.items.find((item) => item.id === setup.selectedItemId)
+  const activeItems = getDeskItemsForSurface(setup, setup.surface)
+  const allItems = getAllDeskSetupItems(setup)
+  const selectedItem = allItems.find((item) => item.id === setup.selectedItemId)
   const selectedProduct = selectedItem ? getDeskProduct(selectedItem.productId) : undefined
   const selectedFootprint = selectedItem ? getDeskItemFootprint(selectedItem) : null
   const selectedPrice = selectedItem ? getDeskItemPrice(selectedItem) : 0
   const validation = useMemo(() => validateDeskSetup(setup), [setup])
-  const pricing = useMemo(() => calculateDeskPricing(setup), [setup])
-  const maxZ = useMemo(() => Math.max(0, ...setup.items.map((item) => item.zIndex ?? 0)), [setup.items])
+  const pricing = useMemo(() => calculateDeskPricing({ items: allItems } as Pick<DeskSetup, 'items'>), [allItems])
+  const maxZ = useMemo(() => Math.max(0, ...allItems.map((item) => item.zIndex ?? 0)), [allItems])
   const productGroups = useMemo(() => (
     Array.from(
-      deskProducts.reduce((groups, product) => {
+      deskProducts
+        .filter((product) => product.validation.allowedSurfaces.includes(setup.surface))
+        .filter((product) => categoryFilter === 'Todos' || product.category === categoryFilter)
+        .reduce((groups, product) => {
         const products = groups.get(product.category) ?? []
         products.push(product)
         groups.set(product.category, products)
         return groups
       }, new Map<string, DeskProductDefinition[]>()),
     )
-  ), [])
+  ), [setup.surface, categoryFilter])
   const setupItemSummaries = useMemo(() => (
-    setup.items.map((item) => {
+    allItems.map((item) => {
       const product = getDeskProduct(item.productId)
       const footprint = getDeskItemFootprint(item)
       return {
@@ -275,7 +385,7 @@ export default function DeskBuilderPage() {
         options: optionSummaryText(item),
       }
     })
-  ), [setup.items])
+  ), [allItems])
   const scale = Math.min(canvasSize.width / setup.desk.widthCm, canvasSize.height / setup.desk.depthCm)
   const deskWidthPx = setup.desk.widthCm * scale
   const deskDepthPx = setup.desk.depthCm * scale
@@ -283,7 +393,7 @@ export default function DeskBuilderPage() {
   useEffect(() => {
     try {
       setShowOnboarding(window.localStorage.getItem(ONBOARDING_STORAGE_KEY) !== 'true')
-      const saved = window.localStorage.getItem(DESK_STORAGE_KEY)
+      const saved = window.localStorage.getItem(DESK_STORAGE_KEY) ?? window.localStorage.getItem('em3d-desk-setup-v1')
       if (!saved) return
       const parsed = JSON.parse(saved) as DeskSetup
       const normalized = normalizeDeskSetupColors(parsed)
@@ -296,6 +406,7 @@ export default function DeskBuilderPage() {
         setLoadWarning(normalized.warnings.join(' '))
       }
       setSetup(normalized.setup)
+      window.localStorage.setItem(DESK_STORAGE_KEY, JSON.stringify(normalized.setup))
     } catch {
       setLoadWarning('Não foi possível carregar o setup guardado. Começámos com uma secretária limpa.')
     }
@@ -447,19 +558,30 @@ export default function DeskBuilderPage() {
     }))
   }
 
+  function mapSurfaceItems(current: DeskSetup, surface: DeskSurface, mapper: (items: DeskItem[]) => DeskItem[]) {
+    return surface === 'top'
+      ? { ...current, topItems: mapper(current.topItems) }
+      : { ...current, underItems: mapper(current.underItems) }
+  }
+
   function bringToFront(itemId: string, mode: DeskSetup['mode'] = setup.mode) {
     mutateSetup((current) => ({
       ...current,
       mode,
       selectedItemId: itemId,
-      items: current.items.map((item) => (
+      topItems: current.topItems.map((item) => (
+        item.id === itemId ? { ...item, zIndex: maxZ + 1 } : item
+      )),
+      underItems: current.underItems.map((item) => (
         item.id === itemId ? { ...item, zIndex: maxZ + 1 } : item
       )),
     }))
   }
 
   function addProduct(product: DeskProductDefinition) {
-    const quantity = setup.items.filter((item) => item.productId === product.productId).length
+    const surface = setup.surface
+    if (!product.validation.allowedSurfaces.includes(surface)) return
+    const quantity = getDeskItemsForSurface(setup, surface).filter((item) => item.productId === product.productId).length
     if (product.validation.maxQuantity && quantity >= product.validation.maxQuantity) return
 
     const customConfig = getDefaultCustomConfig(product)
@@ -486,10 +608,10 @@ export default function DeskBuilderPage() {
 
     const placedItem = snapItemToGrid(clampItemToDesk(item, setup.desk), setup.desk)
     mutateSetup((current) => ({
-      ...current,
+      ...mapSurfaceItems(current, surface, (items) => [...items, placedItem]),
+      surface,
       mode: 'edit',
       selectedItemId: placedItem.id,
-      items: [...current.items, placedItem],
     }))
     setCatalogOpen(false)
   }
@@ -498,7 +620,8 @@ export default function DeskBuilderPage() {
     mutateSetup((current) => ({
       ...current,
       desk: { ...current.desk, ...patch },
-      items: current.items.map((item) => clampItemToDesk(item, { ...current.desk, ...patch })),
+      topItems: current.topItems.map((item) => clampItemToDesk(item, { ...current.desk, ...patch })),
+      underItems: current.underItems.map((item) => clampItemToDesk(item, { ...current.desk, ...patch })),
     }))
   }
 
@@ -506,7 +629,10 @@ export default function DeskBuilderPage() {
     if (!selectedItem) return
     mutateSetup((current) => ({
       ...current,
-      items: current.items.map((item) => (
+      topItems: current.topItems.map((item) => (
+        item.id === selectedItem.id ? clampItemToDesk({ ...item, ...patch }, current.desk) : item
+      )),
+      underItems: current.underItems.map((item) => (
         item.id === selectedItem.id ? clampItemToDesk({ ...item, ...patch }, current.desk) : item
       )),
     }))
@@ -535,7 +661,8 @@ export default function DeskBuilderPage() {
       ...current,
       mode: current.mode === 'focus' ? 'edit' : current.mode,
       selectedItemId: undefined,
-      items: current.items.filter((item) => item.id !== selectedItem.id),
+      topItems: current.topItems.filter((item) => item.id !== selectedItem.id),
+      underItems: current.underItems.filter((item) => item.id !== selectedItem.id),
     }))
     setFocusOpen(false)
   }
@@ -576,7 +703,12 @@ export default function DeskBuilderPage() {
     setSetup((current) => ({
       ...current,
       updatedAt: new Date().toISOString(),
-      items: current.items.map((item) => (
+      topItems: current.topItems.map((item) => (
+        item.id === drag.itemId
+          ? clampItemToDesk({ ...item, xCm: nextX, yCm: nextY }, current.desk)
+          : item
+      )),
+      underItems: current.underItems.map((item) => (
         item.id === drag.itemId
           ? clampItemToDesk({ ...item, xCm: nextX, yCm: nextY }, current.desk)
           : item
@@ -591,14 +723,91 @@ export default function DeskBuilderPage() {
 
     mutateSetup((current) => ({
       ...current,
-      items: current.items.map((item) => (
+      topItems: current.topItems.map((item) => (
+        item.id === drag.itemId ? snapItemToGrid(item, current.desk) : item
+      )),
+      underItems: current.underItems.map((item) => (
         item.id === drag.itemId ? snapItemToGrid(item, current.desk) : item
       )),
     }))
   }
 
+  function createTemplateItem(productId: string, xCm: number, yCm: number): DeskItem | null {
+    const product = getDeskProduct(productId)
+    if (!product) return null
+    const item: DeskItem = {
+      id: newId(),
+      productId,
+      xCm,
+      yCm,
+      rotation: 0,
+      zIndex: maxZ + 1,
+      colorBase: product.defaultColors.base,
+      colorAccent: product.defaultColors.accent,
+      customConfig: getDefaultCustomConfig(product),
+    }
+    return clampItemToDesk(item, setup.desk)
+  }
+
+  function applyTemplate(template: typeof starterTemplates[number]) {
+    if (allItems.length > 0 && !window.confirm('Este template substitui os produtos atuais. Queres continuar?')) return
+    const topItems = template.items
+      .filter((item) => item.surface === 'top')
+      .map((item) => createTemplateItem(item.productId, item.xCm, item.yCm))
+      .filter(Boolean) as DeskItem[]
+    const underItems = template.items
+      .filter((item) => item.surface === 'under')
+      .map((item) => createTemplateItem(item.productId, item.xCm, item.yCm))
+      .filter(Boolean) as DeskItem[]
+
+    mutateSetup((current) => ({
+      ...current,
+      mode: 'edit',
+      surface: template.id === 'cable-management' ? 'under' : 'top',
+      selectedItemId: undefined,
+      topItems,
+      underItems,
+    }))
+  }
+
+  function startFromZero() {
+    if (allItems.length > 0 && !window.confirm('Queres remover os produtos atuais e começar do zero?')) return
+    mutateSetup((current) => ({
+      ...current,
+      mode: 'edit',
+      selectedItemId: undefined,
+      topItems: [],
+      underItems: [],
+    }))
+  }
+
   const productCatalog = (
     <div className="space-y-5">
+      <div className="rounded-lg border border-white/10 bg-white/7 p-3">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-white/45">Catálogo ativo</p>
+        <p className="mt-1 text-sm font-black text-white">{surfaceLabels[setup.surface]}</p>
+        {setup.surface === 'under' && (
+          <p className="mt-2 flex items-center gap-2 text-xs leading-5 text-primary">
+            <Cable className="size-3.5" />
+            Produtos focados em gestão de cabos e arrumação discreta.
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {categoryFilters.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => setCategoryFilter(category)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-bold',
+                categoryFilter === category ? 'border-primary bg-primary text-primary-foreground' : 'border-white/10 bg-black/22 text-white/58',
+              )}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </div>
       {productGroups.map(([category, products]) => (
         <section key={category} className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -606,7 +815,7 @@ export default function DeskBuilderPage() {
             <span className="h-px flex-1 bg-white/10" />
           </div>
           {products.map((product) => {
-            const quantity = setup.items.filter((item) => item.productId === product.productId).length
+            const quantity = activeItems.filter((item) => item.productId === product.productId).length
             const disabled = Boolean(product.validation.maxQuantity && quantity >= product.validation.maxQuantity)
             const itemPreview = previewItem(product)
             const footprint = getDeskItemFootprint(itemPreview)
@@ -661,6 +870,25 @@ export default function DeskBuilderPage() {
 
   const setupControls = (
     <div className="space-y-5">
+      <section className="rounded-lg border border-white/10 bg-white/7 p-4">
+        <p className="text-sm font-black text-white">Superfície</p>
+        <div className="mt-3 grid gap-2">
+          {(['top', 'under'] as DeskSurface[]).map((surface) => (
+            <button
+              key={surface}
+              type="button"
+              onClick={() => mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))}
+              className={cn(
+                'min-h-11 rounded-md border px-3 text-left text-sm font-bold transition',
+                setup.surface === surface ? 'border-primary bg-primary text-primary-foreground' : 'border-white/10 bg-black/20 text-white/66 hover:border-white/24',
+              )}
+            >
+              {surfaceLabels[surface]}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-lg border border-white/10 bg-white/7 p-4">
         <p className="text-sm font-black text-white">Dimensões</p>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -739,9 +967,31 @@ export default function DeskBuilderPage() {
 
       <section className="rounded-lg border border-white/10 bg-white/7 p-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-black text-white">Resumo</p>
-          <span className="rounded-full border border-white/10 bg-black/24 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/52">{setup.items.length} produtos</span>
+          <p className="text-sm font-black text-white">Pronto para orçamento</p>
+          <span className="rounded-full border border-white/10 bg-black/24 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white/52">{allItems.length} produtos</span>
         </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-md border border-white/10 bg-black/20 p-2">
+            <p className="text-white/42">Em cima</p>
+            <p className="text-lg font-black text-white">{setup.topItems.length}</p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/20 p-2">
+            <p className="text-white/42">Por baixo</p>
+            <p className="text-lg font-black text-white">{setup.underItems.length}</p>
+          </div>
+          <div className="rounded-md border border-white/10 bg-black/20 p-2">
+            <p className="text-white/42">Avisos</p>
+            <p className="text-lg font-black text-white">{validation.warnings.length}</p>
+          </div>
+          <div className="rounded-md border border-primary/20 bg-primary/10 p-2">
+            <p className="text-white/42">Total</p>
+            <p className="text-lg font-black text-primary">{formatPrice(pricing.totalPrice)}</p>
+          </div>
+        </div>
+        <Button type="button" onClick={() => setQuoteOpen(true)} className="mt-3 h-10 w-full bg-white font-bold text-[#09090b] hover:bg-white/90">
+          <Send className="size-4" />
+          Pedir orçamento
+        </Button>
         <div className="mt-3 space-y-2">
           {setupItemSummaries.length === 0 ? (
             <div className="rounded-md border border-dashed border-white/14 bg-black/18 p-3 text-sm leading-5 text-white/54">
@@ -972,10 +1222,25 @@ export default function DeskBuilderPage() {
         <section className="flex min-h-[620px] flex-col rounded-lg border border-white/10 bg-[#0f0f14] shadow-2xl lg:min-h-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/42">Superfície superior</p>
-              <p className="text-sm font-bold text-white">{setup.desk.widthCm} x {setup.desk.depthCm} cm · {formatPrice(pricing.totalPrice)}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/42">{surfaceLabels[setup.surface]}</p>
+              <p className="text-sm font-bold text-white">{setup.desk.widthCm} x {setup.desk.depthCm} cm · {setup.topItems.length} em cima · {setup.underItems.length} por baixo · {formatPrice(pricing.totalPrice)}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-md border border-white/10 bg-black/20 p-1">
+                {(['top', 'under'] as DeskSurface[]).map((surface) => (
+                  <button
+                    key={surface}
+                    type="button"
+                    onClick={() => mutateSetup((current) => ({ ...current, surface, selectedItemId: undefined, mode: current.mode === 'view' ? 'view' : 'edit' }))}
+                    className={cn(
+                      'rounded px-3 py-2 text-xs font-black transition',
+                      setup.surface === surface ? 'bg-primary text-primary-foreground' : 'text-white/58 hover:text-white',
+                    )}
+                  >
+                    {surface === 'top' ? 'Em cima' : 'Por baixo'}
+                  </button>
+                ))}
+              </div>
               <Button type="button" variant="outline" onClick={() => setMode(setup.mode === 'view' ? 'edit' : 'view')} className="h-10 border-white/10 bg-white/6 text-white hover:bg-white hover:text-[#09090b]">
                 <Grid3X3 className="size-4" />
                 {setup.mode === 'view' ? 'Modo edição' : 'Voltar ao overview'}
@@ -1047,8 +1312,9 @@ export default function DeskBuilderPage() {
                 style={{
                   width: deskWidthPx,
                   height: deskDepthPx,
-                  background:
-                    setup.desk.surfaceColor === 'walnut'
+                  background: setup.surface === 'under'
+                    ? 'linear-gradient(135deg,#161820,#0b0d12 55%,#1b2230)'
+                    : setup.desk.surfaceColor === 'walnut'
                       ? 'linear-gradient(135deg,#3a281d,#211913 55%,#4a3020)'
                       : '#17171c',
                 }}
@@ -1077,32 +1343,42 @@ export default function DeskBuilderPage() {
                   />
                 )}
 
-                {setup.items.length === 0 && (
+                {activeItems.length === 0 && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center p-6">
-                    <div className="max-w-sm rounded-lg border border-white/14 bg-[#111116]/86 p-5 text-center shadow-2xl backdrop-blur-xl">
+                    <div className="max-w-2xl rounded-lg border border-white/14 bg-[#111116]/90 p-5 text-center shadow-2xl backdrop-blur-xl">
                       <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/12 text-primary">
                         <Layers3 className="size-5" />
                       </div>
-                      <p className="mt-4 text-lg font-black text-white">Arrasta ou clica para adicionar</p>
-                      <p className="mt-2 text-sm leading-6 text-white/58">Começa com um módulo compacto e ajusta tudo com medidas reais.</p>
+                      <p className="mt-4 text-lg font-black text-white">Começa com um objetivo</p>
+                      <p className="mt-2 text-sm leading-6 text-white/58">Escolhe um ponto de partida ou começa do zero. Podes editar tudo depois.</p>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        {starterTemplates.map((template) => (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => applyTemplate(template)}
+                            className="rounded-md border border-white/10 bg-white/7 p-3 text-left hover:border-primary/40"
+                          >
+                            <span className="block text-sm font-black text-white">{template.label}</span>
+                            <span className="mt-1 block text-xs leading-5 text-white/52">{template.description}</span>
+                          </button>
+                        ))}
+                      </div>
                       <Button
                         type="button"
-                        onClick={() => {
-                          const starter = getDeskProduct('magsafe_dock_v1')
-                          if (starter) addProduct(starter)
-                        }}
-                        className="mt-4 h-10 bg-primary font-bold text-primary-foreground hover:bg-primary/90"
-                        aria-label="Adicionar Suporte MagSafe como primeiro produto"
+                        onClick={startFromZero}
+                        variant="outline"
+                        className="mt-4 h-10 border-white/10 bg-white/6 font-bold text-white hover:bg-white hover:text-[#09090b]"
+                        aria-label="Começar setup do zero"
                       >
-                        <Plus className="size-4" />
-                        Adicionar primeiro produto
+                        Começar do zero
                       </Button>
                     </div>
                   </div>
                 )}
 
                 <AnimatePresence>
-                  {setup.items.map((item) => {
+                  {activeItems.map((item) => {
                     const product = getDeskProduct(item.productId)
                     if (!product) return null
                     const dimensions = getDeskItemFootprint(item)

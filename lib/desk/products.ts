@@ -1,7 +1,8 @@
 import type { DeskColorName, DeskCustomFieldDefinition, DeskCustomFieldValue, DeskItem, DeskProductDefinition, DeskProductId } from './types'
 
-export const DESK_STORAGE_KEY = 'em3d-desk-setup-v1'
-export const DESK_SCHEMA_VERSION = 1
+export const DESK_STORAGE_KEY = 'em3d-desk-setup-v2'
+export const LEGACY_DESK_STORAGE_KEY = 'em3d-desk-setup-v1'
+export const DESK_SCHEMA_VERSION = 2
 
 export const deskColors: Record<DeskColorName, { hex: string; label: DeskColorName }> = {
   'Preto Fosco': { label: 'Preto Fosco', hex: '#0B0D10' },
@@ -176,6 +177,195 @@ export const deskProducts: DeskProductDefinition[] = [
       type: 'openscad',
       moduleId: 'headphone_stand_v1',
       moduleName: 'headphone_stand_v1',
+      version: 'v1',
+    },
+  },
+  {
+    productId: 'cable_tray_v1',
+    name: 'Calha para Cabos',
+    category: 'Gestão de cabos',
+    description: 'Calha under-desk para esconder extensões e cabos grossos.',
+    price: 19.9,
+    footprintCm: { width: 35, depth: 10 },
+    defaultColors: { base: 'Preto Fosco', accent: 'Pulse Blue' },
+    allowedColors: {
+      base: ['Preto Fosco', 'Branco Stormtrooper'],
+      accent: ['Madeira Walnut', 'Neon Lime', 'Pulse Blue'],
+    },
+    preview: { shape: 'rail', icon: 'cable' },
+    validation: { allowedSurfaces: ['under'] },
+    customFields: [
+      {
+        key: 'size',
+        label: 'Tamanho',
+        type: 'select',
+        defaultValue: 'M',
+        options: [
+          { value: 'S', label: 'Pequena', footprintCm: { width: 28, depth: 9 } },
+          { value: 'M', label: 'Média', footprintCm: { width: 35, depth: 10 } },
+          { value: 'L', label: 'Grande', priceAdd: 8, footprintCm: { width: 48, depth: 12 } },
+        ],
+      },
+      {
+        key: 'cableExit',
+        label: 'Saída dos cabos',
+        type: 'select',
+        defaultValue: 'both',
+        options: [
+          { value: 'left', label: 'Esquerda' },
+          { value: 'right', label: 'Direita' },
+          { value: 'both', label: 'Ambos os lados' },
+        ],
+      },
+    ],
+    generator: {
+      type: 'openscad',
+      moduleId: 'cable_tray_v1',
+      moduleName: 'cable_tray_v1',
+      version: 'v1',
+    },
+  },
+  {
+    productId: 'cable_clip_v1',
+    name: 'Clips de Cabos',
+    category: 'Gestão de cabos',
+    description: 'Pack de clips para guiar cabos finos por baixo da secretária.',
+    price: 4.9,
+    footprintCm: { width: 6, depth: 3 },
+    defaultColors: { base: 'Preto Fosco', accent: 'Neon Lime' },
+    allowedColors: {
+      base: ['Preto Fosco', 'Branco Stormtrooper'],
+      accent: ['Madeira Walnut', 'Neon Lime', 'Pulse Blue'],
+    },
+    preview: { shape: 'clip', icon: 'clip' },
+    validation: { allowedSurfaces: ['under'] },
+    customFields: [
+      {
+        key: 'packSize',
+        label: 'Pack',
+        type: 'select',
+        defaultValue: '3',
+        options: [
+          { value: '3', label: '3 clips' },
+          { value: '6', label: '6 clips', priceAdd: 4 },
+          { value: '10', label: '10 clips', priceAdd: 8 },
+        ],
+      },
+    ],
+    generator: {
+      type: 'openscad',
+      moduleId: 'cable_clip_v1',
+      moduleName: 'cable_clip_v1',
+      version: 'v1',
+    },
+  },
+  {
+    productId: 'power_brick_mount_v1',
+    name: 'Suporte para Transformador',
+    category: 'Gestão de cabos',
+    description: 'Suporte discreto para transformador, hub ou power brick.',
+    price: 12.9,
+    footprintCm: { width: 16, depth: 9 },
+    defaultColors: { base: 'Preto Fosco', accent: 'Pulse Blue' },
+    allowedColors: {
+      base: ['Preto Fosco', 'Branco Stormtrooper'],
+      accent: ['Madeira Walnut', 'Neon Lime', 'Pulse Blue'],
+    },
+    preview: { shape: 'brick', icon: 'battery' },
+    validation: { allowedSurfaces: ['under'] },
+    customFields: [
+      {
+        key: 'strapType',
+        label: 'Fixação',
+        type: 'select',
+        defaultValue: 'elastic',
+        options: [
+          { value: 'elastic', label: 'Elástico' },
+          { value: 'printed', label: 'Impresso' },
+        ],
+      },
+    ],
+    generator: {
+      type: 'openscad',
+      moduleId: 'power_brick_mount_v1',
+      moduleName: 'power_brick_mount_v1',
+      version: 'v1',
+    },
+  },
+  {
+    productId: 'under_desk_drawer_v1',
+    name: 'Gaveta Under-Desk',
+    category: 'Arrumação',
+    description: 'Gaveta compacta por baixo da secretária para objetos pequenos.',
+    price: 29.9,
+    footprintCm: { width: 28, depth: 18 },
+    defaultColors: { base: 'Preto Fosco', accent: 'Madeira Walnut' },
+    allowedColors: {
+      base: ['Preto Fosco', 'Branco Stormtrooper'],
+      accent: ['Madeira Walnut', 'Neon Lime', 'Pulse Blue'],
+    },
+    preview: { shape: 'drawer', icon: 'drawer' },
+    validation: { allowedSurfaces: ['under'] },
+    customFields: [
+      {
+        key: 'size',
+        label: 'Tamanho',
+        type: 'select',
+        defaultValue: 'standard',
+        options: [
+          { value: 'compact', label: 'Compacta', footprintCm: { width: 22, depth: 15 } },
+          { value: 'standard', label: 'Standard', footprintCm: { width: 28, depth: 18 } },
+        ],
+      },
+      {
+        key: 'openingSide',
+        label: 'Abertura',
+        type: 'select',
+        defaultValue: 'front',
+        options: [
+          { value: 'front', label: 'Frente' },
+          { value: 'left', label: 'Esquerda' },
+          { value: 'right', label: 'Direita' },
+        ],
+      },
+    ],
+    generator: {
+      type: 'openscad',
+      moduleId: 'under_desk_drawer_v1',
+      moduleName: 'under_desk_drawer_v1',
+      version: 'v1',
+    },
+  },
+  {
+    productId: 'headphone_hook_under_v1',
+    name: 'Gancho para Auscultadores',
+    category: 'Áudio',
+    description: 'Gancho simples para esconder os auscultadores sob a borda.',
+    price: 9.9,
+    footprintCm: { width: 8, depth: 6 },
+    defaultColors: { base: 'Preto Fosco', accent: 'Pulse Blue' },
+    allowedColors: {
+      base: ['Preto Fosco', 'Branco Stormtrooper'],
+      accent: ['Madeira Walnut', 'Neon Lime', 'Pulse Blue'],
+    },
+    preview: { shape: 'hook', icon: 'headphones' },
+    validation: { allowedSurfaces: ['under'] },
+    customFields: [
+      {
+        key: 'side',
+        label: 'Lado',
+        type: 'select',
+        defaultValue: 'right',
+        options: [
+          { value: 'left', label: 'Esquerda' },
+          { value: 'right', label: 'Direita' },
+        ],
+      },
+    ],
+    generator: {
+      type: 'openscad',
+      moduleId: 'headphone_hook_under_v1',
+      moduleName: 'headphone_hook_under_v1',
       version: 'v1',
     },
   },

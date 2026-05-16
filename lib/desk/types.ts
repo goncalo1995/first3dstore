@@ -1,9 +1,9 @@
 export type DeskMode = 'view' | 'edit' | 'focus'
-export type DeskSurface = 'top'
+export type DeskSurface = 'top' | 'under'
 export type DeskRotation = 0 | 90 | 180 | 270
 export type DeskSnapSize = 5 | 10
-export type DeskPreviewShape = 'dock' | 'circle' | 'tray' | 'hook'
-export type DeskPreviewIcon = 'smartphone' | 'pen' | 'tray' | 'headphones'
+export type DeskPreviewShape = 'dock' | 'circle' | 'tray' | 'hook' | 'rail' | 'clip' | 'brick' | 'drawer'
+export type DeskPreviewIcon = 'smartphone' | 'pen' | 'tray' | 'headphones' | 'cable' | 'clip' | 'battery' | 'drawer'
 
 export type DeskColorName =
   | 'Preto Fosco'
@@ -17,8 +17,13 @@ export type DeskProductId =
   | 'pen_holder_v1'
   | 'desk_tray_v1'
   | 'headphone_stand_v1'
+  | 'cable_tray_v1'
+  | 'cable_clip_v1'
+  | 'power_brick_mount_v1'
+  | 'under_desk_drawer_v1'
+  | 'headphone_hook_under_v1'
 
-export type DeskProductCategory = 'Carregamento' | 'Organização' | 'Arrumação' | 'Áudio'
+export type DeskProductCategory = 'Carregamento' | 'Organização' | 'Arrumação' | 'Áudio' | 'Gestão de cabos'
 
 export type DeskCustomFieldValue = string | number | boolean
 
@@ -77,7 +82,7 @@ export type DeskItem = {
 
 export type DeskSetup = {
   type: 'desk-setup'
-  schemaVersion: 1
+  schemaVersion: 2
   surface: DeskSurface
   mode: DeskMode
   desk: {
@@ -89,7 +94,9 @@ export type DeskSetup = {
     snapSizeCm: DeskSnapSize
   }
   selectedItemId?: string
-  items: DeskItem[]
+  topItems: DeskItem[]
+  underItems: DeskItem[]
+  items?: DeskItem[]
   createdAt: string
   updatedAt: string
 }

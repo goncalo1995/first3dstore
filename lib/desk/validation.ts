@@ -5,7 +5,7 @@ import {
   getDeskProduct,
   getCustomFieldOption,
 } from './products'
-import type { DeskCustomFieldDefinition, DeskCustomFieldValue, DeskItem, DeskRotation, DeskSetup, ValidationResult } from './types'
+import type { DeskCustomFieldDefinition, DeskCustomFieldValue, DeskItem, DeskRotation, DeskSetup, DeskSurface, ValidationResult } from './types'
 
 const rotations = new Set<DeskRotation>([0, 90, 180, 270])
 export const MAX_DESK_ITEMS = 20
@@ -13,6 +13,18 @@ export const MAX_DESK_ITEMS = 20
 export const deskDimensionLimits = {
   width: { min: 80, max: 200 },
   depth: { min: 50, max: 100 },
+}
+
+export function getDeskItemsForSurface(setup: Pick<DeskSetup, 'topItems' | 'underItems'>, surface: DeskSurface) {
+  return surface === 'top' ? setup.topItems : setup.underItems
+}
+
+export function getAllDeskSetupItems(setup: { items?: DeskItem[]; topItems?: DeskItem[]; underItems?: DeskItem[] } | null | undefined) {
+  if (!setup) return []
+  if (Array.isArray(setup.topItems) || Array.isArray(setup.underItems)) {
+    return [...(setup.topItems ?? []), ...(setup.underItems ?? [])]
+  }
+  return setup.items ?? []
 }
 
 function isNumber(value: unknown): value is number {
@@ -146,10 +158,10 @@ export function sanitizeDeskCustomConfig(item: DeskItem): { item: DeskItem; warn
   }
 }
 
-export function normalizeDeskSetupForLocalStorage(setup: DeskSetup): { setup: DeskSetup; warnings: string[] } {
+function normalizeItemsForLocalStorage(items: DeskItem[]) {
   const warnings: string[] = []
 
-  const items = setup.items.map((item) => {
+  const normalizedItems = items.map((item) => {
     const product = getDeskProduct(item.productId)
     if (!product) return item
 
@@ -168,15 +180,59 @@ export function normalizeDeskSetupForLocalStorage(setup: DeskSetup): { setup: De
     return next
   })
 
+  return { items: normalizedItems, warnings }
+}
+
+function defaultDesk() {
+  return {
+    widthCm: 120,
+    depthCm: 70,
+    surfaceColor: 'walnut',
+    showGrid: true,
+    snapToGrid: true,
+    snapSizeCm: 5 as const,
+  }
+}
+
+export function migrateDeskSetupToV2(value: unknown): { setup: DeskSetup; warnings: string[] } {
+  const warnings: string[] = []
+  const now = new Date().toISOString()
+  const source = isRecord(value) ? value : {}
+  const legacyItems = Array.isArray(source.items) ? source.items as DeskItem[] : []
+  const topItems = Array.isArray(source.topItems) ? source.topItems as DeskItem[] : legacyItems
+  const underItems = Array.isArray(source.underItems) ? source.underItems as DeskItem[] : []
+  const normalizedTop = normalizeItemsForLocalStorage(topItems)
+  const normalizedUnder = normalizeItemsForLocalStorage(underItems)
+  warnings.push(...normalizedTop.warnings, ...normalizedUnder.warnings)
+
+  if (source.schemaVersion === 1 && legacyItems.length) {
+    warnings.push('O setup guardado foi atualizado para suportar produtos por cima e por baixo da secretária.')
+  }
+
+  const candidateDesk = isRecord(source.desk) ? source.desk : {}
+  const desk = {
+    ...defaultDesk(),
+    ...candidateDesk,
+  } as DeskSetup['desk']
+
   return {
     setup: {
-      ...setup,
-      items,
+      type: 'desk-setup',
+      schemaVersion: DESK_SCHEMA_VERSION,
+      surface: source.surface === 'under' ? 'under' : 'top',
+      mode: source.mode === 'edit' || source.mode === 'focus' || source.mode === 'view' ? source.mode : 'view',
+      desk,
+      selectedItemId: typeof source.selectedItemId === 'string' ? source.selectedItemId : undefined,
+      topItems: normalizedTop.items,
+      underItems: normalizedUnder.items,
+      createdAt: typeof source.createdAt === 'string' ? source.createdAt : now,
+      updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : now,
     },
     warnings,
   }
 }
 
+export const normalizeDeskSetupForLocalStorage = migrateDeskSetupToV2
 export const normalizeDeskSetupColors = normalizeDeskSetupForLocalStorage
 
 function itemsOverlap(a: DeskItem, b: DeskItem) {
@@ -192,6 +248,84 @@ function itemsOverlap(a: DeskItem, b: DeskItem) {
   )
 }
 
+function validateItemsForSurface(items: DeskItem[], surface: DeskSurface, desk: DeskSetup['desk'], errors: string[], warnings: string[]) {
+  if (items.length > MAX_DESK_ITEMS) {
+    errors.push(`A superfície ${surface === 'top' ? 'superior' : 'inferior'} permite no máximo ${MAX_DESK_ITEMS} produtos.`)
+  }
+
+  const counts = new Map<string, number>()
+
+  items.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      errors.push(`Produto ${index + 1} inválido.`)
+      return
+    }
+
+    const product = getDeskProduct(item.productId)
+    if (!product) {
+      errors.push(`Produto desconhecido: ${item.productId || index + 1}.`)
+      return
+    }
+
+    counts.set(item.productId, (counts.get(item.productId) ?? 0) + 1)
+
+    if (!product.validation.allowedSurfaces.includes(surface)) {
+      errors.push(`${product.name} não pode ser colocado ${surface === 'top' ? 'em cima' : 'por baixo'} da secretária.`)
+    }
+
+    if (!rotations.has(item.rotation)) {
+      errors.push(`${product.name} tem uma rotação inválida.`)
+    }
+
+    if (!isAllowedBaseColor(item)) {
+      errors.push(`${product.name} tem uma cor principal inválida.`)
+    }
+
+    if (!isAllowedAccentColor(item)) {
+      errors.push(`${product.name} tem uma cor de detalhe inválida.`)
+    }
+
+    if (!isNumber(item.xCm) || !isNumber(item.yCm)) {
+      errors.push(`${product.name} tem coordenadas inválidas.`)
+      return
+    }
+
+    const customValidation = validateDeskCustomConfig(item.productId, item.customConfig)
+    errors.push(...customValidation.errors)
+
+    const footprint = getDeskItemFootprint(item)
+    if (!footprint) return
+
+    if (
+      item.xCm < 0 ||
+      item.yCm < 0 ||
+      item.xCm + footprint.width > desk.widthCm ||
+      item.yCm + footprint.depth > desk.depthCm
+    ) {
+      errors.push(`${product.name} está fora da secretária.`)
+    }
+  })
+
+  counts.forEach((quantity, productId) => {
+    const product = getDeskProduct(productId)
+    if (product?.validation.maxQuantity && quantity > product.validation.maxQuantity) {
+      errors.push(`${product.name} permite no máximo ${product.validation.maxQuantity} unidades.`)
+    }
+  })
+
+  for (let i = 0; i < items.length; i += 1) {
+    for (let j = i + 1; j < items.length; j += 1) {
+      if (itemsOverlap(items[i], items[j])) {
+        warnings.push(surface === 'top'
+          ? 'Alguns produtos em cima da secretária parecem estar sobrepostos.'
+          : 'Alguns produtos por baixo da secretária parecem estar sobrepostos.')
+        i = items.length
+        break
+      }
+    }
+  }
+}
+
 export function validateDeskSetup(setup: unknown): ValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
@@ -204,7 +338,7 @@ export function validateDeskSetup(setup: unknown): ValidationResult {
 
   if (candidate.type !== 'desk-setup') errors.push('Tipo de setup inválido.')
   if (candidate.schemaVersion !== DESK_SCHEMA_VERSION) errors.push('Versão do setup incompatível.')
-  if (candidate.surface !== 'top') errors.push('Superfície do setup inválida.')
+  if (candidate.surface !== 'top' && candidate.surface !== 'under') errors.push('Superfície do setup inválida.')
   if (!['view', 'edit', 'focus'].includes(candidate.mode)) errors.push('Modo do setup inválido.')
 
   if (!candidate.desk || typeof candidate.desk !== 'object') {
@@ -222,82 +356,19 @@ export function validateDeskSetup(setup: unknown): ValidationResult {
     if (candidate.desk.snapSizeCm !== 5 && candidate.desk.snapSizeCm !== 10) errors.push('Tamanho da grelha inválido.')
   }
 
-  if (!Array.isArray(candidate.items)) {
-    errors.push('Lista de produtos inválida.')
-  } else if (candidate.desk) {
-    if (candidate.items.length > MAX_DESK_ITEMS) {
-      errors.push(`O setup permite no máximo ${MAX_DESK_ITEMS} produtos.`)
-    }
+  const hasTopItems = Array.isArray(candidate.topItems)
+  const hasUnderItems = Array.isArray(candidate.underItems)
 
-    const counts = new Map<string, number>()
+  if (!hasTopItems) {
+    errors.push('Lista de produtos superior inválida.')
+  }
+  if (!hasUnderItems) {
+    errors.push('Lista de produtos inferior inválida.')
+  }
 
-    candidate.items.forEach((item, index) => {
-      if (!item || typeof item !== 'object') {
-        errors.push(`Produto ${index + 1} inválido.`)
-        return
-      }
-
-      const product = getDeskProduct(item.productId)
-      if (!product) {
-        errors.push(`Produto desconhecido: ${item.productId || index + 1}.`)
-        return
-      }
-
-      counts.set(item.productId, (counts.get(item.productId) ?? 0) + 1)
-
-      if (!product.validation.allowedSurfaces.includes(candidate.surface)) {
-        errors.push(`${product.name} não pode ser colocado nesta superfície.`)
-      }
-
-      if (!rotations.has(item.rotation)) {
-        errors.push(`${product.name} tem uma rotação inválida.`)
-      }
-
-      if (!isAllowedBaseColor(item)) {
-        errors.push(`${product.name} tem uma cor principal inválida.`)
-      }
-
-      if (!isAllowedAccentColor(item)) {
-        errors.push(`${product.name} tem uma cor de detalhe inválida.`)
-      }
-
-      if (!isNumber(item.xCm) || !isNumber(item.yCm)) {
-        errors.push(`${product.name} tem coordenadas inválidas.`)
-        return
-      }
-
-      const customValidation = validateDeskCustomConfig(item.productId, item.customConfig)
-      errors.push(...customValidation.errors)
-
-      const footprint = getDeskItemFootprint(item)
-      if (!footprint) return
-
-      if (
-        item.xCm < 0 ||
-        item.yCm < 0 ||
-        item.xCm + footprint.width > candidate.desk.widthCm ||
-        item.yCm + footprint.depth > candidate.desk.depthCm
-      ) {
-        errors.push(`${product.name} está fora da secretária.`)
-      }
-    })
-
-    counts.forEach((quantity, productId) => {
-      const product = getDeskProduct(productId)
-      if (product?.validation.maxQuantity && quantity > product.validation.maxQuantity) {
-        errors.push(`${product.name} permite no máximo ${product.validation.maxQuantity} unidades.`)
-      }
-    })
-
-    for (let i = 0; i < candidate.items.length; i += 1) {
-      for (let j = i + 1; j < candidate.items.length; j += 1) {
-        if (itemsOverlap(candidate.items[i], candidate.items[j])) {
-          warnings.push('Alguns produtos parecem estar sobrepostos.')
-          i = candidate.items.length
-          break
-        }
-      }
-    }
+  if (hasTopItems && hasUnderItems && candidate.desk) {
+    validateItemsForSurface(candidate.topItems, 'top', candidate.desk, errors, warnings)
+    validateItemsForSurface(candidate.underItems, 'under', candidate.desk, errors, warnings)
   }
 
   return { valid: errors.length === 0, errors, warnings }

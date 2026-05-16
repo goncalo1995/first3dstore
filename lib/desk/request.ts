@@ -1,7 +1,7 @@
 import { getDeskItemCustomOptionSummaries, getDeskItemFootprint, getDeskProduct } from './products'
-import { calculateDeskPricing, getDeskItemPrice } from './pricing'
+import { calculateDeskSetupPricing, getDeskItemPrice } from './pricing'
 import type { DeskItem, DeskPricing, DeskSetup, ValidationResult } from './types'
-import { MAX_DESK_ITEMS, validateDeskSetup } from './validation'
+import { getAllDeskSetupItems, validateDeskSetup } from './validation'
 
 export type DeskQuoteContact = {
   customerName: string
@@ -70,16 +70,13 @@ export function validateDeskQuoteSetup(value: unknown): DeskQuoteValidation {
   const validation = validateDeskSetup(value)
   const setup = value as DeskSetup
   const errors = [...validation.errors]
+  const items = getAllDeskSetupItems(setup as any)
 
-  if (setup?.items?.length === 0) {
+  if (items.length === 0) {
     errors.push('Adicione pelo menos um produto ao setup.')
   }
 
-  if (setup?.items?.length > MAX_DESK_ITEMS) {
-    errors.push(`O setup permite no máximo ${MAX_DESK_ITEMS} produtos.`)
-  }
-
-  const pricing = validation.valid ? calculateDeskPricing(setup) : { itemsPrice: 0, setupDiscount: 0, totalPrice: 0 }
+  const pricing = validation.valid ? calculateDeskSetupPricing(setup) : { itemsPrice: 0, setupDiscount: 0, totalPrice: 0 }
 
   return {
     setup,
@@ -104,7 +101,8 @@ export function buildDeskCanvasConfig(params: {
     schemaVersion: setup.schemaVersion,
     surface: setup.surface,
     desk: setup.desk,
-    items: setup.items,
+    topItems: setup.topItems,
+    underItems: setup.underItems,
     pricing,
     warnings,
     submittedAt,
@@ -135,9 +133,11 @@ export function buildDeskRequestNotes(params: {
   return [
     'Fluxo: Desk Builder',
     `Secretária: ${setup.desk.widthCm}cm x ${setup.desk.depthCm}cm`,
-    `Superfície: ${setup.surface === 'top' ? 'superior' : setup.surface}`,
-    `Produtos: ${setup.items.length}`,
-    ...setup.items.map(itemSummary),
+    'Superfícies: superior e inferior',
+    `Produtos em cima: ${setup.topItems.length}`,
+    ...setup.topItems.map(itemSummary),
+    `Produtos por baixo: ${setup.underItems.length}`,
+    ...setup.underItems.map(itemSummary),
     warnings.length ? `Avisos: ${warnings.join(' | ')}` : 'Avisos: sem avisos',
     contact.shippingAddress ? `Morada: ${contact.shippingAddress}` : 'Morada: não indicada',
     contact.notes ? `Notas do cliente: ${contact.notes}` : 'Notas do cliente: sem notas',
