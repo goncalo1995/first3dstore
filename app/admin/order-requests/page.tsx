@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import { useMemo, useState, useTransition } from 'react'
-import { CheckCircle2, ExternalLink, FileDown, ImageIcon, Loader2, Mail, PackageCheck, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ExternalLink, FileDown, ImageIcon, Loader2, Mail, PackageCheck, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { db } from '@/lib/db'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,10 @@ import { Label } from '@/components/ui/label'
 import { buildPuzzleOpenScad, buildPuzzleParamsJson, getCutParamsFromConfig } from '@/lib/puzzle/openscad'
 import { buildPuzzleGridPath } from '@/lib/puzzle/preview'
 import type { SvgPuzzleConfig } from '@/lib/puzzle/types'
+import { getDeskItemCustomOptionSummaries, getDeskItemFootprint, getDeskProduct } from '@/lib/desk/products'
+import { getDeskItemPrice } from '@/lib/desk/pricing'
+import { buildDeskGeneratorPayload, DeskGeneratorValidationError, formatDeskGeneratorCall } from '@/lib/desk/generator'
+import type { DeskItem } from '@/lib/desk/types'
 import { approveOrderRequestForProduction, approveOrderRequestPhoto, sendPuzzlePaymentApproval, updateOrderRequestPaymentReceived, updateOrderRequestStatus } from './actions'
 
 type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
@@ -50,6 +54,27 @@ type ProductionJob = {
   id: string
   orderRequestId?: string
   status: string
+}
+
+type DeskSetupCanvasConfig = {
+  type: 'desk-setup'
+  schemaVersion?: number
+  surface?: string
+  desk?: {
+    widthCm?: number
+    depthCm?: number
+    surfaceColor?: string
+  }
+  items?: unknown[]
+  topItems?: unknown[]
+  underItems?: unknown[]
+  pricing?: {
+    itemsPrice?: number
+    setupDiscount?: number
+    totalPrice?: number
+  }
+  warnings?: unknown[]
+  submittedAt?: string
 }
 
 const statusLabels: Record<OrderRequestStatus, string> = {
@@ -95,6 +120,18 @@ function formatPrice(value?: number) {
     style: 'currency',
     currency: 'EUR',
   }).format(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isDeskSetupCanvasConfig(value: unknown): value is DeskSetupCanvasConfig {
+  return isRecord(value) && value.type === 'desk-setup'
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }
 
 function getHexaProductionSummary(request: OrderRequest) {
@@ -181,6 +218,262 @@ function PuzzleRequestPreview({
   )
 }
 
+function toDeskItem(value: unknown): DeskItem | null {
+  if (!isRecord(value)) return null
+  if (typeof value.id !== 'string' || typeof value.productId !== 'string') return null
+  if (!isNumber(value.xCm) || !isNumber(value.yCm)) return null
+  if (value.rotation !== 0 && value.rotation !== 90 && value.rotation !== 180 && value.rotation !== 270) return null
+
+  return {
+    id: value.id,
+    productId: value.productId,
+    xCm: value.xCm,
+    yCm: value.yCm,
+    rotation: value.rotation,
+    zIndex: isNumber(value.zIndex) ? value.zIndex : undefined,
+    colorBase: typeof value.colorBase === 'string' ? value.colorBase : undefined,
+    colorAccent: typeof value.colorAccent === 'string' ? value.colorAccent : undefined,
+    customConfig: isRecord(value.customConfig) ? value.customConfig : undefined,
+  }
+}
+
+function DeskSetupPreview({ config }: { config: DeskSetupCanvasConfig }) {
+  const widthCm = config.desk?.widthCm
+  const depthCm = config.desk?.depthCm
+  const items = getDeskConfigItems(config, 'top')
+
+  if (!isNumber(widthCm) || !isNumber(depthCm) || widthCm <= 0 || depthCm <= 0) {
+    return (
+      <div className="rounded-lg border border-border bg-secondary/40 p-3 text-sm text-muted-foreground">
+        Pré-visualização indisponível: dimensões da secretária inválidas.
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="relative mx-auto w-full max-w-md overflow-hidden rounded-lg border border-border bg-[#2d2118] shadow-inner" style={{ aspectRatio: `${widthCm} / ${depthCm}` }}>
+        <div className="pointer-events-none absolute inset-0 opacity-25" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.28) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.28) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        {items.map((item) => {
+          const product = getDeskProduct(item.productId)
+          const footprint = getDeskItemFootprint(item)
+          const shape = product?.preview.shape ?? 'tray'
+          const left = `${(item.xCm / widthCm) * 100}%`
+          const top = `${(item.yCm / depthCm) * 100}%`
+          const width = `${((footprint?.width ?? 8) / widthCm) * 100}%`
+          const height = `${((footprint?.depth ?? 8) / depthCm) * 100}%`
+
+          return (
+            <div
+              key={item.id}
+              title={product?.name ?? 'Produto desconhecido'}
+              className="absolute border border-white/35 bg-black/45 shadow-sm"
+              style={{
+                left,
+                top,
+                width,
+                height,
+                borderRadius: shape === 'circle' ? '999px' : '6px',
+                background: product ? 'linear-gradient(135deg, rgba(15,23,42,.88), rgba(163,255,18,.24))' : 'rgba(148,163,184,.5)',
+              }}
+            />
+          )
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">Pré-visualização proporcional em planta. Confirmar sempre pelos dados estruturados.</p>
+    </div>
+  )
+}
+
+function getDeskConfigItems(config: DeskSetupCanvasConfig, surface: 'top' | 'under') {
+  const source = surface === 'top'
+    ? (config.topItems ?? config.items ?? [])
+    : (config.underItems ?? [])
+  return source.map(toDeskItem).filter(Boolean) as DeskItem[]
+}
+
+function DeskSetupRequestSummary({
+  request,
+  config,
+}: {
+  request: OrderRequest
+  config: DeskSetupCanvasConfig
+}) {
+  const topItems = (config.topItems ?? config.items ?? []).map((item, index) => ({ index, raw: item, item: toDeskItem(item) }))
+  const underItems = (config.underItems ?? []).map((item, index) => ({ index, raw: item, item: toDeskItem(item) }))
+  const itemCount = topItems.length + underItems.length
+  const warnings = Array.isArray(config.warnings) ? config.warnings.filter((warning): warning is string => typeof warning === 'string') : []
+  const requestPrice = isNumber(config.pricing?.totalPrice) ? config.pricing.totalPrice : undefined
+  const storedPrice = request.selectedPrice ?? request.estimatedPrice
+  const priceMismatch = isNumber(requestPrice) && isNumber(storedPrice) && Math.abs(requestPrice - storedPrice) >= 0.01
+  const canPreview = isNumber(config.desk?.widthCm) && isNumber(config.desk?.depthCm)
+  const generatorPreview = useMemo(() => {
+    try {
+      const payload = buildDeskGeneratorPayload(config)
+      return {
+        payload,
+        call: formatDeskGeneratorCall(payload),
+        errors: null,
+      }
+    } catch (error) {
+      return {
+        payload: null,
+        call: null,
+        errors: error instanceof DeskGeneratorValidationError
+          ? error.errors
+          : ['Não foi possível gerar os dados para o gerador.'],
+      }
+    }
+  }, [config])
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-secondary/35 p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Secretária</p>
+          <p className="mt-1 font-semibold">{isNumber(config.desk?.widthCm) && isNumber(config.desk?.depthCm) ? `${config.desk.widthCm} x ${config.desk.depthCm}cm` : 'Dimensões inválidas'}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Superfície: {config.surface ?? '-'}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-secondary/35 p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Produtos</p>
+          <p className="mt-1 font-semibold">{itemCount}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Submetido: {config.submittedAt ? formatDate(config.submittedAt) : '-'}</p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-secondary/35 p-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Preço no pedido</p>
+            <p className="mt-1 text-lg font-semibold">{formatPrice(requestPrice)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Preço guardado</p>
+            <p className="mt-1 text-lg font-semibold">{formatPrice(storedPrice)}</p>
+          </div>
+        </div>
+        {priceMismatch && (
+          <div className="mt-3 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            O preço guardado e o preço no canvasConfig são diferentes.
+          </div>
+        )}
+      </div>
+
+      {warnings.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="font-semibold">Avisos</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {canPreview && <DeskSetupPreview config={config} />}
+
+      <div className="space-y-2">
+        <p className="font-semibold">Produtos configurados</p>
+        {itemCount === 0 ? (
+          <p className="rounded-lg border border-border bg-secondary/35 p-3 text-sm text-muted-foreground">Sem produtos no canvasConfig.</p>
+        ) : (
+          ([
+            ['Em cima da secretária', topItems],
+            ['Por baixo da secretária', underItems],
+          ] as const).map(([surfaceLabel, surfaceItems]) => surfaceItems.length > 0 && (
+            <div key={surfaceLabel} className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{surfaceLabel}</p>
+              {surfaceItems.map(({ index, raw, item }) => {
+            const product = item ? getDeskProduct(item.productId) : undefined
+            const footprint = item ? getDeskItemFootprint(item) : null
+            const itemPrice = item ? getDeskItemPrice(item) : undefined
+            const options = item ? getDeskItemCustomOptionSummaries(item) : []
+            const rawProductId = isRecord(raw) && typeof raw.productId === 'string' ? raw.productId : `item-${index + 1}`
+
+            return (
+              <div key={item?.id ?? rawProductId} className="rounded-lg border border-border p-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-semibold">{product?.name ?? 'Produto desconhecido'}</p>
+                    <p className="text-xs text-muted-foreground">{item?.productId ?? rawProductId}</p>
+                  </div>
+                  <Badge variant="outline">{formatPrice(itemPrice)}</Badge>
+                </div>
+                {item ? (
+                  <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                    <p><span className="font-semibold text-foreground">Posição:</span> x {item.xCm.toFixed(1)}cm, y {item.yCm.toFixed(1)}cm</p>
+                    <p><span className="font-semibold text-foreground">Rotação:</span> {item.rotation}°</p>
+                    <p><span className="font-semibold text-foreground">Cores:</span> {item.colorBase ?? '-'} / {item.colorAccent ?? '-'}</p>
+                    <p><span className="font-semibold text-foreground">Pegada:</span> {footprint ? `${footprint.width} x ${footprint.depth}cm` : '-'}</p>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">Item malformado no canvasConfig.</p>
+                )}
+                {options.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {options.map((option) => (
+                      <span key={option.key} className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">
+                        {option.label}: <span className="font-medium text-foreground">{option.valueLabel}</span>
+                        {option.priceAdd ? ` (+${formatPrice(option.priceAdd)})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+              })}
+            </div>
+          ))
+        )}
+      </div>
+
+      {underItems.length > 0 && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+          O payload OpenSCAD atual cobre apenas a superfície superior. Produtos por baixo da secretária ainda não têm suporte de gerador.
+        </div>
+      )}
+
+      <details className="rounded-lg border border-border bg-secondary/35">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Dados para gerador</summary>
+        <div className="space-y-3 border-t border-border p-3">
+          {generatorPreview.errors ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              <p className="font-semibold">Payload indisponível</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {generatorPreview.errors.map((error) => <li key={error}>{error}</li>)}
+              </ul>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payload determinístico</p>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-muted-foreground">
+                  {JSON.stringify(generatorPreview.payload, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chamada OpenSCAD de pré-visualização</p>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-muted-foreground">
+                  {generatorPreview.call}
+                </pre>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pré-visualização apenas textual. Não executa OpenSCAD nem gera ficheiros STL.
+              </p>
+            </>
+          )}
+        </div>
+      </details>
+
+      <details className="rounded-lg border border-border bg-secondary/35">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">JSON bruto</summary>
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap border-t border-border p-3 text-xs text-muted-foreground">
+          {JSON.stringify(config, null, 2)}
+        </pre>
+      </details>
+    </div>
+  )
+}
+
 function RequestDrawer({
   request,
   jobs,
@@ -197,6 +490,7 @@ function RequestDrawer({
   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
   const isB2BLead = request.status === 'B2B_LEAD'
   const isHexaRequest = request.canvasConfig?.type === 'hexa-memoria'
+  const deskConfig = isDeskSetupCanvasConfig(request.canvasConfig) ? request.canvasConfig : null
   const hexaProductionSummary = getHexaProductionSummary(request)
   const canApproveProduction = isHexaRequest
     ? request.status === 'READY_FOR_PRODUCTION' && request.isPaid === true
@@ -345,8 +639,9 @@ function RequestDrawer({
                 <CardTitle>Configuração</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <p><span className="font-semibold">Tipo:</span> {request.canvasConfig?.type === 'svg-puzzle' ? 'Puzzle SVG' : request.canvasConfig?.type === 'modular-list' ? 'Modular' : request.canvasConfig?.type === 'hexa-memoria' ? 'HexaMemória' : 'Simples'}</p>
-                <p><span className="font-semibold">Versão:</span> {request.canvasConfig?.version ?? '-'}</p>
+                <p><span className="font-semibold">Tipo:</span> {deskConfig ? 'Desk Setup' : request.canvasConfig?.type === 'svg-puzzle' ? 'Puzzle SVG' : request.canvasConfig?.type === 'modular-list' ? 'Modular' : request.canvasConfig?.type === 'hexa-memoria' ? 'HexaMemória' : 'Simples'}</p>
+                <p><span className="font-semibold">Versão:</span> {deskConfig?.schemaVersion ?? request.canvasConfig?.version ?? '-'}</p>
+                {deskConfig && <DeskSetupRequestSummary request={request} config={deskConfig} />}
                 {hexaProductionSummary && (
                   <div className="rounded-lg border border-lime-200 bg-lime-50 p-3 text-lime-950">
                     <p className="font-semibold">Resumo de produção</p>
@@ -395,9 +690,11 @@ function RequestDrawer({
                     </div>
                   </>
                 )}
-                <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-secondary p-3 text-xs text-muted-foreground">
-                  {request.canvasConfig ? JSON.stringify(request.canvasConfig, null, 2) : 'Sem configuração.'}
-                </pre>
+                {!deskConfig && (
+                  <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-secondary p-3 text-xs text-muted-foreground">
+                    {request.canvasConfig ? JSON.stringify(request.canvasConfig, null, 2) : 'Sem configuração.'}
+                  </pre>
+                )}
               </CardContent>
             </Card>
           </section>

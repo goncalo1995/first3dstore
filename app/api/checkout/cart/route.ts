@@ -4,6 +4,7 @@ import { dbAdmin, id } from '@/lib/db-admin'
 import { getCatalogProductBySlugForBuild } from '@/lib/catalog'
 import type { CartItemPartColor, CartItemVariant } from '@/lib/cart-context'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
+import { getVisualEngravingOption, getVisualProductConfig, getVisualVariant, validateVisualEngraving, visualVariantToProductVariant } from '@/lib/visual-product-config'
 
 export const runtime = 'nodejs'
 
@@ -64,7 +65,11 @@ function formatCustomText(customizations: NonNullable<CheckoutPayload['items']>[
 
 function getVariant(product: Product, selectedVariant?: CartItemVariant) {
   if (!selectedVariant?.id) return undefined
-  return product.variants?.find(variant => variant.id === selectedVariant.id)
+  const catalogVariant = product.variants?.find(variant => variant.id === selectedVariant.id)
+  if (catalogVariant) return catalogVariant
+
+  const visualVariant = getVisualVariant(product.slug, selectedVariant.id)
+  return visualVariant ? visualVariantToProductVariant(visualVariant) : undefined
 }
 
 function normalizeName(value: string | undefined) {
@@ -83,9 +88,11 @@ function getGlobalColorPriceAdd(
 }
 
 function validateCustomizations(product: Product, item: NonNullable<CheckoutPayload['items']>[number], variant?: NonNullable<Product['variants']>[number]) {
+  const visualConfig = getVisualProductConfig(product.slug)
+  const visualOptions = visualConfig ? [getVisualEngravingOption(visualConfig)] : []
   const options = variant?.kind === 'custom_text'
     ? variant.customizationOptions ?? []
-    : product.customizationOptions ?? []
+    : [...(product.customizationOptions ?? []), ...visualOptions]
   const customizations = item.customizations ?? []
 
   for (const customization of customizations) {
@@ -99,6 +106,9 @@ function validateCustomizations(product: Product, item: NonNullable<CheckoutPayl
     }
     if (value.length > option.maxChars) {
       throw new Error(`${option.label} excede o limite de caracteres.`)
+    }
+    if (visualConfig && option.label === visualConfig.engraving.label) {
+      validateVisualEngraving(value, visualConfig)
     }
   }
 
