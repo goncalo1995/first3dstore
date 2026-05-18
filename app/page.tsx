@@ -70,10 +70,13 @@ function ArtFormsPreview() {
 }
 
 function MenuSystemPreview() {
-  const rows = ['Espresso 1,50€', 'Flat White 3,00€', 'Brunch Set 12,00€', 'Wi-Fi gratuito']
-
+  const rows = [
+    { label: '01 - Um menu para o seu negócio', value: '123,45€' },
+    { label: '02 - À sua medida', value: '999,99€' },
+    { label: '03 - Soluções personalizadas', value: 'Preço sob consulta' },
+  ]
   return (
-    <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-white/10 bg-[#d9d2c6] shadow-2xl">
+    <div className="relative min-h-[520px] overflow-hidden rounded-3xl border border-white/10 bg-[#d9d2c6] shadow-2xl">
       <Image
         src="/about/workshop.jpg"
         alt="Ambiente premium para sistema Menu3D"
@@ -90,10 +93,10 @@ function MenuSystemPreview() {
         </div>
         <div className="mt-10 space-y-5">
           {rows.map((row, rowIndex) => (
-            <div key={row} className="rounded-xl border border-black/8 bg-black/12 p-3">
+            <div key={row.label} className="rounded-xl border border-black/8 bg-black/12 p-3">
               <div className="flex items-center justify-between gap-5 text-sm font-bold text-stone-950 sm:text-lg">
-                <span className="truncate">{row.replace(/\s+\S+$/, '')}</span>
-                <span className="shrink-0">{row.match(/\S+$/)?.[0]}</span>
+                <span className="truncate">{row.label}</span>
+                {row.value && <span className="shrink-0">{row.value}</span>}
               </div>
               <div className="mt-3 flex h-4 overflow-hidden rounded-full shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
                 {Array.from({ length: rowIndex === 3 ? 4 : 5 }).map((_, index) => (
