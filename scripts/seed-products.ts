@@ -560,11 +560,11 @@ function createExampleProducts(colorMap: SeedColorMap) {
   return [
     {
       slug: 'menu-rail-25cm',
-      name: 'Calha Menu Modular 25cm',
+      name: 'Módulo Menu 25cm',
       priceFrom: 8,
       priceTo: 8,
-      description: 'Calha interligavel de 25cm para sistemas de menu modular EM3D.',
-      benefit: 'Base limpa e robusta para linhas de menu profissionais',
+      description: 'Módulo de 25cm para criar sistemas Menu3D com largura escalável.',
+      benefit: 'Preço modular e previsível para quadros profissionais até 3m',
       image: '/placeholder.svg',
       featured: false,
       featuredRank: 0,
@@ -576,7 +576,7 @@ function createExampleProducts(colorMap: SeedColorMap) {
       category: 'empresas',
       categorySlugs: ['empresas', 'menus', 'componentes'],
       variants: [],
-      materialRecipe: [{ label: 'Calha 25cm', grams: 85, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialRecipe: [{ label: 'Módulo 25cm', grams: 85, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
       materialGrams: 85,
       sortOrder: 10,
       inventoryColors: ['Preto', 'Branco', 'Madeira'],

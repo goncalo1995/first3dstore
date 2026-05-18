@@ -4,13 +4,15 @@ import { dbAdmin, id } from '@/lib/db-admin'
 import { getCatalogProductBySlugForBuild } from '@/lib/catalog'
 import type { CartItemPartColor, CartItemVariant } from '@/lib/cart-context'
 import {
-  MENU_PACK_SIZE,
-  MENU_RAIL_LENGTH_CM,
-  MENU_MAX_RAILS_PER_LINE,
-  MENU_MIN_RAILS_PER_LINE,
+  CHARS_PER_MODULE_ESTIMATE,
+  LAUNCH_DISCOUNT_PERCENT,
+  MAX_GLOBAL_MODULES,
+  MIN_GLOBAL_MODULES,
+  MODULE_LENGTH_CM,
   calculateMenuQuote,
   validateMenuQuoteLimits,
   type MenuQuote,
+  type MenuRowInput,
 } from '@/lib/menu-calculator'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
@@ -19,9 +21,12 @@ export const runtime = 'nodejs'
 const SHIPPING_COST = 4.99
 const MAX_ITEMS = 30
 const MAX_QUANTITY = 99
+const MAX_MENU_QUANTITY = 2000
 const MENU_RAIL_SLUG = 'menu-rail-25cm'
 const MENU_PACK_SLUG = 'menu-letter-pack-standard'
 const MENU_AVULSO_SLUG = 'menu-letter-custom'
+const MENU_PRODUCT_COLOR_CONFIG_ERROR = 'Este produto ainda não tem cores configuradas. Contacte-nos para finalizar o pedido.'
+const MENU_LETTER_COLOR_REQUEST_MAX_CHARS = 300
 
 type CheckoutPayload = {
   customer?: {
@@ -37,13 +42,24 @@ type CheckoutPayload = {
   menuSystem?: {
     menuText?: string
     extraLettersText?: string
-    railLengthCm?: 25
-    packSize?: 300
+    customIconRequest?: string
+    letterColorRequest?: {
+      enabled?: boolean
+      description?: string
+    }
+    moduleLengthCm?: 25
+    charsPerModuleEstimate?: 5
+    globalModuleCount?: number
+    standardPackQuantity?: number
+    avulsoCharacterQuantity?: number
     lines?: {
       index?: number
       text?: string
+      label?: string
+      suffix?: string
+      price?: string
       characterCount?: number
-      railQuantity?: number
+      widthWarning?: boolean
     }[]
     railColor?: ProductColor
     letterColor?: ProductColor
@@ -64,6 +80,19 @@ type CheckoutPayload = {
 }
 
 type MenuItemRole = 'rails' | 'standard_pack' | 'avulso'
+type MenuBaseUnitPrices = Partial<Record<MenuItemRole, number>>
+type MenuProductColorRecord = {
+  slug?: string
+  inventory?: {
+    colorInventory?: {
+      globalColorId?: string
+      colorName: string
+      colorHex: string
+      offered: boolean
+      priceAdd?: number
+    }[]
+  }
+}
 
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
@@ -75,31 +104,40 @@ function getStripe() {
   return new Stripe(secretKey)
 }
 
-function getMenuLineRailQuantities(menuSystem: NonNullable<CheckoutPayload['menuSystem']>) {
-  const quantities: Record<number, number> = {}
-
-  for (const line of menuSystem.lines ?? []) {
-    const index = Number(line.index)
-    const railQuantity = Number(line.railQuantity)
-
-    if (!Number.isInteger(index) || index < 1) {
-      throw new Error('Uma das linhas do menu é inválida.')
-    }
-    if (!Number.isInteger(railQuantity) || railQuantity < MENU_MIN_RAILS_PER_LINE || railQuantity > MENU_MAX_RAILS_PER_LINE) {
-      throw new Error(`Cada linha deve ter entre ${MENU_MIN_RAILS_PER_LINE} e ${MENU_MAX_RAILS_PER_LINE} calhas.`)
-    }
-
-    quantities[index] = railQuantity
-  }
-
-  return quantities
-}
-
 function getMenuItemRole(slug: string): MenuItemRole | undefined {
   if (slug === MENU_RAIL_SLUG) return 'rails'
   if (slug === MENU_PACK_SLUG) return 'standard_pack'
   if (slug === MENU_AVULSO_SLUG) return 'avulso'
   return undefined
+}
+
+function getMenuRows(menuSystem: NonNullable<CheckoutPayload['menuSystem']>): MenuRowInput[] | undefined {
+  const rows = (menuSystem.lines ?? [])
+    .map(line => ({
+      label: String(line.label ?? '').trim(),
+      suffix: String(line.suffix ?? '').trim(),
+      price: String(line.price ?? '').trim(),
+    }))
+    .filter(row => row.label || row.suffix || row.price)
+
+  return rows.length ? rows : undefined
+}
+
+async function getMenuProductColorRecords() {
+  const data = await dbAdmin.query({
+    catalogProducts: {
+      $: {
+        where: {
+          slug: { $in: [MENU_RAIL_SLUG, MENU_PACK_SLUG, MENU_AVULSO_SLUG] },
+        },
+      },
+      inventory: {},
+    },
+  })
+
+  return Object.fromEntries(
+    ((data.catalogProducts ?? []) as MenuProductColorRecord[]).map(product => [String(product.slug ?? ''), product]),
+  ) as Record<string, MenuProductColorRecord | undefined>
 }
 
 function getMenuItemQuantity(items: NonNullable<CheckoutPayload['items']>, slug: string) {
@@ -136,38 +174,121 @@ function normalizeName(value: string | undefined) {
   return String(value ?? '').trim().toLowerCase()
 }
 
-function validateMenuColor(globalColors: GlobalColor[], color: ProductColor | undefined, label: string) {
-  if (!color?.name && !color?.globalColorId) {
-    throw new Error(`Escolha a ${label}.`)
-  }
+function getOfferedProductColors(product: MenuProductColorRecord | undefined) {
+  return product?.inventory?.colorInventory?.filter(color => color.offered) ?? []
+}
 
-  const match = globalColors.find(candidate => {
+function getActiveGlobalColor(globalColors: GlobalColor[], color: ProductColor | undefined) {
+  if (!color?.name && !color?.globalColorId) return undefined
+  return globalColors.find(candidate => {
     const isActive = candidate.isActive !== false && candidate.spoolStatus !== 'archived'
     if (!isActive) return false
     if (color.globalColorId && (candidate.id === color.globalColorId || candidate.globalColorId === color.globalColorId)) return true
     return normalizeName(candidate.name) === normalizeName(color.name)
   })
+}
+
+function validateMenuColor(
+  globalColors: GlobalColor[],
+  color: ProductColor | undefined,
+  label: string,
+  product?: MenuProductColorRecord,
+  options: { validateProductAvailability?: boolean } = { validateProductAvailability: true },
+) {
+  if (!color?.name && !color?.globalColorId) {
+    throw new Error(`Escolha a ${label}.`)
+  }
+
+  const match = getActiveGlobalColor(globalColors, color)
 
   if (!match) {
     throw new Error(`A ${label} selecionada já não está disponível.`)
   }
+
+  if (options.validateProductAvailability === false) return
+
+  const offeredColors = getOfferedProductColors(product)
+  if (offeredColors.length === 0) {
+    throw new Error(MENU_PRODUCT_COLOR_CONFIG_ERROR)
+  }
+
+  const isOffered = offeredColors.some(offeredColor => {
+    if (color.globalColorId && offeredColor.globalColorId === color.globalColorId) return true
+    if (match.id && offeredColor.globalColorId === match.id) return true
+    if (match.globalColorId && offeredColor.globalColorId === match.globalColorId) return true
+    return normalizeName(offeredColor.colorName) === normalizeName(color.name) ||
+      normalizeName(offeredColor.colorName) === normalizeName(match.name)
+  })
+
+  if (!isOffered) {
+    throw new Error(`A ${label} selecionada não está disponível para este produto.`)
+  }
 }
 
-function validateMenuPayload(body: CheckoutPayload, globalColors: GlobalColor[]): MenuQuote | null {
+function hasUnsupportedControlCharacters(value: string) {
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/.test(value)
+}
+
+function calculateVisibleCharacters(value: string) {
+  return Array.from(String(value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '')).length
+}
+
+function validateLetterColorRequest(menuSystem: NonNullable<CheckoutPayload['menuSystem']>) {
+  const request = menuSystem.letterColorRequest
+  if (!request?.enabled) return
+  const description = String(request.description ?? '').trim()
+  if (!description) return
+
+  if (calculateVisibleCharacters(description) > MENU_LETTER_COLOR_REQUEST_MAX_CHARS) {
+    throw new Error(`O pedido de cor pode ter no máximo ${MENU_LETTER_COLOR_REQUEST_MAX_CHARS} caracteres.`)
+  }
+  if (hasUnsupportedControlCharacters(description)) {
+    throw new Error('O pedido de cor contém caracteres não suportados.')
+  }
+  if (/[^\s@]+@[^\s@]+\.[^\s@]+/.test(description) || /(?:\+?\d[\s().-]*){7,}/.test(description)) {
+    throw new Error('Descreva apenas a cor pretendida, sem contactos pessoais.')
+  }
+}
+
+function sanitizeMenuColor(color: ProductColor | undefined) {
+  if (!color) return undefined
+  return {
+    name: color.name,
+    hex: color.hex,
+    globalColorId: color.globalColorId,
+    priceAdd: color.priceAdd,
+  }
+}
+
+function validateMenuPayload(
+  body: CheckoutPayload,
+  globalColors: GlobalColor[],
+  menuProducts: Record<string, MenuProductColorRecord | undefined> = {},
+): MenuQuote | null {
   if (!body.menuSystem) return null
 
   const items = body.items ?? []
-  if (body.menuSystem.railLengthCm !== undefined && body.menuSystem.railLengthCm !== MENU_RAIL_LENGTH_CM) {
-    throw new Error(`As calhas do Menu Modular usam ${MENU_RAIL_LENGTH_CM}cm.`)
+  if (body.menuSystem.moduleLengthCm !== undefined && body.menuSystem.moduleLengthCm !== MODULE_LENGTH_CM) {
+    throw new Error(`Os módulos do Menu3D usam ${MODULE_LENGTH_CM}cm.`)
   }
-  if (body.menuSystem.packSize !== undefined && body.menuSystem.packSize !== MENU_PACK_SIZE) {
-    throw new Error(`O pack standard tem ${MENU_PACK_SIZE} caracteres.`)
+  if (body.menuSystem.charsPerModuleEstimate !== undefined && body.menuSystem.charsPerModuleEstimate !== CHARS_PER_MODULE_ESTIMATE) {
+    throw new Error(`Cada módulo estima cerca de ${CHARS_PER_MODULE_ESTIMATE} caracteres.`)
+  }
+  if (!Number.isInteger(Number(body.menuSystem.globalModuleCount))) {
+    throw new Error('Escolha a largura do Menu3D em módulos.')
+  }
+  if (Number(body.menuSystem.globalModuleCount) < MIN_GLOBAL_MODULES || Number(body.menuSystem.globalModuleCount) > MAX_GLOBAL_MODULES) {
+    throw new Error(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
   }
 
   const quote = calculateMenuQuote({
+    rows: getMenuRows(body.menuSystem),
     menuText: String(body.menuSystem.menuText ?? ''),
     extraLettersText: String(body.menuSystem.extraLettersText ?? ''),
-    lineRailQuantities: getMenuLineRailQuantities(body.menuSystem),
+    customIconRequest: String(body.menuSystem.customIconRequest ?? ''),
+    globalModuleCount: Number(body.menuSystem.globalModuleCount),
+    standardPackQuantity: Number(body.menuSystem.standardPackQuantity),
+    avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
   })
   const limitErrors = validateMenuQuoteLimits(quote)
 
@@ -176,7 +297,7 @@ function validateMenuPayload(body: CheckoutPayload, globalColors: GlobalColor[])
   }
 
   const expectedQuantities = [
-    { slug: MENU_RAIL_SLUG, quantity: quote.totalRails, label: 'calhas' },
+    { slug: MENU_RAIL_SLUG, quantity: quote.totalRailModules, label: 'módulos de 25cm' },
     { slug: MENU_PACK_SLUG, quantity: quote.standardPackQuantity, label: 'packs standard' },
     { slug: MENU_AVULSO_SLUG, quantity: quote.avulsoCharacterQuantity, label: 'letras avulso' },
   ]
@@ -194,8 +315,20 @@ function validateMenuPayload(body: CheckoutPayload, globalColors: GlobalColor[])
     }
   }
 
-  validateMenuColor(globalColors, body.menuSystem.railColor, 'cor das calhas')
-  validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras')
+  validateLetterColorRequest(body.menuSystem)
+  validateMenuColor(globalColors, body.menuSystem.railColor, 'cor das calhas', menuProducts[MENU_RAIL_SLUG])
+
+  const hasStandardPack = getMenuItemQuantity(items, MENU_PACK_SLUG) > 0
+  const hasAvulsoLetters = getMenuItemQuantity(items, MENU_AVULSO_SLUG) > 0
+  if (hasStandardPack) {
+    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', menuProducts[MENU_PACK_SLUG])
+  }
+  if (hasAvulsoLetters) {
+    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', menuProducts[MENU_AVULSO_SLUG])
+  }
+  if (!hasStandardPack && !hasAvulsoLetters) {
+    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', undefined, { validateProductAvailability: false })
+  }
 
   for (const item of items) {
     const slug = String(item.productSlug ?? '').trim()
@@ -215,21 +348,47 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
 
   const base = {
     role,
-    railLengthCm: quote.railLengthCm,
-    totalRailLengthCm: quote.totalRailLengthCm,
-    packSize: quote.packSize,
+    moduleLengthCm: quote.moduleLengthCm,
+    charsPerModuleEstimate: quote.charsPerModuleEstimate,
     menuText: quote.menuText,
     extraLettersText: quote.extraLettersText || undefined,
+    customIconRequest: quote.customIconRequest || undefined,
+    lineCount: quote.lineCount,
+    globalModuleCount: quote.globalModuleCount,
+    globalWidthCm: quote.globalWidthCm,
+    estimatedCharsPerLine: quote.estimatedCharsPerLine,
+    productionFont: quote.productionFont,
+    productionSize: quote.productionSize,
+    starterQuantity: quote.starterQuantity,
+    extensionQuantityPerLine: quote.extensionQuantityPerLine,
+    totalExtensionQuantity: quote.totalExtensionQuantity,
+    totalRailModules: quote.totalRailModules,
     menuCharacters: quote.menuCharacters,
     extraCharacters: quote.extraCharacters,
     totalCharacters: quote.totalCharacters,
-    totalRails: quote.totalRails,
+    standardPackMinimum: quote.standardPackMinimum,
     standardPackQuantity: quote.standardPackQuantity,
+    avulsoMinimum: quote.avulsoMinimum,
     avulsoCharacterQuantity: quote.avulsoCharacterQuantity,
-    remainingCharacters: quote.remainingCharacters,
     characterFrequencyMap: quote.characterFrequencyMap,
-    railColor: menuSystem?.railColor,
-    letterColor: menuSystem?.letterColor,
+    railModuleUnitPrice: quote.railModuleUnitPrice,
+    standardPackUnitPrice: quote.standardPackUnitPrice,
+    avulsoUnitPrice: quote.avulsoUnitPrice,
+    modulesSubtotal: quote.modulesSubtotal,
+    standardPacksSubtotal: quote.standardPacksSubtotal,
+    avulsoSubtotal: quote.avulsoSubtotal,
+    subtotalBeforeDiscount: quote.subtotalBeforeDiscount,
+    launchDiscountPercent: quote.launchDiscountPercent,
+    launchDiscountAmount: quote.launchDiscountAmount,
+    totalAfterDiscount: quote.totalAfterDiscount,
+    railColor: sanitizeMenuColor(menuSystem?.railColor),
+    letterColor: sanitizeMenuColor(menuSystem?.letterColor),
+    letterColorRequest: menuSystem?.letterColorRequest?.enabled
+      ? {
+          enabled: true,
+          description: String(menuSystem.letterColorRequest.description ?? '').trim(),
+        }
+      : undefined,
   }
 
   if (role === 'rails') {
@@ -243,17 +402,27 @@ function getMenuCustomText(role: MenuItemRole | undefined, quote: MenuQuote | nu
   if (!role || !quote) return customText || undefined
 
   const menuText = role === 'rails'
-    ? `${quote.totalRails} calhas de ${quote.railLengthCm}cm`
+    ? `${quote.totalRailModules} módulos de ${quote.moduleLengthCm}cm (${quote.lineCount} linhas, ${quote.globalModuleCount} por linha)`
     : role === 'standard_pack'
-      ? `${quote.standardPackQuantity} pack(s) de ${quote.packSize} caracteres`
+      ? `${quote.standardPackQuantity} pack(s) de 300 caracteres`
       : `${quote.avulsoCharacterQuantity} letras avulso`
 
   return [customText, menuText].filter(Boolean).join(' | ')
 }
 
-function getMenuOrderNotes(quote: MenuQuote | null) {
+function getMenuOrderNotes(quote: MenuQuote | null, menuSystem?: CheckoutPayload['menuSystem']) {
   if (!quote) return ''
-  return `Sistema Menu Modular: ${quote.totalRails} calhas de ${quote.railLengthCm}cm, ${quote.standardPackQuantity} pack standard, ${quote.avulsoCharacterQuantity} letras avulso, ${quote.totalCharacters} caracteres totais.`
+  const letterColorRequest = menuSystem?.letterColorRequest?.enabled
+    ? String(menuSystem.letterColorRequest.description ?? '').trim()
+    : ''
+  return `Sistema Menu Modular: ${quote.lineCount} linhas, ${quote.globalModuleCount} módulos por linha (${quote.globalWidthCm}cm), ${quote.totalRailModules} módulos totais, ${quote.standardPackQuantity} packs standard, ${quote.avulsoCharacterQuantity} letras avulso, ${quote.totalCharacters} caracteres, subtotal ${formatMoney(quote.subtotalBeforeDiscount)}, desconto lançamento -${quote.launchDiscountPercent}%, total ${formatMoney(quote.totalAfterDiscount)}.${quote.customIconRequest ? ` Pedido ícone/logótipo: ${quote.customIconRequest}.` : ''}${letterColorRequest ? ` Pedido de cor especial para letras: ${letterColorRequest}.` : ''}`
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('pt-PT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(value)
 }
 
 function getGlobalColorPriceAdd(
@@ -410,6 +579,10 @@ function cents(value: number) {
   return Math.round(value * 100)
 }
 
+function discountedMenuUnitPrice(unitPrice: number) {
+  return Math.round(unitPrice * (1 - LAUNCH_DISCOUNT_PERCENT / 100) * 100) / 100
+}
+
 function validateSelectedColors(
   product: Product,
   item: NonNullable<CheckoutPayload['items']>[number],
@@ -507,10 +680,12 @@ export async function POST(request: NextRequest) {
     const lineItems: Stripe.Checkout.SessionCreateParams['line_items'] = []
     const globalColorData = await dbAdmin.query({ globalColors: {} })
     const globalColors = (globalColorData.globalColors ?? []) as GlobalColor[]
+    const menuProducts = body.menuSystem ? await getMenuProductColorRecords() : {}
     let menuQuote: MenuQuote | null = null
+    const menuBaseUnitPrices: MenuBaseUnitPrices = {}
 
     try {
-      menuQuote = validateMenuPayload(body, globalColors)
+      menuQuote = validateMenuPayload(body, globalColors, menuProducts)
     } catch (menuError) {
       return NextResponse.json(
         { error: menuError instanceof Error ? menuError.message : 'Configuração do menu inválida.' },
@@ -521,12 +696,14 @@ export async function POST(request: NextRequest) {
     for (const item of body.items) {
       const slug = String(item.productSlug ?? '').trim()
       const quantity = Number(item.quantity)
-      if (!slug || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
+      const menuRole = menuQuote ? getMenuItemRole(slug) : undefined
+      const maxQuantityForItem = menuRole ? MAX_MENU_QUANTITY : MAX_QUANTITY
+      if (!slug || !Number.isInteger(quantity) || quantity < 1 || quantity > maxQuantityForItem) {
         return NextResponse.json({ error: 'Um dos artigos é inválido.' }, { status: 400 })
       }
 
       const product = await getCatalogProductBySlugForBuild(slug)
-      const isMenuComponent = Boolean(menuQuote && getMenuItemRole(slug))
+      const isMenuComponent = Boolean(menuRole)
       if (!product || (product.visible === false && !isMenuComponent)) {
         return NextResponse.json({ error: `Produto indisponível: ${slug}.` }, { status: 404 })
       }
@@ -542,21 +719,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: colorValidationError }, { status: 400 })
       }
 
-      const unitPrice = getUnitPrice(product, item, globalColors, variant)
-      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      const baseUnitPrice = getUnitPrice(product, item, globalColors, variant)
+      if (!Number.isFinite(baseUnitPrice) || baseUnitPrice < 0) {
         return NextResponse.json({ error: `Preço inválido para ${product.name}.` }, { status: 400 })
       }
+      if (menuRole) {
+        menuBaseUnitPrices[menuRole] = baseUnitPrice
+      }
+
+      const unitPrice = menuRole ? discountedMenuUnitPrice(baseUnitPrice) : baseUnitPrice
 
       const colors = getItemColors(product, item, variant)
       const selectedColorPayload = getSelectedColorPayload(product, item, globalColors, variant)
       const customText = formatCustomText(item.customizations)
-      const menuRole = menuQuote ? getMenuItemRole(slug) : undefined
       const menuDetails = getMenuItemDetails(menuRole, menuQuote, body.menuSystem)
       const itemCustomText = getMenuCustomText(menuRole, menuQuote, customText)
+      const productDisplayName = menuRole === 'rails' ? 'Módulo Menu 25cm' : product.name
 
       orderItems.push({
         productId: product.id,
-        productName: product.name,
+        productName: productDisplayName,
         quantity,
         colors,
         selectedColor: selectedColorPayload.selectedColor,
@@ -593,15 +775,38 @@ export async function POST(request: NextRequest) {
           currency: 'eur',
           unit_amount: cents(unitPrice),
           product_data: {
-            name: product.name,
+            name: productDisplayName,
             description: [
               variant?.name,
               colors.length ? colors.join(', ') : null,
               itemCustomText || null,
+              menuRole ? `Campanha de lançamento -${LAUNCH_DISCOUNT_PERCENT}% aplicada` : null,
             ].filter(Boolean).join(' · ').slice(0, 1000),
           },
         },
       })
+    }
+
+    if (menuQuote) {
+      menuQuote = calculateMenuQuote({
+        menuText: menuQuote.menuText,
+        extraLettersText: menuQuote.extraLettersText,
+        customIconRequest: menuQuote.customIconRequest,
+        globalModuleCount: menuQuote.globalModuleCount,
+        standardPackQuantity: menuQuote.standardPackQuantity,
+        avulsoCharacterQuantity: menuQuote.avulsoCharacterQuantity,
+        railModuleUnitPrice: menuBaseUnitPrices.rails ?? 0,
+        standardPackUnitPrice: menuBaseUnitPrices.standard_pack ?? 0,
+        avulsoUnitPrice: menuBaseUnitPrices.avulso ?? 0,
+      })
+
+      for (const orderItem of orderItems) {
+        const role = orderItem.menuSystem?.role as MenuItemRole | undefined
+        if (!role) continue
+        const menuDetails = getMenuItemDetails(role, menuQuote, body.menuSystem)
+        orderItem.menuSystem = menuDetails
+        orderItem.adminNotes = menuDetails ? JSON.stringify(menuDetails) : ''
+      }
     }
 
     const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) * 100) / 100
@@ -637,9 +842,11 @@ export async function POST(request: NextRequest) {
         flow,
         ...(menuQuote
           ? {
-              railQuantity: String(menuQuote.totalRails),
+              railModuleQuantity: String(menuQuote.totalRailModules),
+              globalModuleCount: String(menuQuote.globalModuleCount),
               standardPackQuantity: String(menuQuote.standardPackQuantity),
               avulsoCharacterQuantity: String(menuQuote.avulsoCharacterQuantity),
+              launchDiscountPercent: String(menuQuote.launchDiscountPercent),
             }
           : {}),
       },
@@ -666,7 +873,7 @@ export async function POST(request: NextRequest) {
         total,
         paymentStatus: 'pending',
         fulfillmentStatus: 'new',
-        ...(menuQuote || notes ? { notes: [getMenuOrderNotes(menuQuote), notes].filter(Boolean).join('\n\n') } : {}),
+        ...(menuQuote || notes ? { notes: [getMenuOrderNotes(menuQuote, body.menuSystem), notes].filter(Boolean).join('\n\n') } : {}),
         stripeSessionId: session.id,
         paymentUrl: session.url,
         createdAt: now,

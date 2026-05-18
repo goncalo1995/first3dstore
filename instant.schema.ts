@@ -300,38 +300,63 @@ const _schema = i.schema({
         }
         menuSystem?: {
           role: 'rails' | 'standard_pack' | 'avulso'
-          railLengthCm?: number
-          totalRailLengthCm?: number
-          packSize?: number
+          moduleLengthCm?: number
+          charsPerModuleEstimate?: number
           menuText?: string
           extraLettersText?: string
+          customIconRequest?: string
+          lineCount?: number
+          globalModuleCount?: number
+          globalWidthCm?: number
+          estimatedCharsPerLine?: number
+          productionFont?: 'em3d-standard'
+          productionSize?: 'standard'
+          starterQuantity?: number
+          extensionQuantityPerLine?: number
+          totalExtensionQuantity?: number
+          totalRailModules?: number
           menuCharacters?: number
           extraCharacters?: number
           totalCharacters?: number
-          totalRails?: number
+          standardPackMinimum?: number
           standardPackQuantity?: number
+          avulsoMinimum?: number
           avulsoCharacterQuantity?: number
-          remainingCharacters?: number
           characterFrequencyMap?: Record<string, number>
+          railModuleUnitPrice?: number
+          standardPackUnitPrice?: number
+          avulsoUnitPrice?: number
+          modulesSubtotal?: number
+          standardPacksSubtotal?: number
+          avulsoSubtotal?: number
+          subtotalBeforeDiscount?: number
+          launchDiscountPercent?: number
+          launchDiscountAmount?: number
+          totalAfterDiscount?: number
           railColor?: {
             name: string
             hex: string
-            imageUrl?: string
             globalColorId?: string
             priceAdd?: number
           }
           letterColor?: {
             name: string
             hex: string
-            imageUrl?: string
             globalColorId?: string
             priceAdd?: number
+          }
+          letterColorRequest?: {
+            enabled: boolean
+            description: string
           }
           lines?: {
             index: number
             text: string
+            label: string
+            suffix?: string
+            price: string
             characterCount: number
-            railQuantity: number
+            widthWarning?: boolean
           }[]
         }
         customText?: string

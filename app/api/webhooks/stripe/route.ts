@@ -136,12 +136,13 @@ function getShippingLabel(method: string) {
 }
 
 function getMenuOrderSummary(order: any) {
-  const menuItem = (order.items ?? []).find((item: any) => item.menuSystem)
+  const menuItems = (order.items ?? []).filter((item: any) => item.menuSystem)
+  const menuItem = menuItems.find((item: any) => (item.menuSystem?.lines ?? []).length > 0) ?? menuItems[0]
   const menuSystem = menuItem?.menuSystem
   if (!menuSystem) return ''
 
   const lineBreakdown = (menuSystem.lines ?? [])
-    .map((line: any) => `- Linha ${line.index}: ${line.characterCount} caracteres, ${line.railQuantity} calha(s) | ${line.text}`)
+    .map((line: any) => `- Linha ${line.index}: ${line.characterCount} caracteres${line.widthWarning ? ' | aviso: pode ficar apertada' : ''} | ${line.text}`)
     .join('\n')
   const frequencySummary = Object.entries(menuSystem.characterFrequencyMap ?? {})
     .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
@@ -149,15 +150,25 @@ function getMenuOrderSummary(order: any) {
     .join(', ')
 
   return `\n\nDetalhes Menu Modular:
-Calhas: ${menuSystem.totalRails ?? '-'} de ${menuSystem.railLengthCm ?? 25}cm
-Comprimento total: ${menuSystem.totalRailLengthCm ?? '-'}cm
+Linhas: ${menuSystem.lineCount ?? '-'}
+Módulos por linha: ${menuSystem.globalModuleCount ?? '-'} (${menuSystem.globalWidthCm ?? '-'}cm)
+Módulos totais: ${menuSystem.totalRailModules ?? '-'}
+Starter/base: ${menuSystem.starterQuantity ?? '-'}
+Extensões por linha: ${menuSystem.extensionQuantityPerLine ?? '-'}
+Extensões totais: ${menuSystem.totalExtensionQuantity ?? '-'}
+Fonte produção: ${menuSystem.productionFont || 'em3d-standard'}
+Tamanho produção: ${menuSystem.productionSize || 'standard'}
 Cor das calhas: ${menuSystem.railColor?.name || '-'}
 Cor das letras: ${menuSystem.letterColor?.name || '-'}
+Pedido de cor especial para letras: ${menuSystem.letterColorRequest?.enabled ? menuSystem.letterColorRequest.description || '-' : '-'}
 Pack standard: ${menuSystem.standardPackQuantity ?? 0}
 Letras avulso: ${menuSystem.avulsoCharacterQuantity ?? 0}
 Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
 Caracteres extra: ${menuSystem.extraCharacters ?? 0}
 Total de caracteres: ${menuSystem.totalCharacters ?? 0}
+Subtotal antes desconto: ${formatPrice(Number(menuSystem.subtotalBeforeDiscount ?? 0))}
+Desconto lançamento: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
+Total Menu3D após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}
 Mapa de caracteres: ${frequencySummary || '-'}
 
 Menu original:
@@ -165,6 +176,9 @@ ${menuSystem.menuText || '-'}
 
 Letras/simbolos extra:
 ${menuSystem.extraLettersText || '-'}
+
+Pedido de ícone/logótipo:
+${menuSystem.customIconRequest || '-'}
 
 Linhas:
 ${lineBreakdown || '-'}`
