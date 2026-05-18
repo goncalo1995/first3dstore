@@ -455,6 +455,51 @@ const colorsToSeed = [
     isActive: true,
     priceAdd: 0,
   },
+  {
+    name: 'Carbon Black',
+    hex: '#0B0D10',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Cyber White',
+    hex: '#F4F7FB',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Neon Lime',
+    hex: '#A3FF12',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Pulse Blue',
+    hex: '#38BDF8',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
+  {
+    name: 'Signal Red',
+    hex: '#FF3B5C',
+    gramsAvailable: 1000,
+    spoolStatus: 'available' as const,
+    isGlobal: true,
+    isActive: true,
+    priceAdd: 0,
+  },
 ]
 
 type SeedColorMap = Map<string, { id: string; name: string; hex: string; priceAdd?: number }>
@@ -511,6 +556,8 @@ async function seedGlobalColors(): Promise<SeedColorMap> {
       id: color.id,
       name: color.name,
       hex: color.hex,
+      gramsAvailable: color.gramsAvailable,
+      spoolStatus: color.spoolStatus,
       priceAdd: color.priceAdd,
     })
   })
@@ -537,7 +584,7 @@ function createInventory(slug: string, colorMap: SeedColorMap, names: string[]) 
         colorHex: color.hex,
         offered: true,
         stockQuantity: 0,
-        gramsAvailable: 0,
+        gramsAvailable: color.gramsAvailable ?? 0,
         priceAdd: color.priceAdd ?? 0,
       }
     }),
@@ -556,6 +603,13 @@ function createExampleProducts(colorMap: SeedColorMap) {
   const branco = colorRef(colorMap, 'Branco')
   const amarelo = colorRef(colorMap, 'Amarelo')
   const azul = colorRef(colorMap, 'Azul')
+  const carbonBlack = colorRef(colorMap, 'Carbon Black')
+  const cyberWhite = colorRef(colorMap, 'Cyber White')
+  const neonLime = colorRef(colorMap, 'Neon Lime')
+  const pulseBlue = colorRef(colorMap, 'Pulse Blue')
+  const signalRed = colorRef(colorMap, 'Signal Red')
+  const headsetStandMainColorIds = [carbonBlack.id, cyberWhite.id]
+  const headsetStandAccentColorIds = [neonLime.id, pulseBlue.id, signalRed.id, cyberWhite.id]
 
   return [
     {
@@ -796,7 +850,7 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
   let updated = 0
 
   for (const product of exampleProductsToSeed) {
-    const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
+    const existingProduct = (existingProducts.catalogProducts || []).find((p) => p.slug === product.slug)
 
     const productId = existingProduct?.id || id()
     const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productSlug === product.slug || inv.productId === productId)
@@ -829,10 +883,11 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
         images,
         visible: product.visible,
         featured: product.featured,
-        featuredRank: (product as any).featuredRank,
+        featuredRank: product.featuredRank,
         sortOrder: product.sortOrder,
+        isModular: (product as any).isModular ?? false,
         customizable: product.customizable,
-        customizationOptions: [],
+        customizationOptions: (product as any).customizationOptions ?? [],
         multiColor: product.multiColor,
         multiColorCount: product.multiColorCount,
         colorSelectionMode: product.colorSelectionMode,
