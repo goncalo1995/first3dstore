@@ -556,8 +556,6 @@ async function seedGlobalColors(): Promise<SeedColorMap> {
       id: color.id,
       name: color.name,
       hex: color.hex,
-      gramsAvailable: color.gramsAvailable,
-      spoolStatus: color.spoolStatus,
       priceAdd: color.priceAdd,
     })
   })
@@ -584,7 +582,6 @@ function createInventory(slug: string, colorMap: SeedColorMap, names: string[]) 
         colorHex: color.hex,
         offered: true,
         stockQuantity: 0,
-        gramsAvailable: color.gramsAvailable ?? 0,
         priceAdd: color.priceAdd ?? 0,
       }
     }),
