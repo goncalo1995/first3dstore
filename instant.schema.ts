@@ -298,6 +298,67 @@ const _schema = i.schema({
             priceAdd?: number
           }[]
         }
+        menuSystem?: {
+          role: 'rails' | 'standard_pack' | 'avulso'
+          moduleLengthCm?: number
+          charsPerModuleEstimate?: number
+          menuText?: string
+          extraLettersText?: string
+          customIconRequest?: string
+          lineCount?: number
+          globalModuleCount?: number
+          globalWidthCm?: number
+          estimatedCharsPerLine?: number
+          productionFont?: 'em3d-standard'
+          productionSize?: 'standard'
+          starterQuantity?: number
+          extensionQuantityPerLine?: number
+          totalExtensionQuantity?: number
+          totalRailModules?: number
+          menuCharacters?: number
+          extraCharacters?: number
+          totalCharacters?: number
+          standardPackMinimum?: number
+          standardPackQuantity?: number
+          avulsoMinimum?: number
+          avulsoCharacterQuantity?: number
+          characterFrequencyMap?: Record<string, number>
+          railModuleUnitPrice?: number
+          standardPackUnitPrice?: number
+          avulsoUnitPrice?: number
+          modulesSubtotal?: number
+          standardPacksSubtotal?: number
+          avulsoSubtotal?: number
+          subtotalBeforeDiscount?: number
+          launchDiscountPercent?: number
+          launchDiscountAmount?: number
+          totalAfterDiscount?: number
+          railColor?: {
+            name: string
+            hex: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterColor?: {
+            name: string
+            hex: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterColorRequest?: {
+            enabled: boolean
+            description: string
+          }
+          lines?: {
+            index: number
+            text: string
+            label: string
+            suffix?: string
+            price: string
+            characterCount: number
+            widthWarning?: boolean
+          }[]
+        }
         customText?: string
         unitPrice: number
         itemStatus?: 'new' | 'waiting_color' | 'scheduled' | 'printing' | 'printed' | 'assembled' | 'done' | 'blocked'

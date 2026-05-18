@@ -502,14 +502,8 @@ const colorsToSeed = [
   },
 ]
 
-type SeedColorMap = Map<string, {
-  id: string
-  name: string
-  hex: string
-  gramsAvailable?: number
-  spoolStatus?: 'available' | 'low' | 'archived'
-  priceAdd?: number
-}>
+type SeedColorMap = Map<string, { id: string; name: string; hex: string; priceAdd?: number }>
+const menuProductSlugs = ['menu-rail-25cm', 'menu-letter-pack-standard', 'menu-letter-custom']
 
 async function seedGlobalColors(): Promise<SeedColorMap> {
   console.log('\n🎨 Seeding global colors...')
@@ -562,8 +556,6 @@ async function seedGlobalColors(): Promise<SeedColorMap> {
       id: color.id,
       name: color.name,
       hex: color.hex,
-      gramsAvailable: color.gramsAvailable,
-      spoolStatus: color.spoolStatus,
       priceAdd: color.priceAdd,
     })
   })
@@ -590,7 +582,6 @@ function createInventory(slug: string, colorMap: SeedColorMap, names: string[]) 
         colorHex: color.hex,
         offered: true,
         stockQuantity: 0,
-        gramsAvailable: color.gramsAvailable ?? 0,
         priceAdd: color.priceAdd ?? 0,
       }
     }),
@@ -619,78 +610,73 @@ function createExampleProducts(colorMap: SeedColorMap) {
 
   return [
     {
-      slug: 'headset-stand',
-      name: 'Suporte de Auscultadores Personalizado',
-      priceFrom: 24.90,
-      priceTo: 34.90,
-      description: 'Suporte de auscultadores premium para setups gaming e trabalho, com estrutura à escolha, detalhe colorido e gamertag opcional.',
-      benefit: 'Eleva o setup com um suporte feito à medida em Portugal',
+      slug: 'menu-rail-25cm',
+      name: 'Módulo Menu 25cm',
+      priceFrom: 8,
+      priceTo: 8,
+      description: 'Módulo de 25cm para criar sistemas Menu3D com largura escalável.',
+      benefit: 'Preço modular e previsível para quadros profissionais até 3m',
       image: '/placeholder.svg',
-      featured: true,
-      featuredRank: 1,
-      visible: true,
-      isModular: true,
-      colorSelectionMode: 'preset_options' as const,
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
       customizable: true,
-      customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
-      multiColor: true,
-      multiColorCount: 2,
-      category: 'secretaria',
-      categorySlugs: ['secretaria', 'gaming', 'headset-stand'],
-      variants: [
-        {
-          id: 'stealth',
-          name: 'Oculto (3M)',
-          kind: 'preset_pack' as const,
-          colorMode: 'multi_part' as const,
-          finalPrice: 24.90,
-          formatLabel: 'Por baixo da mesa',
-          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
-          colors: [],
-          parts: [
-            { label: 'Estrutura', grams: 85, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
-            { label: 'Detalhe/Texto', grams: 10, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
-          ],
-          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
-        },
-        {
-          id: 'tower',
-          name: 'De Mesa',
-          kind: 'preset_pack' as const,
-          colorMode: 'multi_part' as const,
-          finalPrice: 29.90,
-          formatLabel: 'Base de mesa',
-          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
-          colors: [],
-          parts: [
-            { label: 'Estrutura', grams: 130, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
-            { label: 'Detalhe/Texto', grams: 12, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
-          ],
-          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
-        },
-        {
-          id: 'clamp',
-          name: 'Aperto (Rosca)',
-          kind: 'preset_pack' as const,
-          colorMode: 'multi_part' as const,
-          finalPrice: 34.90,
-          formatLabel: 'Aperto com rosca',
-          allowedGlobalColorIds: [...headsetStandMainColorIds, ...headsetStandAccentColorIds],
-          colors: [],
-          parts: [
-            { label: 'Estrutura', grams: 155, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandMainColorIds },
-            { label: 'Detalhe/Texto', grams: 14, materialType: 'PLA' as const, colorSource: 'customer_choice' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
-          ],
-          customizationOptions: [{ type: 'text' as const, label: 'Gamertag', maxChars: 15, priceAdd: 5 }],
-        },
-      ],
-      materialRecipe: [
-        { label: 'Estrutura', grams: 130, materialType: 'PLA' as const, colorSource: 'partColor' as const, allowedGlobalColorIds: headsetStandMainColorIds },
-        { label: 'Detalhe/Texto', grams: 12, materialType: 'PLA' as const, colorSource: 'partColor' as const, allowedGlobalColorIds: headsetStandAccentColorIds },
-      ],
-      materialGrams: 142,
-      sortOrder: 1,
-      inventoryColors: ['Carbon Black', 'Cyber White', 'Neon Lime', 'Pulse Blue', 'Signal Red'],
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Módulo 25cm', grams: 85, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 85,
+      sortOrder: 10,
+      inventoryColors: ['Preto', 'Branco', 'Madeira'],
+    },
+    {
+      slug: 'menu-letter-pack-standard',
+      name: 'Pack Letras Standard 300',
+      priceFrom: 35,
+      priceTo: 35,
+      description: 'Pack standard com 300 letras, numeros e simbolos para menu modular EM3D.',
+      benefit: 'Caracteres suficientes para menus compactos e sinaletica de balcão',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Letras standard', grams: 120, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 120,
+      sortOrder: 11,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
+    },
+    {
+      slug: 'menu-letter-custom',
+      name: 'Letras Avulso',
+      priceFrom: 0.3,
+      priceTo: 0.3,
+      description: 'Letras, numeros e simbolos avulso para ajustar o menu sem comprar outro pack completo.',
+      benefit: 'Pague apenas os caracteres extra de que precisa',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Letras avulso', grams: 1, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 1,
+      sortOrder: 12,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
     },
     {
       slug: 'suporte-telemovel-simples',
@@ -843,7 +829,7 @@ function createExampleProducts(colorMap: SeedColorMap) {
 
 async function seedProducts(colorMap: SeedColorMap): Promise<void> {
   console.log('\n📦 Seeding products...')
-  const exampleProductsToSeed = createExampleProducts(colorMap)
+  const exampleProductsToSeed = createExampleProducts(colorMap).filter((product) => menuProductSlugs.includes(product.slug))
 
   const existingProducts = await dbAdmin.query({
     catalogProducts: {
@@ -864,7 +850,7 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
     const existingProduct = (existingProducts.catalogProducts || []).find((p) => p.slug === product.slug)
 
     const productId = existingProduct?.id || id()
-    const existingInventory = (existingProducts.productInventory || []).find((inv) => inv.id === productId)
+    const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productSlug === product.slug || inv.productId === productId)
     const inventoryId = existingInventory?.id || id()
     const now = new Date()
 
