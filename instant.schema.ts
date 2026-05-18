@@ -298,6 +298,42 @@ const _schema = i.schema({
             priceAdd?: number
           }[]
         }
+        menuSystem?: {
+          role: 'rails' | 'standard_pack' | 'avulso'
+          railLengthCm?: number
+          totalRailLengthCm?: number
+          packSize?: number
+          menuText?: string
+          extraLettersText?: string
+          menuCharacters?: number
+          extraCharacters?: number
+          totalCharacters?: number
+          totalRails?: number
+          standardPackQuantity?: number
+          avulsoCharacterQuantity?: number
+          remainingCharacters?: number
+          characterFrequencyMap?: Record<string, number>
+          railColor?: {
+            name: string
+            hex: string
+            imageUrl?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterColor?: {
+            name: string
+            hex: string
+            imageUrl?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          lines?: {
+            index: number
+            text: string
+            characterCount: number
+            railQuantity: number
+          }[]
+        }
         customText?: string
         unitPrice: number
         itemStatus?: 'new' | 'waiting_color' | 'scheduled' | 'printing' | 'printed' | 'assembled' | 'done' | 'blocked'

@@ -458,6 +458,7 @@ const colorsToSeed = [
 ]
 
 type SeedColorMap = Map<string, { id: string; name: string; hex: string; priceAdd?: number }>
+const menuProductSlugs = ['menu-rail-25cm', 'menu-letter-pack-standard', 'menu-letter-custom']
 
 async function seedGlobalColors(): Promise<SeedColorMap> {
   console.log('\n🎨 Seeding global colors...')
@@ -557,6 +558,75 @@ function createExampleProducts(colorMap: SeedColorMap) {
   const azul = colorRef(colorMap, 'Azul')
 
   return [
+    {
+      slug: 'menu-rail-25cm',
+      name: 'Calha Menu Modular 25cm',
+      priceFrom: 8,
+      priceTo: 8,
+      description: 'Calha interligavel de 25cm para sistemas de menu modular EM3D.',
+      benefit: 'Base limpa e robusta para linhas de menu profissionais',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Calha 25cm', grams: 85, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 85,
+      sortOrder: 10,
+      inventoryColors: ['Preto', 'Branco', 'Madeira'],
+    },
+    {
+      slug: 'menu-letter-pack-standard',
+      name: 'Pack Letras Standard 300',
+      priceFrom: 35,
+      priceTo: 35,
+      description: 'Pack standard com 300 letras, numeros e simbolos para menu modular EM3D.',
+      benefit: 'Caracteres suficientes para menus compactos e sinaletica de balcão',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Letras standard', grams: 120, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 120,
+      sortOrder: 11,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
+    },
+    {
+      slug: 'menu-letter-custom',
+      name: 'Letras Avulso',
+      priceFrom: 0.3,
+      priceTo: 0.3,
+      description: 'Letras, numeros e simbolos avulso para ajustar o menu sem comprar outro pack completo.',
+      benefit: 'Pague apenas os caracteres extra de que precisa',
+      image: '/placeholder.svg',
+      featured: false,
+      featuredRank: 0,
+      visible: false,
+      colorSelectionMode: 'single' as const,
+      customizable: true,
+      multiColor: false,
+      multiColorCount: 1,
+      category: 'empresas',
+      categorySlugs: ['empresas', 'menus', 'componentes'],
+      variants: [],
+      materialRecipe: [{ label: 'Letras avulso', grams: 1, materialType: 'PLA' as const, colorSource: 'partColor' as const }],
+      materialGrams: 1,
+      sortOrder: 12,
+      inventoryColors: ['Preto', 'Branco', 'Amarelo', 'Azul'],
+    },
     {
       slug: 'suporte-telemovel-simples',
       name: 'Suporte de Telemóvel Simples',
@@ -708,7 +778,7 @@ function createExampleProducts(colorMap: SeedColorMap) {
 
 async function seedProducts(colorMap: SeedColorMap): Promise<void> {
   console.log('\n📦 Seeding products...')
-  const exampleProductsToSeed = createExampleProducts(colorMap)
+  const exampleProductsToSeed = createExampleProducts(colorMap).filter((product) => menuProductSlugs.includes(product.slug))
 
   const existingProducts = await dbAdmin.query({
     catalogProducts: {
@@ -729,7 +799,7 @@ async function seedProducts(colorMap: SeedColorMap): Promise<void> {
     const existingProduct = (existingProducts.catalogProducts || []).find((p: any) => p.slug === product.slug)
 
     const productId = existingProduct?.id || id()
-    const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productId === productId)
+    const existingInventory = (existingProducts.productInventory || []).find((inv: any) => inv.productSlug === product.slug || inv.productId === productId)
     const inventoryId = existingInventory?.id || id()
     const now = new Date()
 

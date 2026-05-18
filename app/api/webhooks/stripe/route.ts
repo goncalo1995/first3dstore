@@ -135,8 +135,44 @@ function getShippingLabel(method: string) {
   return method === 'mainland_portugal' ? 'Envio nacional' : 'Levantamento em Carcavelos'
 }
 
+function getMenuOrderSummary(order: any) {
+  const menuItem = (order.items ?? []).find((item: any) => item.menuSystem)
+  const menuSystem = menuItem?.menuSystem
+  if (!menuSystem) return ''
+
+  const lineBreakdown = (menuSystem.lines ?? [])
+    .map((line: any) => `- Linha ${line.index}: ${line.characterCount} caracteres, ${line.railQuantity} calha(s) | ${line.text}`)
+    .join('\n')
+  const frequencySummary = Object.entries(menuSystem.characterFrequencyMap ?? {})
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
+    .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}: ${count}`)
+    .join(', ')
+
+  return `\n\nDetalhes Menu Modular:
+Calhas: ${menuSystem.totalRails ?? '-'} de ${menuSystem.railLengthCm ?? 25}cm
+Comprimento total: ${menuSystem.totalRailLengthCm ?? '-'}cm
+Cor das calhas: ${menuSystem.railColor?.name || '-'}
+Cor das letras: ${menuSystem.letterColor?.name || '-'}
+Pack standard: ${menuSystem.standardPackQuantity ?? 0}
+Letras avulso: ${menuSystem.avulsoCharacterQuantity ?? 0}
+Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
+Caracteres extra: ${menuSystem.extraCharacters ?? 0}
+Total de caracteres: ${menuSystem.totalCharacters ?? 0}
+Mapa de caracteres: ${frequencySummary || '-'}
+
+Menu original:
+${menuSystem.menuText || '-'}
+
+Letras/simbolos extra:
+${menuSystem.extraLettersText || '-'}
+
+Linhas:
+${lineBreakdown || '-'}`
+}
+
 async function sendStandardOrderEmails(order: any, orderId: string) {
   try {
+    const menuSummary = getMenuOrderSummary(order)
     const itemLines = (order.items ?? [])
       .map((item: any) => {
         const details = [
@@ -166,6 +202,7 @@ ${itemLines}
 Subtotal: ${formatPrice(order.subtotal)}
 Entrega: ${formatPrice(order.shippingCost)} (${getShippingLabel(order.shippingMethod)})
 Total: ${formatPrice(order.total)}
+${menuSummary}
 
 Vamos preparar a encomenda e enviaremos novidades por email.
 
@@ -188,7 +225,7 @@ Entrega: ${getShippingLabel(order.shippingMethod)}
 Total: ${formatPrice(order.total)}
 
 Artigos:
-${itemLines}`,
+${itemLines}${menuSummary}`,
       })
     }
   } catch (error) {

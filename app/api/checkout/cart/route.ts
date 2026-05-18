@@ -3,6 +3,15 @@ import Stripe from 'stripe'
 import { dbAdmin, id } from '@/lib/db-admin'
 import { getCatalogProductBySlugForBuild } from '@/lib/catalog'
 import type { CartItemPartColor, CartItemVariant } from '@/lib/cart-context'
+import {
+  MENU_PACK_SIZE,
+  MENU_RAIL_LENGTH_CM,
+  MENU_MAX_RAILS_PER_LINE,
+  MENU_MIN_RAILS_PER_LINE,
+  calculateMenuQuote,
+  validateMenuQuoteLimits,
+  type MenuQuote,
+} from '@/lib/menu-calculator'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
 export const runtime = 'nodejs'
@@ -10,6 +19,9 @@ export const runtime = 'nodejs'
 const SHIPPING_COST = 4.99
 const MAX_ITEMS = 30
 const MAX_QUANTITY = 99
+const MENU_RAIL_SLUG = 'menu-rail-25cm'
+const MENU_PACK_SLUG = 'menu-letter-pack-standard'
+const MENU_AVULSO_SLUG = 'menu-letter-custom'
 
 type CheckoutPayload = {
   customer?: {
@@ -22,6 +34,20 @@ type CheckoutPayload = {
     address?: string
   }
   notes?: string
+  menuSystem?: {
+    menuText?: string
+    extraLettersText?: string
+    railLengthCm?: 25
+    packSize?: 300
+    lines?: {
+      index?: number
+      text?: string
+      characterCount?: number
+      railQuantity?: number
+    }[]
+    railColor?: ProductColor
+    letterColor?: ProductColor
+  }
   items?: {
     productSlug?: string
     quantity?: number
@@ -37,6 +63,8 @@ type CheckoutPayload = {
   }[]
 }
 
+type MenuItemRole = 'rails' | 'standard_pack' | 'avulso'
+
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
 }
@@ -45,6 +73,43 @@ function getStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY
   if (!secretKey) return null
   return new Stripe(secretKey)
+}
+
+function getMenuLineRailQuantities(menuSystem: NonNullable<CheckoutPayload['menuSystem']>) {
+  const quantities: Record<number, number> = {}
+
+  for (const line of menuSystem.lines ?? []) {
+    const index = Number(line.index)
+    const railQuantity = Number(line.railQuantity)
+
+    if (!Number.isInteger(index) || index < 1) {
+      throw new Error('Uma das linhas do menu é inválida.')
+    }
+    if (!Number.isInteger(railQuantity) || railQuantity < MENU_MIN_RAILS_PER_LINE || railQuantity > MENU_MAX_RAILS_PER_LINE) {
+      throw new Error(`Cada linha deve ter entre ${MENU_MIN_RAILS_PER_LINE} e ${MENU_MAX_RAILS_PER_LINE} calhas.`)
+    }
+
+    quantities[index] = railQuantity
+  }
+
+  return quantities
+}
+
+function getMenuItemRole(slug: string): MenuItemRole | undefined {
+  if (slug === MENU_RAIL_SLUG) return 'rails'
+  if (slug === MENU_PACK_SLUG) return 'standard_pack'
+  if (slug === MENU_AVULSO_SLUG) return 'avulso'
+  return undefined
+}
+
+function getMenuItemQuantity(items: NonNullable<CheckoutPayload['items']>, slug: string) {
+  return items.reduce((sum, item) => sum + (String(item.productSlug ?? '').trim() === slug ? Number(item.quantity) || 0 : 0), 0)
+}
+
+function colorsMatch(left: ProductColor | undefined, right: ProductColor | undefined) {
+  if (!left || !right) return false
+  if (left.globalColorId && right.globalColorId) return left.globalColorId === right.globalColorId
+  return normalizeName(left.name) === normalizeName(right.name)
 }
 
 function isEmail(value: string) {
@@ -69,6 +134,126 @@ function getVariant(product: Product, selectedVariant?: CartItemVariant) {
 
 function normalizeName(value: string | undefined) {
   return String(value ?? '').trim().toLowerCase()
+}
+
+function validateMenuColor(globalColors: GlobalColor[], color: ProductColor | undefined, label: string) {
+  if (!color?.name && !color?.globalColorId) {
+    throw new Error(`Escolha a ${label}.`)
+  }
+
+  const match = globalColors.find(candidate => {
+    const isActive = candidate.isActive !== false && candidate.spoolStatus !== 'archived'
+    if (!isActive) return false
+    if (color.globalColorId && (candidate.id === color.globalColorId || candidate.globalColorId === color.globalColorId)) return true
+    return normalizeName(candidate.name) === normalizeName(color.name)
+  })
+
+  if (!match) {
+    throw new Error(`A ${label} selecionada já não está disponível.`)
+  }
+}
+
+function validateMenuPayload(body: CheckoutPayload, globalColors: GlobalColor[]): MenuQuote | null {
+  if (!body.menuSystem) return null
+
+  const items = body.items ?? []
+  if (body.menuSystem.railLengthCm !== undefined && body.menuSystem.railLengthCm !== MENU_RAIL_LENGTH_CM) {
+    throw new Error(`As calhas do Menu Modular usam ${MENU_RAIL_LENGTH_CM}cm.`)
+  }
+  if (body.menuSystem.packSize !== undefined && body.menuSystem.packSize !== MENU_PACK_SIZE) {
+    throw new Error(`O pack standard tem ${MENU_PACK_SIZE} caracteres.`)
+  }
+
+  const quote = calculateMenuQuote({
+    menuText: String(body.menuSystem.menuText ?? ''),
+    extraLettersText: String(body.menuSystem.extraLettersText ?? ''),
+    lineRailQuantities: getMenuLineRailQuantities(body.menuSystem),
+  })
+  const limitErrors = validateMenuQuoteLimits(quote)
+
+  if (limitErrors.length) {
+    throw new Error(limitErrors[0])
+  }
+
+  const expectedQuantities = [
+    { slug: MENU_RAIL_SLUG, quantity: quote.totalRails, label: 'calhas' },
+    { slug: MENU_PACK_SLUG, quantity: quote.standardPackQuantity, label: 'packs standard' },
+    { slug: MENU_AVULSO_SLUG, quantity: quote.avulsoCharacterQuantity, label: 'letras avulso' },
+  ]
+
+  for (const expected of expectedQuantities) {
+    if (getMenuItemQuantity(items, expected.slug) !== expected.quantity) {
+      throw new Error(`A quantidade de ${expected.label} não corresponde ao cálculo do menu.`)
+    }
+  }
+
+  for (const item of items) {
+    const slug = String(item.productSlug ?? '').trim()
+    if (!getMenuItemRole(slug)) {
+      throw new Error('A encomenda do Menu Modular só pode incluir componentes do menu.')
+    }
+  }
+
+  validateMenuColor(globalColors, body.menuSystem.railColor, 'cor das calhas')
+  validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras')
+
+  for (const item of items) {
+    const slug = String(item.productSlug ?? '').trim()
+    if (slug === MENU_RAIL_SLUG && !colorsMatch(item.selectedColor, body.menuSystem.railColor)) {
+      throw new Error('A cor das calhas no carrinho não corresponde ao cálculo do menu.')
+    }
+    if ((slug === MENU_PACK_SLUG || slug === MENU_AVULSO_SLUG) && !colorsMatch(item.selectedColor, body.menuSystem.letterColor)) {
+      throw new Error('A cor das letras no carrinho não corresponde ao cálculo do menu.')
+    }
+  }
+
+  return quote
+}
+
+function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | null, menuSystem?: CheckoutPayload['menuSystem']) {
+  if (!role || !quote) return undefined
+
+  const base = {
+    role,
+    railLengthCm: quote.railLengthCm,
+    totalRailLengthCm: quote.totalRailLengthCm,
+    packSize: quote.packSize,
+    menuText: quote.menuText,
+    extraLettersText: quote.extraLettersText || undefined,
+    menuCharacters: quote.menuCharacters,
+    extraCharacters: quote.extraCharacters,
+    totalCharacters: quote.totalCharacters,
+    totalRails: quote.totalRails,
+    standardPackQuantity: quote.standardPackQuantity,
+    avulsoCharacterQuantity: quote.avulsoCharacterQuantity,
+    remainingCharacters: quote.remainingCharacters,
+    characterFrequencyMap: quote.characterFrequencyMap,
+    railColor: menuSystem?.railColor,
+    letterColor: menuSystem?.letterColor,
+  }
+
+  if (role === 'rails') {
+    return { ...base, lines: quote.lines }
+  }
+
+  return base
+}
+
+function getMenuCustomText(role: MenuItemRole | undefined, quote: MenuQuote | null, customText: string) {
+  if (!role || !quote) return customText || undefined
+
+  const menuText = role === 'rails'
+    ? `${quote.totalRails} calhas de ${quote.railLengthCm}cm`
+    : role === 'standard_pack'
+      ? `${quote.standardPackQuantity} pack(s) de ${quote.packSize} caracteres`
+      : `${quote.avulsoCharacterQuantity} letras avulso`
+
+  return [customText, menuText].filter(Boolean).join(' | ')
+}
+
+function getMenuOrderNotes(quote: MenuQuote | null) {
+  if (!quote) return ''
+  return `Sistema Menu Modular: ${quote.totalRails} calhas de ${quote.railLengthCm}cm, ${quote.standardPackQuantity} pack standard, ${quote.avulsoCharacterQuantity} letras avulso, ${quote.totalCharacters} caracteres totais.`
 }
 
 function getGlobalColorPriceAdd(
@@ -209,13 +394,16 @@ function getUnitPrice(
   const multiColorPriceAdd = !variant && item.selectedColors && item.selectedColors.length > 1
     ? product.multiColorPriceAdd ?? 0
     : 0
+  const menuColorPriceAdd = !variant && getMenuItemRole(product.slug)
+    ? getGlobalColorPriceAdd(globalColors, item.selectedColor ?? item.selectedColors?.[0])
+    : 0
   const premiumColorPriceAdd = variantColorMode === 'customer_choice'
     ? getGlobalColorPriceAdd(globalColors, item.selectedColor ?? item.selectedColors?.[0])
     : variantColorMode === 'multi_part'
       ? (item.selectedParts ?? []).reduce((sum, part) => sum + getGlobalColorPriceAdd(globalColors, part), 0)
       : 0
 
-  return basePrice + variantPriceAdd + multiColorPriceAdd + customizationPriceAdd + premiumColorPriceAdd
+  return basePrice + variantPriceAdd + multiColorPriceAdd + customizationPriceAdd + premiumColorPriceAdd + menuColorPriceAdd
 }
 
 function cents(value: number) {
@@ -319,6 +507,16 @@ export async function POST(request: NextRequest) {
     const lineItems: Stripe.Checkout.SessionCreateParams['line_items'] = []
     const globalColorData = await dbAdmin.query({ globalColors: {} })
     const globalColors = (globalColorData.globalColors ?? []) as GlobalColor[]
+    let menuQuote: MenuQuote | null = null
+
+    try {
+      menuQuote = validateMenuPayload(body, globalColors)
+    } catch (menuError) {
+      return NextResponse.json(
+        { error: menuError instanceof Error ? menuError.message : 'Configuração do menu inválida.' },
+        { status: 400 },
+      )
+    }
 
     for (const item of body.items) {
       const slug = String(item.productSlug ?? '').trim()
@@ -328,7 +526,8 @@ export async function POST(request: NextRequest) {
       }
 
       const product = await getCatalogProductBySlugForBuild(slug)
-      if (!product || product.visible === false) {
+      const isMenuComponent = Boolean(menuQuote && getMenuItemRole(slug))
+      if (!product || (product.visible === false && !isMenuComponent)) {
         return NextResponse.json({ error: `Produto indisponível: ${slug}.` }, { status: 404 })
       }
 
@@ -351,6 +550,9 @@ export async function POST(request: NextRequest) {
       const colors = getItemColors(product, item, variant)
       const selectedColorPayload = getSelectedColorPayload(product, item, globalColors, variant)
       const customText = formatCustomText(item.customizations)
+      const menuRole = menuQuote ? getMenuItemRole(slug) : undefined
+      const menuDetails = getMenuItemDetails(menuRole, menuQuote, body.menuSystem)
+      const itemCustomText = getMenuCustomText(menuRole, menuQuote, customText)
 
       orderItems.push({
         productId: product.id,
@@ -376,10 +578,11 @@ export async function POST(request: NextRequest) {
               })),
             }
           : undefined,
-        customText: customText || undefined,
+        menuSystem: menuDetails,
+        customText: itemCustomText,
         unitPrice,
         itemStatus: 'new' as const,
-        adminNotes: '',
+        adminNotes: menuDetails ? JSON.stringify(menuDetails) : '',
         scheduledFor: '',
         quantityDone: 0,
       })
@@ -394,7 +597,7 @@ export async function POST(request: NextRequest) {
             description: [
               variant?.name,
               colors.length ? colors.join(', ') : null,
-              customText || null,
+              itemCustomText || null,
             ].filter(Boolean).join(' · ').slice(0, 1000),
           },
         },
@@ -420,6 +623,7 @@ export async function POST(request: NextRequest) {
     }
 
     const orderId = id()
+    const flow = menuQuote ? 'menu_modular' : 'standard_order'
 
     // Create Stripe session first to ensure it succeeds before saving order
     const session = await stripe.checkout.sessions.create({
@@ -427,10 +631,17 @@ export async function POST(request: NextRequest) {
       customer_email: customerEmail,
       client_reference_id: orderId,
       success_url: `${siteUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl()}/checkout`,
+      cancel_url: `${siteUrl()}${menuQuote ? '/colecoes/menus' : '/checkout'}`,
       metadata: {
         orderId,
-        flow: 'standard_order',
+        flow,
+        ...(menuQuote
+          ? {
+              railQuantity: String(menuQuote.totalRails),
+              standardPackQuantity: String(menuQuote.standardPackQuantity),
+              avulsoCharacterQuantity: String(menuQuote.avulsoCharacterQuantity),
+            }
+          : {}),
       },
       line_items: lineItems,
     })
@@ -455,7 +666,7 @@ export async function POST(request: NextRequest) {
         total,
         paymentStatus: 'pending',
         fulfillmentStatus: 'new',
-        ...(notes ? { notes } : {}),
+        ...(menuQuote || notes ? { notes: [getMenuOrderNotes(menuQuote), notes].filter(Boolean).join('\n\n') } : {}),
         stripeSessionId: session.id,
         paymentUrl: session.url,
         createdAt: now,
