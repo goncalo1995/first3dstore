@@ -392,20 +392,27 @@ function parseRawMenuText(value: string): EditableMenuLine[] {
     })
 }
 
+function parseAssistantSegment(segment: string) {
+  const cleaned = segment.trim().replace(/\s*\.{2,}\s*/g, ' ')
+  if (!cleaned) return null
+  const match = cleaned.match(/^(.*?)(\d+(?:[,.]\d{1,2})?\s*€?|desde\s+\d+(?:[,.]\d{1,2})?\s*€?|sob\s+consulta|sob\s+marcação|sob\s+marcacao|\-\d+%|\+\d+(?:[,.]\d{1,2})?\s*€?)$/i)
+  if (!match) return createLine(cleaned, '', '')
+
+  return createLine(
+    match[1].replace(/[-:]+$/g, '').replace(/\s+/g, ' ').trim(),
+    '',
+    match[2].replace('.', ',').replace(/\s*€?$/, '€'),
+  )
+}
+
 function formatAssistantMenu(value: string) {
   const fallback = 'Espresso 1,50\nFlat White 3,00\nPastel de nata 1,40'
   const source = value.trim() || fallback
-  const matches = Array.from(source.matchAll(/([^,\n]+?)\s+(\d+(?:[,.]\d{1,2})?\s*€?)(?=,|\n|$)/gi))
-
-  if (matches.length) {
-    return matches.map(match => createLine(
-      match[1].replace(/[-:]+$/g, '').replace(/\s+/g, ' ').trim(),
-      '',
-      match[2].replace('.', ',').replace(/\s*€?$/, '€'),
-    ))
-  }
-
-  return parseRawMenuText(source)
+  return source
+    .split(/\n|,(?!\d)/)
+    .map(parseAssistantSegment)
+    .filter((line): line is EditableMenuLine => Boolean(line))
+    .slice(0, MENU_MAX_LINES)
 }
 
 function toCalculatorRows(lines: EditableMenuLine[]): MenuRowInput[] {
@@ -414,6 +421,10 @@ function toCalculatorRows(lines: EditableMenuLine[]): MenuRowInput[] {
     suffix: line.suffix,
     price: line.price,
   }))
+}
+
+function isBlankEditableRow(line: EditableMenuLine) {
+  return buildMenuTextFromRows([{ label: line.label, suffix: line.suffix, price: line.price }]).length === 0
 }
 
 function SwatchPicker({
@@ -792,7 +803,8 @@ export default function ModularMenusPage() {
 
   function saveDraft() {
     if (!draftRows) return
-    setSavedRows(draftRows)
+    const filteredRows = draftRows.filter(line => !isBlankEditableRow(line))
+    setSavedRows(filteredRows)
     setDraftRows(null)
     setRowsAreDirty(true)
   }

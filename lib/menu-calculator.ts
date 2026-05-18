@@ -56,6 +56,7 @@ export type MenuQuote = {
   lines: MenuQuoteLine[]
   lineCount: number
   moduleLengthCm: typeof MODULE_LENGTH_CM
+  rawGlobalModuleCount: number | undefined
   globalModuleCount: number
   globalWidthCm: number
   charsPerModuleEstimate: typeof CHARS_PER_MODULE_ESTIMATE
@@ -130,6 +131,10 @@ export function buildMenuTextFromRows(rows: MenuRowInput[] = []) {
     .join('\n')
 }
 
+function isBlankRow(row: MenuRowInput) {
+  return [row.label, row.suffix, row.price].every(value => String(value ?? '').trim().length === 0)
+}
+
 function splitLineParts(text: string): { label: string; suffix?: string; price: string } {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   const match = cleaned.match(/^(.*?)(\d+(?:[,.]\d{1,2})?\s*€?|desde\s+\d+(?:[,.]\d{1,2})?\s*€?|sob\s+consulta|sob\s+marcação|sob\s+marcacao|\-\d+%|\+\d+(?:[,.]\d{1,2})?\s*€?)$/i)
@@ -177,6 +182,42 @@ export function parseMenuText(menuTextInput: string, globalModuleCount = MIN_GLO
   }
 }
 
+function parseMenuRows(rows: MenuRowInput[] = [], globalModuleCount = MIN_GLOBAL_MODULES): ParsedMenuText {
+  const estimatedCharsPerLine = clampInteger(globalModuleCount, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES) * CHARS_PER_MODULE_ESTIMATE
+  const lines = rows
+    .map((row, rawIndex) => {
+      const label = sanitizeMenuText(String(row.label ?? '')).replace(/\s+/g, ' ').trim()
+      const suffix = sanitizeMenuText(String(row.suffix ?? '')).replace(/\s+/g, ' ').trim()
+      const price = sanitizeMenuText(String(row.price ?? '')).replace(/\s+/g, ' ').trim()
+      const text = [label, suffix, price].filter(Boolean).join(' ')
+      return { rawIndex, text, label, suffix, price }
+    })
+    .filter(line => line.text.length > 0)
+    .map(line => {
+      const characterCount = calculateCharacters(line.text)
+
+      return {
+        index: line.rawIndex + 1,
+        text: line.text,
+        label: line.label,
+        suffix: line.suffix || undefined,
+        price: line.price,
+        characterCount,
+        widthWarning: calculateWidthWarning(characterCount, estimatedCharsPerLine),
+      }
+    })
+  const text = lines.map(line => line.text).join('\n')
+  const characterCount = lines.reduce((sum, line) => sum + line.characterCount, 0)
+  const rawText = rows.map(row => [row.label, row.suffix, row.price].map(value => String(value ?? '')).join(' ')).join('\n')
+
+  return {
+    text,
+    lines,
+    characterCount,
+    hasUnsupportedControlCharacters: hasUnsupportedControlCharacters(rawText),
+  }
+}
+
 export function calculateLetterPacks(totalCharacters: number, selectedStandardPacks?: number, selectedAvulsoCharacters?: number) {
   const safeTotal = Math.max(0, Math.trunc(totalCharacters))
   const standardPackMinimum = Math.floor(safeTotal / STANDARD_PACK_SIZE)
@@ -197,6 +238,7 @@ export function calculateLetterPacks(totalCharacters: number, selectedStandardPa
 }
 
 export function calculateMenuBoardModules(lineCount: number, globalModuleCountInput = MIN_GLOBAL_MODULES) {
+  const rawGlobalModuleCount = Number(globalModuleCountInput)
   const globalModuleCount = clampInteger(globalModuleCountInput, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES)
   const extensionQuantityPerLine = Math.max(globalModuleCount - 1, 0)
   const starterQuantity = lineCount
@@ -205,6 +247,7 @@ export function calculateMenuBoardModules(lineCount: number, globalModuleCountIn
 
   return {
     moduleLengthCm: MODULE_LENGTH_CM as typeof MODULE_LENGTH_CM,
+    rawGlobalModuleCount: Number.isFinite(rawGlobalModuleCount) ? rawGlobalModuleCount : undefined,
     globalModuleCount,
     globalWidthCm: globalModuleCount * MODULE_LENGTH_CM,
     charsPerModuleEstimate: CHARS_PER_MODULE_ESTIMATE as typeof CHARS_PER_MODULE_ESTIMATE,
@@ -253,9 +296,10 @@ export function calculateMenuOrderPricing({
 }
 
 export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
-  const menuText = input.rows ? buildMenuTextFromRows(input.rows) : sanitizeMenuText(String(input.menuText ?? ''), { allowNewlines: true })
   const modules = calculateMenuBoardModules(0, input.globalModuleCount)
-  const parsedMenu = parseMenuText(menuText, modules.globalModuleCount)
+  const parsedMenu = input.rows
+    ? parseMenuRows(input.rows.filter(row => !isBlankRow(row)), modules.globalModuleCount)
+    : parseMenuText(sanitizeMenuText(String(input.menuText ?? ''), { allowNewlines: true }), modules.globalModuleCount)
   const rawExtraLettersText = normalizeLineEndings(String(input.extraLettersText ?? ''))
   const rawCustomIconRequest = normalizeLineEndings(String(input.customIconRequest ?? ''))
   const extraLettersText = sanitizeMenuText(rawExtraLettersText)
@@ -303,13 +347,14 @@ export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
 
 export function validateMenuQuoteLimits(quote: MenuQuote) {
   const errors: string[] = []
+  const rawGlobalModuleCount = quote.rawGlobalModuleCount
 
   if (quote.menuCharacters < 1) errors.push('Indique pelo menos uma linha de menu.')
   if (quote.menuCharacters > MENU_TEXT_MAX_CHARS) errors.push(`O menu pode ter no máximo ${MENU_TEXT_MAX_CHARS} caracteres visíveis.`)
   if (quote.extraCharacters > MENU_EXTRA_MAX_CHARS) errors.push(`As letras extra podem ter no máximo ${MENU_EXTRA_MAX_CHARS} caracteres visíveis.`)
   if (calculateCharacters(quote.customIconRequest) > MENU_CUSTOM_ICON_MAX_CHARS) errors.push(`O pedido de ícone/logótipo pode ter no máximo ${MENU_CUSTOM_ICON_MAX_CHARS} caracteres visíveis.`)
   if (quote.lines.length > MENU_MAX_LINES) errors.push(`O menu pode ter no máximo ${MENU_MAX_LINES} linhas preenchidas.`)
-  if (quote.globalModuleCount < MIN_GLOBAL_MODULES || quote.globalModuleCount > MAX_GLOBAL_MODULES) errors.push(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
+  if (rawGlobalModuleCount === undefined || !Number.isInteger(rawGlobalModuleCount) || rawGlobalModuleCount < MIN_GLOBAL_MODULES || rawGlobalModuleCount > MAX_GLOBAL_MODULES) errors.push(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
   if (quote.standardPackQuantity < quote.standardPackMinimum) errors.push('A quantidade de packs standard não pode ser inferior ao mínimo calculado.')
   if (quote.avulsoCharacterQuantity < quote.avulsoMinimum) errors.push('A quantidade de letras avulso não pode ser inferior ao mínimo calculado.')
   if (quote.hasUnsupportedControlCharacters) errors.push('O texto contém caracteres de controlo não suportados.')
