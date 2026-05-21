@@ -1,9 +1,27 @@
-export const MODULE_LENGTH_CM = 25
-export const CHARS_PER_MODULE_ESTIMATE = 5
-export const MIN_GLOBAL_MODULES = 1
-export const MAX_GLOBAL_MODULES = 12
-export const STANDARD_PACK_SIZE = 300
-export const LAUNCH_DISCOUNT_PERCENT = 20
+import {
+  CHARACTER_WIDTH_MM,
+  CHARS_PER_MODULE_ESTIMATE,
+  FALLBACK_CHARACTER_WIDTH_MM,
+  LAUNCH_DISCOUNT_PERCENT,
+  MAX_GLOBAL_MODULES,
+  MIN_GLOBAL_MODULES,
+  MODULE_LENGTH_MM,
+  STANDARD_PACK_DISTRIBUTION,
+} from './modular-inventory-config'
+
+export {
+  CHARACTER_WIDTH_MM,
+  CHARS_PER_MODULE_ESTIMATE,
+  FALLBACK_CHARACTER_WIDTH_MM,
+  LAUNCH_DISCOUNT_PERCENT,
+  MAX_GLOBAL_MODULES,
+  MIN_GLOBAL_MODULES,
+  MODULE_LENGTH_MM,
+  STANDARD_PACK_DISTRIBUTION,
+}
+
+export const MODULE_LENGTH_CM = MODULE_LENGTH_MM / 10
+export const STANDARD_PACK_SIZE = Object.values(STANDARD_PACK_DISTRIBUTION).reduce((sum, count) => sum + count, 0)
 export const MENU_TEXT_MAX_CHARS = 5000
 export const MENU_EXTRA_MAX_CHARS = 500
 export const MENU_CUSTOM_ICON_MAX_CHARS = 500
@@ -13,19 +31,35 @@ export const MENU_MAX_LINES = 100
 export const MENU_RAIL_LENGTH_CM = MODULE_LENGTH_CM
 export const MENU_PACK_SIZE = STANDARD_PACK_SIZE
 
-export type MenuRowInput = {
-  label?: string
+export type ModularLine = {
+  id: string
+  label: string
+  detail?: string
+  useAccent?: boolean
+}
+
+export type MenuRowInput = Partial<ModularLine> & {
   suffix?: string
   price?: string
 }
 
+export type MenuColorPayload = {
+  name: string
+  hex?: string
+  globalColorId?: string
+  priceAdd?: number
+}
+
 export type MenuQuoteLine = {
   index: number
+  id?: string
   text: string
   label: string
-  suffix?: string
-  price: string
+  detail?: string
+  useAccent: boolean
   characterCount: number
+  textWidthMm: number
+  globalWidthMm: number
   widthWarning: boolean
 }
 
@@ -47,6 +81,15 @@ export type MenuQuoteInput = {
   railModuleUnitPrice?: number
   standardPackUnitPrice?: number
   avulsoUnitPrice?: number
+  baseLetterColor?: MenuColorPayload
+  accentLetterColor?: MenuColorPayload
+}
+
+export type CharacterFrequencyByColor = {
+  [colorKey: string]: {
+    color: MenuColorPayload
+    characters: Record<string, number>
+  }
 }
 
 export type MenuQuote = {
@@ -56,9 +99,11 @@ export type MenuQuote = {
   lines: MenuQuoteLine[]
   lineCount: number
   moduleLengthCm: typeof MODULE_LENGTH_CM
+  moduleLengthMm: typeof MODULE_LENGTH_MM
   rawGlobalModuleCount: number | undefined
   globalModuleCount: number
   globalWidthCm: number
+  globalWidthMm: number
   charsPerModuleEstimate: typeof CHARS_PER_MODULE_ESTIMATE
   estimatedCharsPerLine: number
   productionFont: 'em3d-standard'
@@ -71,10 +116,12 @@ export type MenuQuote = {
   extraCharacters: number
   totalCharacters: number
   characterFrequencyMap: Record<string, number>
+  characterFrequencyByColor: CharacterFrequencyByColor
   standardPackMinimum: number
   standardPackQuantity: number
   avulsoMinimum: number
   avulsoCharacterQuantity: number
+  avulsoDeficitMap: Record<string, number>
   railModuleUnitPrice: number
   standardPackUnitPrice: number
   avulsoUnitPrice: number
@@ -89,6 +136,10 @@ export type MenuQuote = {
 }
 
 const UNSUPPORTED_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
+const DEFAULT_STANDARD_PACK_UNIT_PRICE = 35
+const DEFAULT_AVULSO_UNIT_PRICE = 0.3
+const BASE_COLOR_FALLBACK: MenuColorPayload = { name: 'Base' }
+const ACCENT_COLOR_FALLBACK: MenuColorPayload = { name: 'Accent' }
 
 function normalizeLineEndings(value: string) {
   return value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -107,6 +158,27 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100
 }
 
+function colorKey(color: MenuColorPayload | undefined, fallback: string) {
+  return color?.globalColorId || color?.name?.trim().toLowerCase() || fallback
+}
+
+function addCharacter(map: Record<string, number>, character: string, count = 1) {
+  map[character] = (map[character] ?? 0) + count
+}
+
+function addCharactersToColorGroup(
+  groups: CharacterFrequencyByColor,
+  color: MenuColorPayload,
+  fallbackKey: string,
+  value: string,
+) {
+  const key = colorKey(color, fallbackKey)
+  groups[key] ??= { color, characters: {} }
+  for (const character of Array.from(sanitizeMenuText(value).replace(/\n/g, ''))) {
+    addCharacter(groups[key].characters, character)
+  }
+}
+
 export function sanitizeMenuText(value: string, options: { allowNewlines?: boolean } = {}) {
   const withoutUnsupported = normalizeLineEndings(String(value ?? '')).replace(UNSUPPORTED_CONTROL_CHARS, '')
   if (options.allowNewlines) return withoutUnsupported
@@ -119,63 +191,81 @@ export function calculateCharacters(value: string) {
 
 export function buildCharacterFrequencyMap(value: string) {
   return Array.from(sanitizeMenuText(value).replace(/\n/g, '')).reduce<Record<string, number>>((map, character) => {
-    map[character] = (map[character] ?? 0) + 1
+    addCharacter(map, character)
     return map
   }, {})
 }
 
+export function calculateTextWidthMm(value: string) {
+  return Array.from(sanitizeMenuText(value)).reduce((sum, character) => {
+    if (character === '\n') return sum
+    return sum + (CHARACTER_WIDTH_MM[character] ?? FALLBACK_CHARACTER_WIDTH_MM)
+  }, 0)
+}
+
+export function buildLineText(row: Pick<MenuRowInput, 'label' | 'detail' | 'suffix' | 'price'>) {
+  const label = sanitizeMenuText(String(row.label ?? '')).replace(/\s+/g, ' ').trim()
+  const detail = sanitizeMenuText(String(row.detail ?? [row.suffix, row.price].filter(Boolean).join(' ') ?? '')).replace(/\s+/g, ' ').trim()
+  return [label, detail].filter(Boolean).join(' ')
+}
+
 export function buildMenuTextFromRows(rows: MenuRowInput[] = []) {
   return rows
-    .map(row => [row.label, row.suffix, row.price].map(value => String(value ?? '').trim()).filter(Boolean).join(' '))
+    .map(row => buildLineText(row))
     .filter(Boolean)
     .join('\n')
 }
 
 function isBlankRow(row: MenuRowInput) {
-  return [row.label, row.suffix, row.price].every(value => String(value ?? '').trim().length === 0)
+  return buildLineText(row).length === 0
 }
 
-function splitLineParts(text: string): { label: string; suffix?: string; price: string } {
-  const cleaned = text.replace(/\s+/g, ' ').trim()
-  const match = cleaned.match(/^(.*?)(\d+(?:[,.]\d{1,2})?\s*€?|desde\s+\d+(?:[,.]\d{1,2})?\s*€?|sob\s+consulta|sob\s+marcação|sob\s+marcacao|\-\d+%|\+\d+(?:[,.]\d{1,2})?\s*€?)$/i)
-  if (!match) return { label: cleaned, price: '' }
-
+function normalizeRow(row: MenuRowInput, index: number): ModularLine {
+  const label = sanitizeMenuText(String(row.label ?? '')).replace(/\s+/g, ' ').trim()
+  const detailSource = row.detail ?? [row.suffix, row.price].map(value => String(value ?? '').trim()).filter(Boolean).join(' ')
+  const detail = sanitizeMenuText(String(detailSource ?? '')).replace(/\s+/g, ' ').trim()
   return {
-    label: match[1].replace(/[-:]+$/g, '').replace(/\s+/g, ' ').trim(),
-    price: match[2].replace('.', ',').replace(/\s*€$/, '€').trim(),
+    id: String(row.id ?? `line-${index + 1}`),
+    label,
+    ...(detail ? { detail } : {}),
+    useAccent: Boolean(row.useAccent),
   }
 }
 
-export function calculateWidthWarning(characterCount: number, estimatedCharsPerLine: number) {
-  return characterCount > estimatedCharsPerLine
+export function calculateWidthWarning(textWidthMm: number, globalWidthMm: number) {
+  return textWidthMm > globalWidthMm
+}
+
+function quoteLineFromRow(row: ModularLine, rawIndex: number, globalWidthMm: number): MenuQuoteLine {
+  const text = buildLineText(row)
+  const textWidthMm = calculateTextWidthMm(text)
+  return {
+    index: rawIndex + 1,
+    id: row.id,
+    text,
+    label: row.label,
+    detail: row.detail,
+    useAccent: Boolean(row.useAccent),
+    characterCount: calculateCharacters(text),
+    textWidthMm,
+    globalWidthMm,
+    widthWarning: calculateWidthWarning(textWidthMm, globalWidthMm),
+  }
 }
 
 export function parseMenuText(menuTextInput: string, globalModuleCount = MIN_GLOBAL_MODULES): ParsedMenuText {
   const rawText = normalizeLineEndings(String(menuTextInput ?? ''))
   const text = sanitizeMenuText(rawText, { allowNewlines: true })
-  const estimatedCharsPerLine = clampInteger(globalModuleCount, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES) * CHARS_PER_MODULE_ESTIMATE
+  const globalWidthMm = clampInteger(globalModuleCount, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES) * MODULE_LENGTH_MM
   const lines = text
     .split('\n')
-    .map((line, rawIndex) => ({ rawIndex, text: line.trim() }))
+    .map((line, rawIndex) => ({ rawIndex, text: sanitizeMenuText(line).replace(/\s+/g, ' ').trim() }))
     .filter(line => line.text.length > 0)
-    .map(line => {
-      const parts = splitLineParts(line.text)
-      const characterCount = calculateCharacters(line.text)
-
-      return {
-        index: line.rawIndex + 1,
-        text: line.text,
-        label: parts.label,
-        suffix: parts.suffix,
-        price: parts.price,
-        characterCount,
-        widthWarning: calculateWidthWarning(characterCount, estimatedCharsPerLine),
-      }
-    })
+    .map(line => quoteLineFromRow({ id: `line-${line.rawIndex + 1}`, label: line.text, useAccent: false }, line.rawIndex, globalWidthMm))
   const characterCount = lines.reduce((sum, line) => sum + line.characterCount, 0)
 
   return {
-    text,
+    text: lines.map(line => line.text).join('\n'),
     lines,
     characterCount,
     hasUnsupportedControlCharacters: hasUnsupportedControlCharacters(rawText),
@@ -183,32 +273,15 @@ export function parseMenuText(menuTextInput: string, globalModuleCount = MIN_GLO
 }
 
 function parseMenuRows(rows: MenuRowInput[] = [], globalModuleCount = MIN_GLOBAL_MODULES): ParsedMenuText {
-  const estimatedCharsPerLine = clampInteger(globalModuleCount, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES) * CHARS_PER_MODULE_ESTIMATE
-  const lines = rows
-    .map((row, rawIndex) => {
-      const label = sanitizeMenuText(String(row.label ?? '')).replace(/\s+/g, ' ').trim()
-      const suffix = sanitizeMenuText(String(row.suffix ?? '')).replace(/\s+/g, ' ').trim()
-      const price = sanitizeMenuText(String(row.price ?? '')).replace(/\s+/g, ' ').trim()
-      const text = [label, suffix, price].filter(Boolean).join(' ')
-      return { rawIndex, text, label, suffix, price }
-    })
-    .filter(line => line.text.length > 0)
-    .map(line => {
-      const characterCount = calculateCharacters(line.text)
-
-      return {
-        index: line.rawIndex + 1,
-        text: line.text,
-        label: line.label,
-        suffix: line.suffix || undefined,
-        price: line.price,
-        characterCount,
-        widthWarning: calculateWidthWarning(characterCount, estimatedCharsPerLine),
-      }
-    })
+  const globalWidthMm = clampInteger(globalModuleCount, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES) * MODULE_LENGTH_MM
+  const normalizedRows = rows.map(normalizeRow)
+  const lines = normalizedRows
+    .map((row, rawIndex) => ({ row, rawIndex }))
+    .filter(({ row }) => !isBlankRow(row))
+    .map(({ row, rawIndex }) => quoteLineFromRow(row, rawIndex, globalWidthMm))
   const text = lines.map(line => line.text).join('\n')
   const characterCount = lines.reduce((sum, line) => sum + line.characterCount, 0)
-  const rawText = rows.map(row => [row.label, row.suffix, row.price].map(value => String(value ?? '')).join(' ')).join('\n')
+  const rawText = rows.map(row => [row.label, row.detail, row.suffix, row.price].map(value => String(value ?? '')).join(' ')).join('\n')
 
   return {
     text,
@@ -218,10 +291,87 @@ function parseMenuRows(rows: MenuRowInput[] = [], globalModuleCount = MIN_GLOBAL
   }
 }
 
-export function calculateLetterPacks(totalCharacters: number, selectedStandardPacks?: number, selectedAvulsoCharacters?: number) {
-  const safeTotal = Math.max(0, Math.trunc(totalCharacters))
-  const standardPackMinimum = Math.floor(safeTotal / STANDARD_PACK_SIZE)
-  const avulsoMinimum = safeTotal % STANDARD_PACK_SIZE
+export function buildCharacterFrequencyByColor({
+  lines,
+  extraLettersText = '',
+  baseLetterColor = BASE_COLOR_FALLBACK,
+  accentLetterColor = ACCENT_COLOR_FALLBACK,
+}: {
+  lines: MenuQuoteLine[]
+  extraLettersText?: string
+  baseLetterColor?: MenuColorPayload
+  accentLetterColor?: MenuColorPayload
+}) {
+  const groups: CharacterFrequencyByColor = {}
+
+  for (const line of lines) {
+    addCharactersToColorGroup(groups, baseLetterColor, 'base', line.label)
+    if (!line.detail) continue
+    const detailColor = line.useAccent ? accentLetterColor : baseLetterColor
+    addCharactersToColorGroup(groups, detailColor, line.useAccent ? 'accent' : 'base', ` ${line.detail}`)
+  }
+
+  if (extraLettersText) {
+    addCharactersToColorGroup(groups, baseLetterColor, 'base', extraLettersText)
+  }
+
+  return groups
+}
+
+function calculateDeficitMap(characterFrequencyMap: Record<string, number>, packCount: number) {
+  const deficits: Record<string, number> = {}
+
+  for (const [character, needed] of Object.entries(characterFrequencyMap)) {
+    const covered = (STANDARD_PACK_DISTRIBUTION[character] ?? 0) * packCount
+    const deficit = Math.max(needed - covered, 0)
+    if (deficit > 0) deficits[character] = deficit
+  }
+
+  return deficits
+}
+
+function countCharacters(map: Record<string, number>) {
+  return Object.values(map).reduce((sum, count) => sum + count, 0)
+}
+
+export function calculateLetterPacks(
+  characterFrequencyMapOrTotal: Record<string, number> | number,
+  selectedStandardPacks?: number,
+  selectedAvulsoCharacters?: number,
+  standardPackUnitPrice = DEFAULT_STANDARD_PACK_UNIT_PRICE,
+  avulsoUnitPrice = DEFAULT_AVULSO_UNIT_PRICE,
+) {
+  const characterFrequencyMap = typeof characterFrequencyMapOrTotal === 'number'
+    ? { '*': Math.max(0, Math.trunc(characterFrequencyMapOrTotal)) }
+    : characterFrequencyMapOrTotal
+  const safeStandardPrice = Number.isFinite(standardPackUnitPrice) ? Math.max(0, Number(standardPackUnitPrice)) : DEFAULT_STANDARD_PACK_UNIT_PRICE
+  const safeAvulsoPrice = Number.isFinite(avulsoUnitPrice) ? Math.max(0, Number(avulsoUnitPrice)) : DEFAULT_AVULSO_UNIT_PRICE
+  const supportedNeeds = Object.entries(characterFrequencyMap)
+    .filter(([character]) => (STANDARD_PACK_DISTRIBUTION[character] ?? 0) > 0)
+    .map(([character, count]) => Math.ceil(count / Math.max(STANDARD_PACK_DISTRIBUTION[character] ?? 1, 1)))
+  const maxUsefulPackCount = Math.max(0, ...supportedNeeds)
+
+  let best = {
+    packCount: 0,
+    deficitMap: calculateDeficitMap(characterFrequencyMap, 0),
+    deficitCount: countCharacters(characterFrequencyMap),
+    totalLetterCost: roundMoney(countCharacters(characterFrequencyMap) * safeAvulsoPrice),
+  }
+
+  for (let packCount = 0; packCount <= maxUsefulPackCount; packCount += 1) {
+    const deficitMap = calculateDeficitMap(characterFrequencyMap, packCount)
+    const deficitCount = countCharacters(deficitMap)
+    const totalLetterCost = roundMoney((packCount * safeStandardPrice) + (deficitCount * safeAvulsoPrice))
+    const isCheaper = totalLetterCost < best.totalLetterCost
+    const isSameCostSimpler = totalLetterCost === best.totalLetterCost && deficitCount < best.deficitCount
+
+    if (isCheaper || isSameCostSimpler) {
+      best = { packCount, deficitMap, deficitCount, totalLetterCost }
+    }
+  }
+
+  const standardPackMinimum = best.packCount
+  const avulsoMinimum = best.deficitCount
   const standardPackQuantity = Number.isFinite(Number(selectedStandardPacks))
     ? Math.trunc(Number(selectedStandardPacks))
     : standardPackMinimum
@@ -234,6 +384,7 @@ export function calculateLetterPacks(totalCharacters: number, selectedStandardPa
     standardPackQuantity,
     avulsoMinimum,
     avulsoCharacterQuantity,
+    avulsoDeficitMap: best.deficitMap,
   }
 }
 
@@ -247,9 +398,11 @@ export function calculateMenuBoardModules(lineCount: number, globalModuleCountIn
 
   return {
     moduleLengthCm: MODULE_LENGTH_CM as typeof MODULE_LENGTH_CM,
+    moduleLengthMm: MODULE_LENGTH_MM as typeof MODULE_LENGTH_MM,
     rawGlobalModuleCount: Number.isFinite(rawGlobalModuleCount) ? rawGlobalModuleCount : undefined,
     globalModuleCount,
     globalWidthCm: globalModuleCount * MODULE_LENGTH_CM,
+    globalWidthMm: globalModuleCount * MODULE_LENGTH_MM,
     charsPerModuleEstimate: CHARS_PER_MODULE_ESTIMATE as typeof CHARS_PER_MODULE_ESTIMATE,
     estimatedCharsPerLine: globalModuleCount * CHARS_PER_MODULE_ESTIMATE,
     starterQuantity,
@@ -306,10 +459,33 @@ export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
   const customIconRequest = sanitizeMenuText(rawCustomIconRequest)
   const lineCount = parsedMenu.lines.length
   const boardModules = calculateMenuBoardModules(lineCount, input.globalModuleCount)
-  const menuCharacters = parsedMenu.lines.reduce((sum, line) => sum + line.characterCount, 0)
+  const lines = parsedMenu.lines.map(line => ({
+    ...line,
+    globalWidthMm: boardModules.globalWidthMm,
+    widthWarning: calculateWidthWarning(line.textWidthMm, boardModules.globalWidthMm),
+  }))
+  const menuCharacters = lines.reduce((sum, line) => sum + line.characterCount, 0)
   const extraCharacters = calculateCharacters(extraLettersText)
-  const totalCharacters = menuCharacters + extraCharacters
-  const letterPacks = calculateLetterPacks(totalCharacters, input.standardPackQuantity, input.avulsoCharacterQuantity)
+  const characterFrequencyByColor = buildCharacterFrequencyByColor({
+    lines,
+    extraLettersText,
+    baseLetterColor: input.baseLetterColor ?? BASE_COLOR_FALLBACK,
+    accentLetterColor: input.accentLetterColor ?? ACCENT_COLOR_FALLBACK,
+  })
+  const characterFrequencyMap = Object.values(characterFrequencyByColor).reduce<Record<string, number>>((map, group) => {
+    for (const [character, count] of Object.entries(group.characters)) {
+      addCharacter(map, character, count)
+    }
+    return map
+  }, {})
+  const totalCharacters = countCharacters(characterFrequencyMap)
+  const letterPacks = calculateLetterPacks(
+    characterFrequencyMap,
+    input.standardPackQuantity,
+    input.avulsoCharacterQuantity,
+    input.standardPackUnitPrice,
+    input.avulsoUnitPrice,
+  )
   const pricing = calculateMenuOrderPricing({
     totalRailModules: boardModules.totalRailModules,
     standardPackQuantity: letterPacks.standardPackQuantity,
@@ -318,16 +494,12 @@ export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
     standardPackUnitPrice: input.standardPackUnitPrice,
     avulsoUnitPrice: input.avulsoUnitPrice,
   })
-  const characterSource = [parsedMenu.text, extraLettersText].filter(Boolean).join('')
 
   return {
     menuText: parsedMenu.text,
     extraLettersText,
     customIconRequest,
-    lines: parsedMenu.lines.map(line => ({
-      ...line,
-      widthWarning: calculateWidthWarning(line.characterCount, boardModules.estimatedCharsPerLine),
-    })),
+    lines,
     lineCount,
     ...boardModules,
     productionFont: 'em3d-standard',
@@ -335,7 +507,8 @@ export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
     menuCharacters,
     extraCharacters,
     totalCharacters,
-    characterFrequencyMap: buildCharacterFrequencyMap(characterSource),
+    characterFrequencyMap,
+    characterFrequencyByColor,
     ...letterPacks,
     ...pricing,
     hasUnsupportedControlCharacters:
@@ -349,11 +522,11 @@ export function validateMenuQuoteLimits(quote: MenuQuote) {
   const errors: string[] = []
   const rawGlobalModuleCount = quote.rawGlobalModuleCount
 
-  if (quote.menuCharacters < 1) errors.push('Indique pelo menos uma linha de menu.')
-  if (quote.menuCharacters > MENU_TEXT_MAX_CHARS) errors.push(`O menu pode ter no máximo ${MENU_TEXT_MAX_CHARS} caracteres visíveis.`)
+  if (quote.menuCharacters < 1) errors.push('Indique pelo menos uma linha.')
+  if (quote.menuCharacters > MENU_TEXT_MAX_CHARS) errors.push(`O conteúdo pode ter no máximo ${MENU_TEXT_MAX_CHARS} caracteres visíveis.`)
   if (quote.extraCharacters > MENU_EXTRA_MAX_CHARS) errors.push(`As letras extra podem ter no máximo ${MENU_EXTRA_MAX_CHARS} caracteres visíveis.`)
   if (calculateCharacters(quote.customIconRequest) > MENU_CUSTOM_ICON_MAX_CHARS) errors.push(`O pedido de ícone/logótipo pode ter no máximo ${MENU_CUSTOM_ICON_MAX_CHARS} caracteres visíveis.`)
-  if (quote.lines.length > MENU_MAX_LINES) errors.push(`O menu pode ter no máximo ${MENU_MAX_LINES} linhas preenchidas.`)
+  if (quote.lines.length > MENU_MAX_LINES) errors.push(`O sistema pode ter no máximo ${MENU_MAX_LINES} linhas preenchidas.`)
   if (rawGlobalModuleCount === undefined || !Number.isInteger(rawGlobalModuleCount) || rawGlobalModuleCount < MIN_GLOBAL_MODULES || rawGlobalModuleCount > MAX_GLOBAL_MODULES) errors.push(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
   if (quote.standardPackQuantity < quote.standardPackMinimum) errors.push('A quantidade de packs standard não pode ser inferior ao mínimo calculado.')
   if (quote.avulsoCharacterQuantity < quote.avulsoMinimum) errors.push('A quantidade de letras avulso não pode ser inferior ao mínimo calculado.')

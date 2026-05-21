@@ -301,6 +301,7 @@ const _schema = i.schema({
         menuSystem?: {
           role: 'rails' | 'standard_pack' | 'avulso'
           moduleLengthCm?: number
+          moduleLengthMm?: number
           charsPerModuleEstimate?: number
           menuText?: string
           extraLettersText?: string
@@ -308,6 +309,7 @@ const _schema = i.schema({
           lineCount?: number
           globalModuleCount?: number
           globalWidthCm?: number
+          globalWidthMm?: number
           estimatedCharsPerLine?: number
           productionFont?: 'em3d-standard'
           productionSize?: 'standard'
@@ -322,7 +324,17 @@ const _schema = i.schema({
           standardPackQuantity?: number
           avulsoMinimum?: number
           avulsoCharacterQuantity?: number
+          avulsoDeficitMap?: Record<string, number>
           characterFrequencyMap?: Record<string, number>
+          characterFrequencyByColor?: Record<string, {
+            color: {
+              name: string
+              hex?: string
+              globalColorId?: string
+              priceAdd?: number
+            }
+            characters: Record<string, number>
+          }>
           railModuleUnitPrice?: number
           standardPackUnitPrice?: number
           avulsoUnitPrice?: number
@@ -345,6 +357,24 @@ const _schema = i.schema({
             globalColorId?: string
             priceAdd?: number
           }
+          baseLetterColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          accentLetterColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterCardColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
           letterColorRequest?: {
             enabled: boolean
             description: string
@@ -353,9 +383,13 @@ const _schema = i.schema({
             index: number
             text: string
             label: string
+            detail?: string
+            useAccent?: boolean
             suffix?: string
-            price: string
+            price?: string
             characterCount: number
+            textWidthMm?: number
+            globalWidthMm?: number
             widthWarning?: boolean
           }[]
         }

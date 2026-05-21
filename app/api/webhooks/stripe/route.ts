@@ -148,40 +148,62 @@ function getMenuOrderSummary(order: any) {
     .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
     .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}: ${count}`)
     .join(', ')
+  const deficitSummary = Object.entries(menuSystem.avulsoDeficitMap ?? {})
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
+    .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}: ${count}`)
+    .join(', ')
+  const colorFrequencySummary = Object.values(menuSystem.characterFrequencyByColor ?? {})
+    .map((group: any) => {
+      const characters = Object.entries(group.characters ?? {})
+        .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
+        .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}(${count})`)
+        .join(', ')
+      return `LETRAS — ${group.color?.name || 'Cor'}: ${characters || '-'}`
+    })
+    .join('\n')
 
-  return `\n\nDetalhes Menu Modular:
+  return `\n\nSistema Modular — Collection 01
+
+RESUMO DO SISTEMA
+Menu original:
+${menuSystem.menuText || '-'}
+
 Linhas: ${menuSystem.lineCount ?? '-'}
-Módulos por linha: ${menuSystem.globalModuleCount ?? '-'} (${menuSystem.globalWidthCm ?? '-'}cm)
-Módulos totais: ${menuSystem.totalRailModules ?? '-'}
+Largura do sistema: ${menuSystem.globalModuleCount ?? '-'} módulos / ${menuSystem.globalWidthCm ?? '-'}cm (${menuSystem.globalWidthMm ?? '-'}mm)
+Fonte produção: ${menuSystem.productionFont || 'em3d-standard'}
+Tamanho produção: ${menuSystem.productionSize || 'standard'}
+Avisos e linhas:
+${lineBreakdown || '-'}
+
+MÓDULOS
+Módulos totais de 25cm: ${menuSystem.totalRailModules ?? '-'}
 Starter/base: ${menuSystem.starterQuantity ?? '-'}
 Extensões por linha: ${menuSystem.extensionQuantityPerLine ?? '-'}
 Extensões totais: ${menuSystem.totalExtensionQuantity ?? '-'}
-Fonte produção: ${menuSystem.productionFont || 'em3d-standard'}
-Tamanho produção: ${menuSystem.productionSize || 'standard'}
+
+LETRAS POR COR
 Cor das calhas: ${menuSystem.railColor?.name || '-'}
-Cor das letras: ${menuSystem.letterColor?.name || '-'}
-Pedido de cor especial para letras: ${menuSystem.letterColorRequest?.enabled ? menuSystem.letterColorRequest.description || '-' : '-'}
-Pack standard: ${menuSystem.standardPackQuantity ?? 0}
+Cor das letras: ${menuSystem.baseLetterColor?.name || menuSystem.letterColor?.name || '-'}
+Cor de destaque: ${menuSystem.accentLetterColor?.name || menuSystem.baseLetterColor?.name || menuSystem.letterColor?.name || '-'}
+Fundo das Letras: ${menuSystem.letterCardColor?.name || '-'}
+Pack Standard: ${menuSystem.standardPackQuantity ?? 0}
 Letras avulso: ${menuSystem.avulsoCharacterQuantity ?? 0}
+Défice avulso: ${deficitSummary || '-'}
+Mapa geral: ${frequencySummary || '-'}
+${colorFrequencySummary || '-'}
+
+PEDIDOS ESPECIAIS
+Letras/símbolos extra: ${menuSystem.extraLettersText || '-'}
+Pedido de cor especial: ${menuSystem.letterColorRequest?.enabled ? menuSystem.letterColorRequest.description || '-' : '-'}
+Pedido de símbolo/logótipo: ${menuSystem.customIconRequest || '-'}
+
+PREÇO
 Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
 Caracteres extra: ${menuSystem.extraCharacters ?? 0}
 Total de caracteres: ${menuSystem.totalCharacters ?? 0}
 Subtotal antes desconto: ${formatPrice(Number(menuSystem.subtotalBeforeDiscount ?? 0))}
-Desconto lançamento: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
-Total Menu3D após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}
-Mapa de caracteres: ${frequencySummary || '-'}
-
-Menu original:
-${menuSystem.menuText || '-'}
-
-Letras/simbolos extra:
-${menuSystem.extraLettersText || '-'}
-
-Pedido de ícone/logótipo:
-${menuSystem.customIconRequest || '-'}
-
-Linhas:
-${lineBreakdown || '-'}`
+Desconto campanha: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
+Total Sinalética Modular após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}`
 }
 
 async function sendStandardOrderEmails(order: any, orderId: string) {

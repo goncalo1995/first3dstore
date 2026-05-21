@@ -614,7 +614,7 @@ function createExampleProducts(colorMap: SeedColorMap) {
       name: 'Módulo Menu 25cm',
       priceFrom: 8,
       priceTo: 8,
-      description: 'Módulo de 25cm para criar sistemas Menu3D com largura escalável.',
+      description: 'Módulo de 25cm para criar sistemas Sinalética Modular com largura escalável.',
       benefit: 'Preço modular e previsível para quadros profissionais até 3m',
       image: '/placeholder.svg',
       featured: false,

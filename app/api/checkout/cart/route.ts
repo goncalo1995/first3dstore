@@ -26,6 +26,7 @@ const MENU_RAIL_SLUG = 'menu-rail-25cm'
 const MENU_PACK_SLUG = 'menu-letter-pack-standard'
 const MENU_AVULSO_SLUG = 'menu-letter-custom'
 const MENU_PRODUCT_COLOR_CONFIG_ERROR = 'Este produto ainda não tem cores configuradas. Contacte-nos para finalizar o pedido.'
+const MENU_RAIL_COLOR_CONFIG_ERROR = 'As cores das calhas não estão configuradas.'
 const MENU_LETTER_COLOR_REQUEST_MAX_CHARS = 300
 
 type CheckoutPayload = {
@@ -56,6 +57,8 @@ type CheckoutPayload = {
       index?: number
       text?: string
       label?: string
+      detail?: string
+      useAccent?: boolean
       suffix?: string
       price?: string
       characterCount?: number
@@ -63,6 +66,9 @@ type CheckoutPayload = {
     }[]
     railColor?: ProductColor
     letterColor?: ProductColor
+    baseLetterColor?: ProductColor
+    accentLetterColor?: ProductColor
+    letterCardColor?: ProductColor
   }
   items?: {
     productSlug?: string
@@ -115,10 +121,10 @@ function getMenuRows(menuSystem: NonNullable<CheckoutPayload['menuSystem']>): Me
   const rows = (menuSystem.lines ?? [])
     .map(line => ({
       label: String(line.label ?? '').trim(),
-      suffix: String(line.suffix ?? '').trim(),
-      price: String(line.price ?? '').trim(),
+      detail: String(line.detail ?? [line.suffix, line.price].filter(Boolean).join(' ')).trim(),
+      useAccent: Boolean(line.useAccent),
     }))
-    .filter(row => row.label || row.suffix || row.price)
+    .filter(row => row.label || row.detail)
 
   return rows.length ? rows : undefined
 }
@@ -193,7 +199,7 @@ function validateMenuColor(
   color: ProductColor | undefined,
   label: string,
   product?: MenuProductColorRecord,
-  options: { validateProductAvailability?: boolean } = { validateProductAvailability: true },
+  options: { validateProductAvailability?: boolean; configError?: string } = { validateProductAvailability: true },
 ) {
   if (!color?.name && !color?.globalColorId) {
     throw new Error(`Escolha a ${label}.`)
@@ -209,7 +215,7 @@ function validateMenuColor(
 
   const offeredColors = getOfferedProductColors(product)
   if (offeredColors.length === 0) {
-    throw new Error(MENU_PRODUCT_COLOR_CONFIG_ERROR)
+    throw new Error(options.configError ?? MENU_PRODUCT_COLOR_CONFIG_ERROR)
   }
 
   const isOffered = offeredColors.some(offeredColor => {
@@ -223,6 +229,14 @@ function validateMenuColor(
   if (!isOffered) {
     throw new Error(`A ${label} selecionada não está disponível para este produto.`)
   }
+}
+
+function getEffectiveLetterColorPriceAdd(globalColors: GlobalColor[], menuSystem: NonNullable<CheckoutPayload['menuSystem']>) {
+  return Math.max(
+    getGlobalColorPriceAdd(globalColors, menuSystem.baseLetterColor ?? menuSystem.letterColor),
+    getGlobalColorPriceAdd(globalColors, menuSystem.accentLetterColor ?? menuSystem.baseLetterColor ?? menuSystem.letterColor),
+    getGlobalColorPriceAdd(globalColors, menuSystem.letterCardColor),
+  )
 }
 
 function hasUnsupportedControlCharacters(value: string) {
@@ -269,13 +283,13 @@ function validateMenuPayload(
 
   const items = body.items ?? []
   if (body.menuSystem.moduleLengthCm !== undefined && body.menuSystem.moduleLengthCm !== MODULE_LENGTH_CM) {
-    throw new Error(`Os módulos do Menu3D usam ${MODULE_LENGTH_CM}cm.`)
+    throw new Error(`Os módulos do Sinalética Modular usam ${MODULE_LENGTH_CM}cm.`)
   }
   if (body.menuSystem.charsPerModuleEstimate !== undefined && body.menuSystem.charsPerModuleEstimate !== CHARS_PER_MODULE_ESTIMATE) {
     throw new Error(`Cada módulo estima cerca de ${CHARS_PER_MODULE_ESTIMATE} caracteres.`)
   }
   if (!Number.isInteger(Number(body.menuSystem.globalModuleCount))) {
-    throw new Error('Escolha a largura do Menu3D em módulos.')
+    throw new Error('Escolha a largura do Sinalética Modular em módulos.')
   }
   if (Number(body.menuSystem.globalModuleCount) < MIN_GLOBAL_MODULES || Number(body.menuSystem.globalModuleCount) > MAX_GLOBAL_MODULES) {
     throw new Error(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
@@ -316,18 +330,29 @@ function validateMenuPayload(
   }
 
   validateLetterColorRequest(body.menuSystem)
-  validateMenuColor(globalColors, body.menuSystem.railColor, 'cor das calhas', menuProducts[MENU_RAIL_SLUG])
+  validateMenuColor(globalColors, body.menuSystem.railColor, 'cor das calhas', menuProducts[MENU_RAIL_SLUG], {
+    configError: MENU_RAIL_COLOR_CONFIG_ERROR,
+  })
 
+  const baseLetterColor = body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor
+  const accentLetterColor = body.menuSystem.accentLetterColor ?? baseLetterColor
+  const letterCardColor = body.menuSystem.letterCardColor
   const hasStandardPack = getMenuItemQuantity(items, MENU_PACK_SLUG) > 0
   const hasAvulsoLetters = getMenuItemQuantity(items, MENU_AVULSO_SLUG) > 0
   if (hasStandardPack) {
-    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', menuProducts[MENU_PACK_SLUG])
+    validateMenuColor(globalColors, baseLetterColor, 'cor das letras', menuProducts[MENU_PACK_SLUG])
+    validateMenuColor(globalColors, accentLetterColor, 'cor de destaque', menuProducts[MENU_PACK_SLUG])
+    validateMenuColor(globalColors, letterCardColor, 'cor do fundo das letras', menuProducts[MENU_PACK_SLUG])
   }
   if (hasAvulsoLetters) {
-    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', menuProducts[MENU_AVULSO_SLUG])
+    validateMenuColor(globalColors, baseLetterColor, 'cor das letras', menuProducts[MENU_AVULSO_SLUG])
+    validateMenuColor(globalColors, accentLetterColor, 'cor de destaque', menuProducts[MENU_AVULSO_SLUG])
+    validateMenuColor(globalColors, letterCardColor, 'cor do fundo das letras', menuProducts[MENU_AVULSO_SLUG])
   }
   if (!hasStandardPack && !hasAvulsoLetters) {
-    validateMenuColor(globalColors, body.menuSystem.letterColor, 'cor das letras', undefined, { validateProductAvailability: false })
+    validateMenuColor(globalColors, baseLetterColor, 'cor das letras', undefined, { validateProductAvailability: false })
+    validateMenuColor(globalColors, accentLetterColor, 'cor de destaque', undefined, { validateProductAvailability: false })
+    validateMenuColor(globalColors, letterCardColor, 'cor do fundo das letras', undefined, { validateProductAvailability: false })
   }
 
   for (const item of items) {
@@ -335,7 +360,7 @@ function validateMenuPayload(
     if (slug === MENU_RAIL_SLUG && !colorsMatch(item.selectedColor, body.menuSystem.railColor)) {
       throw new Error('A cor das calhas no carrinho não corresponde ao cálculo do menu.')
     }
-    if ((slug === MENU_PACK_SLUG || slug === MENU_AVULSO_SLUG) && !colorsMatch(item.selectedColor, body.menuSystem.letterColor)) {
+    if ((slug === MENU_PACK_SLUG || slug === MENU_AVULSO_SLUG) && !colorsMatch(item.selectedColor, baseLetterColor)) {
       throw new Error('A cor das letras no carrinho não corresponde ao cálculo do menu.')
     }
   }
@@ -371,6 +396,8 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
     avulsoMinimum: quote.avulsoMinimum,
     avulsoCharacterQuantity: quote.avulsoCharacterQuantity,
     characterFrequencyMap: quote.characterFrequencyMap,
+    characterFrequencyByColor: quote.characterFrequencyByColor,
+    avulsoDeficitMap: quote.avulsoDeficitMap,
     railModuleUnitPrice: quote.railModuleUnitPrice,
     standardPackUnitPrice: quote.standardPackUnitPrice,
     avulsoUnitPrice: quote.avulsoUnitPrice,
@@ -382,7 +409,10 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
     launchDiscountAmount: quote.launchDiscountAmount,
     totalAfterDiscount: quote.totalAfterDiscount,
     railColor: sanitizeMenuColor(menuSystem?.railColor),
-    letterColor: sanitizeMenuColor(menuSystem?.letterColor),
+    letterColor: sanitizeMenuColor(menuSystem?.baseLetterColor ?? menuSystem?.letterColor),
+    baseLetterColor: sanitizeMenuColor(menuSystem?.baseLetterColor ?? menuSystem?.letterColor),
+    accentLetterColor: sanitizeMenuColor(menuSystem?.accentLetterColor ?? menuSystem?.baseLetterColor ?? menuSystem?.letterColor),
+    letterCardColor: sanitizeMenuColor(menuSystem?.letterCardColor),
     letterColorRequest: menuSystem?.letterColorRequest?.enabled
       ? {
           enabled: true,
@@ -410,12 +440,69 @@ function getMenuCustomText(role: MenuItemRole | undefined, quote: MenuQuote | nu
   return [customText, menuText].filter(Boolean).join(' | ')
 }
 
+function formatCharacterMap(map: Record<string, number> | undefined) {
+  const entries = Object.entries(map ?? {})
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
+    .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}(${count})`)
+  return entries.length ? entries.join(', ') : '-'
+}
+
+function formatLettersByColor(quote: MenuQuote) {
+  return Object.values(quote.characterFrequencyByColor ?? {})
+    .map(group => `LETRAS — ${group.color.name}: ${formatCharacterMap(group.characters)}`)
+    .join('\n') || '-'
+}
+
 function getMenuOrderNotes(quote: MenuQuote | null, menuSystem?: CheckoutPayload['menuSystem']) {
   if (!quote) return ''
   const letterColorRequest = menuSystem?.letterColorRequest?.enabled
     ? String(menuSystem.letterColorRequest.description ?? '').trim()
     : ''
-  return `Sistema Menu Modular: ${quote.lineCount} linhas, ${quote.globalModuleCount} módulos por linha (${quote.globalWidthCm}cm), ${quote.totalRailModules} módulos totais, ${quote.standardPackQuantity} packs standard, ${quote.avulsoCharacterQuantity} letras avulso, ${quote.totalCharacters} caracteres, subtotal ${formatMoney(quote.subtotalBeforeDiscount)}, desconto lançamento -${quote.launchDiscountPercent}%, total ${formatMoney(quote.totalAfterDiscount)}.${quote.customIconRequest ? ` Pedido ícone/logótipo: ${quote.customIconRequest}.` : ''}${letterColorRequest ? ` Pedido de cor especial para letras: ${letterColorRequest}.` : ''}`
+  const baseLetterColor = menuSystem?.baseLetterColor ?? menuSystem?.letterColor
+  const accentLetterColor = menuSystem?.accentLetterColor ?? baseLetterColor
+  const letterCardColor = menuSystem?.letterCardColor
+  const widthWarnings = quote.lines
+    .filter(line => line.widthWarning)
+    .map(line => `Linha ${line.index}: ${line.text}`)
+    .join('\n') || '-'
+
+  return `Sistema Modular — Collection 01
+
+RESUMO DO SISTEMA
+Texto original:
+${quote.menuText || '-'}
+
+Linhas: ${quote.lineCount}
+Largura do sistema: ${quote.globalModuleCount} módulos / ${quote.globalWidthCm}cm (${quote.globalWidthMm}mm)
+Avisos de largura:
+${widthWarnings}
+
+MÓDULOS
+Módulos totais de 25cm: ${quote.totalRailModules}
+Starter/base: ${quote.starterQuantity}
+Extensões por linha: ${quote.extensionQuantityPerLine}
+Extensões totais: ${quote.totalExtensionQuantity}
+
+LETRAS POR COR
+Cor das calhas: ${menuSystem?.railColor?.name || '-'}
+Cor das letras: ${baseLetterColor?.name || '-'}
+Cor de destaque: ${accentLetterColor?.name || '-'}
+Fundo das Letras: ${letterCardColor?.name || '-'}
+Pack Standard: ${quote.standardPackQuantity}
+Letras avulso: ${quote.avulsoCharacterQuantity}
+Défice avulso: ${formatCharacterMap(quote.avulsoDeficitMap)}
+Mapa geral: ${formatCharacterMap(quote.characterFrequencyMap)}
+${formatLettersByColor(quote)}
+
+PEDIDOS ESPECIAIS
+Letras/símbolos extra: ${quote.extraLettersText || '-'}
+Pedido de cor especial: ${letterColorRequest || '-'}
+Pedido de símbolo/logótipo: ${quote.customIconRequest || '-'}
+
+PREÇO
+Subtotal: ${formatMoney(quote.subtotalBeforeDiscount)}
+Desconto campanha: -${quote.launchDiscountPercent}% (${formatMoney(quote.launchDiscountAmount)})
+Total modular: ${formatMoney(quote.totalAfterDiscount)}`
 }
 
 function formatMoney(value: number) {
@@ -683,6 +770,9 @@ export async function POST(request: NextRequest) {
     const menuProducts = body.menuSystem ? await getMenuProductColorRecords() : {}
     let menuQuote: MenuQuote | null = null
     const menuBaseUnitPrices: MenuBaseUnitPrices = {}
+    const effectiveLetterColorPriceAdd = body.menuSystem
+      ? getEffectiveLetterColorPriceAdd(globalColors, body.menuSystem)
+      : 0
 
     try {
       menuQuote = validateMenuPayload(body, globalColors, menuProducts)
@@ -719,7 +809,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: colorValidationError }, { status: 400 })
       }
 
-      const baseUnitPrice = getUnitPrice(product, item, globalColors, variant)
+      const rawUnitPrice = getUnitPrice(product, item, globalColors, variant)
+      const baseUnitPrice = menuRole === 'standard_pack' || menuRole === 'avulso'
+        ? (product.salePrice ?? product.priceFrom) + effectiveLetterColorPriceAdd
+        : rawUnitPrice
       if (!Number.isFinite(baseUnitPrice) || baseUnitPrice < 0) {
         return NextResponse.json({ error: `Preço inválido para ${product.name}.` }, { status: 400 })
       }
@@ -789,7 +882,12 @@ export async function POST(request: NextRequest) {
 
     if (menuQuote) {
       menuQuote = calculateMenuQuote({
-        menuText: menuQuote.menuText,
+        rows: menuQuote.lines.map(line => ({
+          id: line.id,
+          label: line.label,
+          detail: line.detail,
+          useAccent: line.useAccent,
+        })),
         extraLettersText: menuQuote.extraLettersText,
         customIconRequest: menuQuote.customIconRequest,
         globalModuleCount: menuQuote.globalModuleCount,
@@ -798,6 +896,8 @@ export async function POST(request: NextRequest) {
         railModuleUnitPrice: menuBaseUnitPrices.rails ?? 0,
         standardPackUnitPrice: menuBaseUnitPrices.standard_pack ?? 0,
         avulsoUnitPrice: menuBaseUnitPrices.avulso ?? 0,
+        baseLetterColor: sanitizeMenuColor(body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
+        accentLetterColor: sanitizeMenuColor(body.menuSystem?.accentLetterColor ?? body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
       })
 
       for (const orderItem of orderItems) {
@@ -836,7 +936,7 @@ export async function POST(request: NextRequest) {
       customer_email: customerEmail,
       client_reference_id: orderId,
       success_url: `${siteUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${siteUrl()}${menuQuote ? '/colecoes/menus' : '/checkout'}`,
+      cancel_url: `${siteUrl()}${menuQuote ? '/colecoes/modular/builder' : '/checkout'}`,
       metadata: {
         orderId,
         flow,
