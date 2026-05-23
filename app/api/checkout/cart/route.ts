@@ -14,6 +14,16 @@ import {
   type MenuQuote,
   type MenuRowInput,
 } from '@/lib/menu-calculator'
+import {
+  PHYSICAL_GRID_DIMENSION_SET,
+  extraLetterGroupsToText,
+  getGridBom,
+  physicalGridToMenuRows,
+  type ExtraLetterGroup,
+  type FontStyle,
+  type PhysicalCategory,
+  type PhysicalRow,
+} from '@/lib/modular-physical-grid'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
 export const runtime = 'nodejs'
@@ -41,6 +51,11 @@ type CheckoutPayload = {
   }
   notes?: string
   menuSystem?: {
+    dimensionSet?: 'v1-standard-250'
+    fontStyle?: FontStyle
+    physicalGrid?: PhysicalRow[]
+    categories?: PhysicalCategory[]
+    extraLetterGroups?: ExtraLetterGroup[]
     menuText?: string
     extraLettersText?: string
     customIconRequest?: string
@@ -59,9 +74,16 @@ type CheckoutPayload = {
       label?: string
       detail?: string
       useAccent?: boolean
+      moduleCount?: number
+      categoryId?: string
+      widthCm?: number
+      widthMm?: number
+      railModuleQuantity?: number
       suffix?: string
       price?: string
       characterCount?: number
+      textWidthMm?: number
+      globalWidthMm?: number
       widthWarning?: boolean
     }[]
     railColor?: ProductColor
@@ -118,11 +140,28 @@ function getMenuItemRole(slug: string): MenuItemRole | undefined {
 }
 
 function getMenuRows(menuSystem: NonNullable<CheckoutPayload['menuSystem']>): MenuRowInput[] | undefined {
+  if (Array.isArray(menuSystem.physicalGrid) && menuSystem.physicalGrid.length > 0) {
+    const rows = physicalGridToMenuRows(menuSystem.physicalGrid)
+      .map(row => ({
+        id: row.id,
+        label: String(row.label ?? '').trim(),
+        detail: String(row.detail ?? '').trim(),
+        useAccent: Boolean(row.useAccent),
+        moduleCount: row.moduleCount,
+        categoryId: row.categoryId,
+      }))
+      .filter(row => row.label || row.detail)
+
+    return rows.length ? rows : undefined
+  }
+
   const rows = (menuSystem.lines ?? [])
     .map(line => ({
       label: String(line.label ?? '').trim(),
       detail: String(line.detail ?? [line.suffix, line.price].filter(Boolean).join(' ')).trim(),
       useAccent: Boolean(line.useAccent),
+      moduleCount: Number.isFinite(Number(line.moduleCount)) ? Number(line.moduleCount) : undefined,
+      categoryId: line.categoryId,
     }))
     .filter(row => row.label || row.detail)
 
@@ -236,6 +275,7 @@ function getEffectiveLetterColorPriceAdd(globalColors: GlobalColor[], menuSystem
     getGlobalColorPriceAdd(globalColors, menuSystem.baseLetterColor ?? menuSystem.letterColor),
     getGlobalColorPriceAdd(globalColors, menuSystem.accentLetterColor ?? menuSystem.baseLetterColor ?? menuSystem.letterColor),
     getGlobalColorPriceAdd(globalColors, menuSystem.letterCardColor),
+    ...(menuSystem.extraLetterGroups ?? []).map(group => getGlobalColorPriceAdd(globalColors, group.color)),
   )
 }
 
@@ -282,25 +322,59 @@ function validateMenuPayload(
   if (!body.menuSystem) return null
 
   const items = body.items ?? []
+  const usesPhysicalGrid = Array.isArray(body.menuSystem.physicalGrid) && body.menuSystem.physicalGrid.length > 0
   if (body.menuSystem.moduleLengthCm !== undefined && body.menuSystem.moduleLengthCm !== MODULE_LENGTH_CM) {
     throw new Error(`Os módulos do Sinalética Modular usam ${MODULE_LENGTH_CM}cm.`)
   }
   if (body.menuSystem.charsPerModuleEstimate !== undefined && body.menuSystem.charsPerModuleEstimate !== CHARS_PER_MODULE_ESTIMATE) {
     throw new Error(`Cada módulo estima cerca de ${CHARS_PER_MODULE_ESTIMATE} caracteres.`)
   }
-  if (!Number.isInteger(Number(body.menuSystem.globalModuleCount))) {
+  if (usesPhysicalGrid && body.menuSystem.dimensionSet !== PHYSICAL_GRID_DIMENSION_SET) {
+    throw new Error('A grelha física usa uma dimensão não suportada.')
+  }
+  if (usesPhysicalGrid && body.menuSystem.fontStyle !== 'classic' && body.menuSystem.fontStyle !== 'modern') {
+    throw new Error('Escolha o estilo de letra STL.')
+  }
+  if (!usesPhysicalGrid && !Number.isInteger(Number(body.menuSystem.globalModuleCount))) {
     throw new Error('Escolha a largura do Sinalética Modular em módulos.')
   }
-  if (Number(body.menuSystem.globalModuleCount) < MIN_GLOBAL_MODULES || Number(body.menuSystem.globalModuleCount) > MAX_GLOBAL_MODULES) {
+  if (!usesPhysicalGrid && (Number(body.menuSystem.globalModuleCount) < MIN_GLOBAL_MODULES || Number(body.menuSystem.globalModuleCount) > MAX_GLOBAL_MODULES)) {
     throw new Error(`A largura deve ter entre ${MIN_GLOBAL_MODULES} e ${MAX_GLOBAL_MODULES} módulos.`)
+  }
+
+  if (usesPhysicalGrid) {
+    const physicalBom = getGridBom({
+      grid: body.menuSystem.physicalGrid ?? [],
+      extraLetterGroups: body.menuSystem.extraLetterGroups ?? [],
+      baseLetterColor: sanitizeMenuColor(body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+      accentLetterColor: sanitizeMenuColor(body.menuSystem.accentLetterColor ?? body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+      standardPackQuantity: Number(body.menuSystem.standardPackQuantity),
+      avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
+    })
+
+    if (physicalBom.totalRailModules < 1) {
+      throw new Error('A grelha física deve ter pelo menos uma calha.')
+    }
+    if (physicalBom.hasOverflow) {
+      throw new Error('Há texto que excede o tamanho da calha física.')
+    }
+    for (const group of body.menuSystem.extraLetterGroups ?? []) {
+      if (group.quantity > 0 && !group.color?.name && !group.color?.globalColorId) {
+        throw new Error('Escolha a cor de todos os conjuntos de Letras Extra.')
+      }
+    }
   }
 
   const quote = calculateMenuQuote({
     rows: getMenuRows(body.menuSystem),
     menuText: String(body.menuSystem.menuText ?? ''),
-    extraLettersText: String(body.menuSystem.extraLettersText ?? ''),
+    extraLettersText: usesPhysicalGrid
+      ? extraLetterGroupsToText(body.menuSystem.extraLetterGroups)
+      : String(body.menuSystem.extraLettersText ?? ''),
     customIconRequest: String(body.menuSystem.customIconRequest ?? ''),
-    globalModuleCount: Number(body.menuSystem.globalModuleCount),
+    globalModuleCount: usesPhysicalGrid
+      ? Math.max(MIN_GLOBAL_MODULES, ...physicalGridToMenuRows(body.menuSystem.physicalGrid ?? []).map(row => row.moduleCount))
+      : Number(body.menuSystem.globalModuleCount),
     standardPackQuantity: Number(body.menuSystem.standardPackQuantity),
     avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
   })
@@ -308,6 +382,9 @@ function validateMenuPayload(
 
   if (limitErrors.length) {
     throw new Error(limitErrors[0])
+  }
+  if (quote.lines.some(line => line.widthWarning)) {
+    throw new Error('Há texto que excede o tamanho da calha física.')
   }
 
   const expectedQuantities = [
@@ -373,6 +450,11 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
 
   const base = {
     role,
+    dimensionSet: menuSystem?.dimensionSet,
+    fontStyle: menuSystem?.fontStyle,
+    physicalGrid: menuSystem?.physicalGrid,
+    categories: menuSystem?.categories,
+    extraLetterGroups: menuSystem?.extraLetterGroups,
     moduleLengthCm: quote.moduleLengthCm,
     charsPerModuleEstimate: quote.charsPerModuleEstimate,
     menuText: quote.menuText,
@@ -432,7 +514,7 @@ function getMenuCustomText(role: MenuItemRole | undefined, quote: MenuQuote | nu
   if (!role || !quote) return customText || undefined
 
   const menuText = role === 'rails'
-    ? `${quote.totalRailModules} módulos de ${quote.moduleLengthCm}cm (${quote.lineCount} linhas, ${quote.globalModuleCount} por linha)`
+    ? `${quote.totalRailModules} módulos de ${quote.moduleLengthCm}cm (${quote.lineCount} linhas, larguras físicas variáveis)`
     : role === 'standard_pack'
       ? `${quote.standardPackQuantity} pack(s) de 300 caracteres`
       : `${quote.avulsoCharacterQuantity} letras avulso`
@@ -465,6 +547,11 @@ function getMenuOrderNotes(quote: MenuQuote | null, menuSystem?: CheckoutPayload
     .filter(line => line.widthWarning)
     .map(line => `Linha ${line.index}: ${line.text}`)
     .join('\n') || '-'
+  const productionMap = (menuSystem?.physicalGrid ?? [])
+    .flatMap((row, rowIndex) => row.columns.map((column, columnIndex) => (
+      `Row ${rowIndex + 1}, Col ${columnIndex + 1}: ${column.railModules} módulo(s) / ${column.railModules * 250}mm / ${menuSystem?.fontStyle ?? 'classic'} / ${column.leftText || '-'} / ${column.rightText || '-'}`
+    )))
+    .join('\n') || '-'
 
   return `Sistema Modular — Collection 01
 
@@ -473,9 +560,14 @@ Texto original:
 ${quote.menuText || '-'}
 
 Linhas: ${quote.lineCount}
-Largura do sistema: ${quote.globalModuleCount} módulos / ${quote.globalWidthCm}cm (${quote.globalWidthMm}mm)
+Dimensão: ${menuSystem?.dimensionSet || 'legacy'}
+Fonte STL: ${menuSystem?.fontStyle || 'classic'}
+Linha mais larga: ${quote.globalModuleCount} módulos / ${quote.globalWidthCm}cm (${quote.globalWidthMm}mm)
 Avisos de largura:
 ${widthWarnings}
+
+MAPA DE PRODUÇÃO
+${productionMap}
 
 MÓDULOS
 Módulos totais de 25cm: ${quote.totalRailModules}
@@ -887,6 +979,8 @@ export async function POST(request: NextRequest) {
           label: line.label,
           detail: line.detail,
           useAccent: line.useAccent,
+          moduleCount: line.moduleCount,
+          categoryId: line.categoryId,
         })),
         extraLettersText: menuQuote.extraLettersText,
         customIconRequest: menuQuote.customIconRequest,

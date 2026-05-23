@@ -300,6 +300,45 @@ const _schema = i.schema({
         }
         menuSystem?: {
           role: 'rails' | 'standard_pack' | 'avulso'
+          dimensionSet?: 'v1-standard-250'
+          fontStyle?: 'classic' | 'modern'
+          physicalGrid?: {
+            id: string
+            columns: {
+              id: string
+              railModules: number
+              leftText: string
+              rightText: string
+              colorOverride?: string
+            }[]
+          }[]
+          categories?: {
+            id: string
+            title: string
+            collapsed: boolean
+            rows: {
+              id: string
+              columns: {
+                id: string
+                railModules: number
+                leftText: string
+                rightText: string
+                colorOverride?: string
+              }[]
+            }[]
+          }[]
+          extraLetterGroups?: {
+            id: 'numbers' | 'vowels' | 'symbols'
+            label: string
+            charactersPerUnit: string
+            quantity: number
+            color?: {
+              name: string
+              hex?: string
+              globalColorId?: string
+              priceAdd?: number
+            }
+          }[]
           moduleLengthCm?: number
           moduleLengthMm?: number
           charsPerModuleEstimate?: number
@@ -385,6 +424,11 @@ const _schema = i.schema({
             label: string
             detail?: string
             useAccent?: boolean
+            moduleCount?: number
+            categoryId?: string
+            widthCm?: number
+            widthMm?: number
+            railModuleQuantity?: number
             suffix?: string
             price?: string
             characterCount: number

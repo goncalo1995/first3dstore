@@ -6,6 +6,7 @@ import {
   MAX_GLOBAL_MODULES,
   MIN_GLOBAL_MODULES,
   MODULE_LENGTH_MM,
+  RAIL_LENGTH_MM,
   STANDARD_PACK_DISTRIBUTION,
 } from './modular-inventory-config'
 
@@ -17,6 +18,7 @@ export {
   MAX_GLOBAL_MODULES,
   MIN_GLOBAL_MODULES,
   MODULE_LENGTH_MM,
+  RAIL_LENGTH_MM,
   STANDARD_PACK_DISTRIBUTION,
 }
 
@@ -36,6 +38,8 @@ export type ModularLine = {
   label: string
   detail?: string
   useAccent?: boolean
+  moduleCount?: number
+  categoryId?: string
 }
 
 export type MenuRowInput = Partial<ModularLine> & {
@@ -57,9 +61,14 @@ export type MenuQuoteLine = {
   label: string
   detail?: string
   useAccent: boolean
+  moduleCount: number
+  categoryId?: string
   characterCount: number
   textWidthMm: number
   globalWidthMm: number
+  widthCm: number
+  widthMm: number
+  railModuleQuantity: number
   widthWarning: boolean
 }
 
@@ -154,6 +163,10 @@ function clampInteger(value: number | undefined, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.trunc(Number(value))))
 }
 
+function clampModuleCount(value: number | undefined) {
+  return clampInteger(value, MIN_GLOBAL_MODULES, MAX_GLOBAL_MODULES)
+}
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100
 }
@@ -229,6 +242,8 @@ function normalizeRow(row: MenuRowInput, index: number): ModularLine {
     label,
     ...(detail ? { detail } : {}),
     useAccent: Boolean(row.useAccent),
+    moduleCount: Number.isFinite(Number(row.moduleCount)) ? clampModuleCount(Number(row.moduleCount)) : undefined,
+    categoryId: row.categoryId,
   }
 }
 
@@ -239,6 +254,8 @@ export function calculateWidthWarning(textWidthMm: number, globalWidthMm: number
 function quoteLineFromRow(row: ModularLine, rawIndex: number, globalWidthMm: number): MenuQuoteLine {
   const text = buildLineText(row)
   const textWidthMm = calculateTextWidthMm(text)
+  const moduleCount = clampModuleCount(row.moduleCount ?? globalWidthMm / MODULE_LENGTH_MM)
+  const widthMm = moduleCount * MODULE_LENGTH_MM
   return {
     index: rawIndex + 1,
     id: row.id,
@@ -246,10 +263,15 @@ function quoteLineFromRow(row: ModularLine, rawIndex: number, globalWidthMm: num
     label: row.label,
     detail: row.detail,
     useAccent: Boolean(row.useAccent),
+    moduleCount,
+    categoryId: row.categoryId,
     characterCount: calculateCharacters(text),
     textWidthMm,
-    globalWidthMm,
-    widthWarning: calculateWidthWarning(textWidthMm, globalWidthMm),
+    globalWidthMm: widthMm,
+    widthCm: widthMm / 10,
+    widthMm,
+    railModuleQuantity: moduleCount,
+    widthWarning: calculateWidthWarning(textWidthMm, widthMm),
   }
 }
 
@@ -412,6 +434,30 @@ export function calculateMenuBoardModules(lineCount: number, globalModuleCountIn
   }
 }
 
+export function calculateMenuBoardModulesFromLines(lines: Pick<MenuQuoteLine, 'moduleCount'>[], globalModuleCountInput = MIN_GLOBAL_MODULES) {
+  const rawGlobalModuleCount = Number(globalModuleCountInput)
+  const maxLineModuleCount = Math.max(MIN_GLOBAL_MODULES, ...lines.map(line => clampModuleCount(line.moduleCount)))
+  const globalModuleCount = lines.length ? maxLineModuleCount : clampModuleCount(globalModuleCountInput)
+  const starterQuantity = lines.length
+  const totalExtensionQuantity = lines.reduce((sum, line) => sum + Math.max(clampModuleCount(line.moduleCount) - 1, 0), 0)
+  const totalRailModules = lines.reduce((sum, line) => sum + clampModuleCount(line.moduleCount), 0)
+
+  return {
+    moduleLengthCm: MODULE_LENGTH_CM as typeof MODULE_LENGTH_CM,
+    moduleLengthMm: MODULE_LENGTH_MM as typeof MODULE_LENGTH_MM,
+    rawGlobalModuleCount: Number.isFinite(rawGlobalModuleCount) ? rawGlobalModuleCount : undefined,
+    globalModuleCount,
+    globalWidthCm: globalModuleCount * MODULE_LENGTH_CM,
+    globalWidthMm: globalModuleCount * MODULE_LENGTH_MM,
+    charsPerModuleEstimate: CHARS_PER_MODULE_ESTIMATE as typeof CHARS_PER_MODULE_ESTIMATE,
+    estimatedCharsPerLine: globalModuleCount * CHARS_PER_MODULE_ESTIMATE,
+    starterQuantity,
+    extensionQuantityPerLine: Math.max(globalModuleCount - 1, 0),
+    totalExtensionQuantity,
+    totalRailModules,
+  }
+}
+
 export function calculateMenuOrderPricing({
   totalRailModules,
   standardPackQuantity,
@@ -458,11 +504,11 @@ export function calculateMenuQuote(input: MenuQuoteInput): MenuQuote {
   const extraLettersText = sanitizeMenuText(rawExtraLettersText)
   const customIconRequest = sanitizeMenuText(rawCustomIconRequest)
   const lineCount = parsedMenu.lines.length
-  const boardModules = calculateMenuBoardModules(lineCount, input.globalModuleCount)
+  const boardModules = calculateMenuBoardModulesFromLines(parsedMenu.lines, input.globalModuleCount)
   const lines = parsedMenu.lines.map(line => ({
     ...line,
-    globalWidthMm: boardModules.globalWidthMm,
-    widthWarning: calculateWidthWarning(line.textWidthMm, boardModules.globalWidthMm),
+    globalWidthMm: line.widthMm,
+    widthWarning: calculateWidthWarning(line.textWidthMm, line.widthMm),
   }))
   const menuCharacters = lines.reduce((sum, line) => sum + line.characterCount, 0)
   const extraCharacters = calculateCharacters(extraLettersText)

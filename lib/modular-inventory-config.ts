@@ -1,10 +1,11 @@
-export const MODULE_LENGTH_MM = 250
+export const RAIL_LENGTH_MM = 250
+export const MODULE_LENGTH_MM = RAIL_LENGTH_MM
 export const CHARS_PER_MODULE_ESTIMATE = 5
 export const MIN_GLOBAL_MODULES = 1
 export const MAX_GLOBAL_MODULES = 12
 export const LAUNCH_DISCOUNT_PERCENT = 20
 
-export const FALLBACK_CHARACTER_WIDTH_MM = 40
+export const FALLBACK_CHARACTER_WIDTH_MM = 38
 
 const narrowCharacters = ['i', 'I', 'l', '1', '.', ',', ':', ';', "'", '"', '`', '´', '!', '|']
 const wideCharacters = ['m', 'M', 'w', 'W', '@', '#', '%', '&', '€']
