@@ -314,6 +314,11 @@ export async function generateProductionJobs(orderId: string) {
   })
 
   if (transactions.length > 0) {
+    transactions.push(dbAdmin.tx.orders[orderId].update({
+      status: 'IN_PRODUCTION',
+      updatedAt: now,
+    }))
+
     const BATCH_SIZE = 50
     for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
       await dbAdmin.transact(transactions.slice(i, i + BATCH_SIZE))
@@ -956,8 +961,17 @@ export async function syncOrderStates(orderIds: string[]) {
     })
 
     // 3. Update order
+    const pipelineStatus = nextStatus === 'shipped'
+      ? 'SHIPPED'
+      : nextStatus === 'cancelled'
+        ? 'CANCELLED'
+        : allAssembled
+          ? 'READY_FOR_PRODUCTION'
+          : 'IN_PRODUCTION'
+
     await dbAdmin.transact(
       dbAdmin.tx.orders[orderId].update({
+        status: pipelineStatus,
         fulfillmentStatus: nextStatus,
         items: newItems,
         updatedAt: new Date()

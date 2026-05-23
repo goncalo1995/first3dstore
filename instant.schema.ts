@@ -256,6 +256,7 @@ const _schema = i.schema({
       stripePaymentIntentId: i.string().indexed().optional(),
       paymentUrl: i.string().optional(),
       paidAt: i.date().optional(),
+      status: i.string<'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'>().indexed().optional(),
       items: i.json<{
         productId?: string
         productName: string
@@ -296,6 +297,166 @@ const _schema = i.schema({
             imageUrl?: string
             globalColorId?: string
             priceAdd?: number
+          }[]
+        }
+        menuSystem?: {
+          role: 'rails' | 'standard_pack' | 'avulso'
+          dimensionSet?: 'v1-standard-250'
+          fontStyle?: 'classic' | 'modern'
+          walls?: {
+            id: string
+            name: string
+            type: 'text' | 'logo'
+            maxWidthCm?: number
+            rows: {
+              id: string
+              columns: {
+                id: string
+                kind?: 'title' | 'item'
+                railModules: number
+                leftText: string
+                rightText: string
+                railAlign?: 'left' | 'center' | 'right'
+                textAlign?: 'left' | 'center' | 'right'
+                colorOverride?: string
+              }[]
+            }[]
+            logoSvgUrl?: string
+            logoSvgText?: string
+          }[]
+          physicalGrid?: {
+            id: string
+            columns: {
+              id: string
+              railModules: number
+              leftText: string
+              rightText: string
+              colorOverride?: string
+            }[]
+          }[]
+          categories?: {
+            id: string
+            title: string
+            collapsed: boolean
+            rows: {
+              id: string
+              columns: {
+                id: string
+                railModules: number
+                leftText: string
+                rightText: string
+                colorOverride?: string
+              }[]
+            }[]
+          }[]
+          extraLetterGroups?: {
+            id: 'numbers' | 'vowels' | 'symbols'
+            label: string
+            charactersPerUnit: string
+            quantity: number
+            color?: {
+              name: string
+              hex?: string
+              globalColorId?: string
+              priceAdd?: number
+            }
+          }[]
+          moduleLengthCm?: number
+          moduleLengthMm?: number
+          charsPerModuleEstimate?: number
+          menuText?: string
+          extraLettersText?: string
+          customIconRequest?: string
+          lineCount?: number
+          globalModuleCount?: number
+          globalWidthCm?: number
+          globalWidthMm?: number
+          estimatedCharsPerLine?: number
+          productionFont?: 'em3d-standard'
+          productionSize?: 'standard'
+          starterQuantity?: number
+          extensionQuantityPerLine?: number
+          totalExtensionQuantity?: number
+          totalRailModules?: number
+          menuCharacters?: number
+          extraCharacters?: number
+          totalCharacters?: number
+          standardPackMinimum?: number
+          standardPackQuantity?: number
+          avulsoMinimum?: number
+          avulsoCharacterQuantity?: number
+          avulsoDeficitMap?: Record<string, number>
+          characterFrequencyMap?: Record<string, number>
+          characterFrequencyByColor?: Record<string, {
+            color: {
+              name: string
+              hex?: string
+              globalColorId?: string
+              priceAdd?: number
+            }
+            characters: Record<string, number>
+          }>
+          railModuleUnitPrice?: number
+          standardPackUnitPrice?: number
+          avulsoUnitPrice?: number
+          modulesSubtotal?: number
+          standardPacksSubtotal?: number
+          avulsoSubtotal?: number
+          subtotalBeforeDiscount?: number
+          launchDiscountPercent?: number
+          launchDiscountAmount?: number
+          totalAfterDiscount?: number
+          railColor?: {
+            name: string
+            hex: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterColor?: {
+            name: string
+            hex: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          baseLetterColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          accentLetterColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterCardColor?: {
+            name: string
+            hex?: string
+            globalColorId?: string
+            priceAdd?: number
+          }
+          letterColorRequest?: {
+            enabled: boolean
+            description: string
+          }
+          lines?: {
+            index: number
+            text: string
+            label: string
+            detail?: string
+            useAccent?: boolean
+            moduleCount?: number
+            categoryId?: string
+            widthCm?: number
+            widthMm?: number
+            railModuleQuantity?: number
+            suffix?: string
+            price?: string
+            characterCount: number
+            textWidthMm?: number
+            globalWidthMm?: number
+            widthWarning?: boolean
           }[]
         }
         customText?: string
@@ -343,7 +504,7 @@ const _schema = i.schema({
       leadType: i.string<'custom_idea' | 'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
-      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
+      status: i.string<'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'>().indexed(),
       createdAt: i.date().indexed(),
       updatedAt: i.date(),
     }),
@@ -436,6 +597,7 @@ const _schema = i.schema({
       }[]>().optional(),
       outsourced: i.boolean().indexed(),
       assignedFarmId: i.string().indexed().optional(),
+      farmPayoutAmount: i.number().optional(),
       customText: i.string().optional(),
       notes: i.string().optional(),
       createdAt: i.date().indexed(),

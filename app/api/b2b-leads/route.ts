@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         notes: description,
         isPaid: false,
         leadType: 'b2b',
-        status: 'B2B_LEAD',
+        status: 'PENDING_REVIEW',
         createdAt: now,
         updatedAt: now,
       }),

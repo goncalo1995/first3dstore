@@ -13,6 +13,7 @@ export const MODEL_RATES: Record<string, [input: number, output: number]> = {
   'google/gemini-2.0-pro-001':         [1.25, 10.00],
   'google/gemini-3.1-flash-image-preview': [0.15, 0.60],
   // OpenAI
+  'openai/gpt-4o-mini':                [0.15, 0.60],
   'dall-e-3':                          [40.00, 40.00], // flat image pricing approximation
   'openai/gpt-4-vision-preview':       [10.00, 30.00],
   // Anthropic

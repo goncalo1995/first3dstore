@@ -54,6 +54,7 @@ export async function recheckStripeOrderPayment(orderId: string) {
   const now = new Date()
   await dbAdmin.transact(
     dbAdmin.tx.orders[orderId].update({
+      status: 'PAID',
       paymentStatus: 'paid',
       paidAt: now,
       stripeSessionId: session.id,

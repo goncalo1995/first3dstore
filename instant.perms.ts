@@ -122,7 +122,7 @@ const rules = {
     bind: {
       isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
       validPhotoStatus: "data.status == 'PENDING_REVIEW'",
-      validB2BStatus: "data.status == 'B2B_LEAD'",
+      validB2BStatus: "data.status == 'PENDING_REVIEW'",
       validBaseColor: "data.baseColor == null || data.baseColor in ['black', 'wood']",
       validPaidState: "data.isPaid == null || data.isPaid == false",
       hasCustomer:

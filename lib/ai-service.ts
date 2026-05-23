@@ -9,6 +9,7 @@ const openrouter = createOpenRouter({
 });
 
 const OPENROUTER_API = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 
 function openrouterHeaders(apiKey = process.env.OPENROUTER_API_KEY) {
   return {
@@ -43,6 +44,62 @@ export const imageGenerationSchema = z.object({
   negativePrompt: z.string().optional(),
   style: z.string(),
 });
+
+type AiGatewayMeta = {
+  feature: string;
+  userId?: string;
+}
+
+type GenerateAiObjectParams<S extends z.ZodTypeAny> = {
+  schema: S;
+  prompt: string;
+  system?: string;
+  model?: string;
+  temperature?: number;
+  feature: string;
+  userId?: string;
+  timeoutMs?: number;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('AI gateway timeout')), timeoutMs);
+    }),
+  ]);
+}
+
+export async function generateAiObject<S extends z.ZodTypeAny>({
+  schema,
+  prompt,
+  system,
+  model,
+  temperature = 0.2,
+  feature,
+  userId,
+  timeoutMs,
+}: GenerateAiObjectParams<S>): Promise<{ object: z.infer<S> }> {
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY is not configured');
+  }
+
+  const modelId = model || process.env.OPENROUTER_AI_MODEL || DEFAULT_OPENROUTER_MODEL;
+  const meta: AiGatewayMeta = { feature, userId };
+  const request = trackedGenerateObject(
+    () => generateObject({
+      model: openrouter(modelId),
+      schema,
+      system,
+      prompt,
+      temperature,
+    }),
+    modelId,
+    meta,
+  );
+
+  return timeoutMs ? withTimeout(request, timeoutMs) : request;
+}
 
 // ------------------ Text Generation ------------------
 export async function generateProductImprovements(product: {

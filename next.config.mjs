@@ -10,6 +10,14 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'public.em3d.pt',
+      },
+      {
+        protocol: 'https',
+        hostname: 'pub-f8e78bd948414156890e0632ecc170b9.r2.dev',
+      },
+      {
+        protocol: 'https',
         hostname: 'files.golfprint.pt',
       },
       {
