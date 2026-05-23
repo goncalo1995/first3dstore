@@ -33,10 +33,10 @@
 - [x] Wall pills switch active wall without losing quote state.
 - [x] Titles are physical rows/columns, not category-only UI text.
 - [x] Add/remove wall.
-- [ ] Add/remove row.
-- [ ] Add/remove column.
-- [ ] Per-column rail module controls.
-- [ ] Per-column alignment controls.
+- [x] Add/remove row.
+- [x] Add/remove column.
+- [x] Per-column rail module controls.
+- [x] Per-column alignment controls.
 - [ ] Logo wall SVG upload mode.
 - [x] Global BOM aggregates all walls.
 - [ ] Mobile sticky preview + bottom controls.

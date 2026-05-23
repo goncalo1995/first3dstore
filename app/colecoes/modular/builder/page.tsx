@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FocusEvent } from 'react'
 import type { InstaQLEntity } from '@instantdb/react'
-import { Check, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Check, Loader2, Minus, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
@@ -21,7 +21,6 @@ import {
   getColumnMetrics,
   getWallsBom,
   inferRailModulesForText,
-  measureTextMm,
   physicalGridToMenuRows,
   type ExtraLetterGroup,
   type FontStyle,
@@ -42,6 +41,7 @@ const SHIPPING_COST = 4.99
 const BUILDER_STORAGE_KEY = 'em3d-modular-builder-active'
 const GENERATED_WALLS_STORAGE_KEY = 'em3d-modular-planner-walls-v1'
 const BUILDER_TOAST_STORAGE_KEY = 'em3d-modular-builder-toast'
+const MAX_COLUMNS_PER_ROW = 4
 
 type CatalogProductBase = InstaQLEntity<AppSchema, 'catalogProducts'>
 type ProductInventoryRecord = InstaQLEntity<AppSchema, 'productInventory'>
@@ -167,17 +167,20 @@ function createDefaultWalls(): PhysicalWall[] {
         createTitleRow('Entradas', 2),
         createRow([
           createColumn({ kind: 'item', leftText: 'SOPA DO DIA', rightText: '3,50€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
+          createColumn({ kind: 'item', leftText: 'BRUSCHETTA', rightText: '5,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
           createColumn({ kind: 'item', leftText: 'TÁBUA MINI', rightText: '8,00€', railModules: 2, railAlign: 'right', textAlign: 'left' }),
         ]),
         createTitleRow('Pratos', 2),
         createRow([
           createColumn({ kind: 'item', leftText: 'BACALHAU DA CASA', rightText: '14,50€', railModules: 3, railAlign: 'left', textAlign: 'left' }),
+          createColumn({ kind: 'item', leftText: 'RISOTTO', rightText: '13,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
           createColumn({ kind: 'item', leftText: 'BIFE GRELHADO', rightText: '16,00€', railModules: 3, railAlign: 'right', textAlign: 'left' }),
         ]),
         createTitleRow('Sobremesas', 2),
         createRow([
           createColumn({ kind: 'item', leftText: 'MOUSSE', rightText: '4,00€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'CAFÉ', rightText: '1,20€', railModules: 2, railAlign: 'right', textAlign: 'left' }),
+          createColumn({ kind: 'item', leftText: 'PUDIM', rightText: '4,50€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
+          createColumn({ kind: 'item', leftText: 'CAFÉ', rightText: '1,20€', railModules: 1, railAlign: 'right', textAlign: 'left' }),
         ]),
       ],
     },
@@ -217,8 +220,6 @@ function normalizeColumn(value: unknown, index: number): PhysicalColumn | null {
   if (!isObject(value)) return null
   const leftText = sanitizeMenuText(String(value.leftText ?? '')).slice(0, 160)
   const rightText = sanitizeMenuText(String(value.rightText ?? '')).slice(0, 120)
-  if (!leftText.trim() && !rightText.trim()) return null
-
   const kind = value.kind === 'title' ? 'title' : 'item'
   const railAlign = cleanAlign(value.railAlign) ?? (kind === 'title' ? 'center' : 'left')
   const textAlign = cleanAlign(value.textAlign) ?? (kind === 'title' ? 'center' : 'left')
@@ -431,6 +432,12 @@ function stripMenuColor(color: ProductColor): MenuColorPayload {
   }
 }
 
+function scrollFocusedInputIntoView(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  window.setTimeout(() => {
+    event.currentTarget.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+  }, 120)
+}
+
 function SwatchPicker({
   label,
   colors,
@@ -485,7 +492,7 @@ function LetterTiles({
   textAlign: TextAlign
 }) {
   const availableWidth = clampRailModules(railModules) * RAIL_LENGTH_MM
-  const characters = Array.from(text)
+  const characters = Array.from(String(text ?? ''))
   const justify = textAlign === 'right' ? 'justify-end' : textAlign === 'center' ? 'justify-center' : 'justify-start'
 
   return (
@@ -518,7 +525,6 @@ function LetterTiles({
 }
 
 function PreviewColumn({
-  rowId,
   column,
   metrics,
   railHex,
@@ -526,7 +532,6 @@ function PreviewColumn({
   accentLetterHex,
   letterCardHex,
 }: {
-  rowId: string
   column: PhysicalColumn
   metrics: PhysicalColumnMetrics
   railHex: string
@@ -534,36 +539,99 @@ function PreviewColumn({
   accentLetterHex: string
   letterCardHex: string
 }) {
-  const justify = column.railAlign === 'right' ? 'justify-end' : column.railAlign === 'center' ? 'justify-center' : 'justify-start'
-  const widthPercent = `${(clampRailModules(column.railModules) / 12) * 100}%`
+  const hasRightText = Boolean(column.rightText.trim())
 
   return (
-    <div className={`flex w-full ${justify}`} aria-label={`${rowId} ${column.id}`}>
-      <div
-        className={`relative min-h-[82px] rounded-xl border p-3 pb-6 transition ${
-          metrics.overflow
-            ? 'border-red-400 bg-red-950/25 shadow-[0_0_0_2px_rgba(248,113,113,0.22)]'
-            : 'border-white/10 bg-black/14'
-        }`}
-        style={{ width: widthPercent }}
-      >
-        <div className="grid min-h-[42px] grid-cols-[minmax(0,1fr)_minmax(0,0.55fr)] items-end gap-3">
-          <LetterTiles text={column.leftText || ' '} railModules={column.railModules} colorHex={baseLetterHex} cardHex={letterCardHex} textAlign={column.textAlign} />
-          <LetterTiles text={column.rightText} railModules={column.railModules} colorHex={accentLetterHex} cardHex={letterCardHex} textAlign="right" />
-        </div>
+    <div
+      className={`relative min-h-[82px] rounded-xl border p-3 pb-6 transition ${
+        metrics.overflow
+          ? 'border-red-400 bg-red-950/25 shadow-[0_0_0_2px_rgba(248,113,113,0.22)]'
+          : 'border-white/10 bg-black/14'
+      }`}
+      aria-label={`${metrics.rowId} ${column.id}`}
+    >
+      <div className={hasRightText ? 'grid min-h-[42px] grid-cols-[minmax(0,1fr)_minmax(0,0.55fr)] items-end gap-3' : 'min-h-[42px]'}>
+        <LetterTiles text={column.leftText || ' '} railModules={column.railModules} colorHex={baseLetterHex} cardHex={letterCardHex} textAlign={column.textAlign} />
+        {hasRightText && <LetterTiles text={column.rightText} railModules={column.railModules} colorHex={accentLetterHex} cardHex={letterCardHex} textAlign="right" />}
+      </div>
 
-        <div className="absolute inset-x-3 bottom-3 h-[10px] overflow-hidden rounded-b-md shadow-[0_5px_9px_rgba(0,0,0,0.2)]" style={{ background: railHex }}>
-          <div className="absolute inset-x-0 top-0 h-px bg-white/24" />
-          <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/22" />
-          <div className="absolute inset-0 flex">
-            {Array.from({ length: clampRailModules(column.railModules) }).map((_, moduleIndex) => (
-              <span key={moduleIndex} className="relative flex-1 border-r border-white/18 last:border-r-0">
-                <span className="absolute inset-y-1 left-0 w-px bg-black/18" />
-              </span>
-            ))}
-          </div>
+      <div className="absolute inset-x-3 bottom-3 h-[10px] overflow-hidden rounded-b-md shadow-[0_5px_9px_rgba(0,0,0,0.2)]" style={{ background: railHex }}>
+        <div className="absolute inset-x-0 top-0 h-px bg-white/24" />
+        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/22" />
+        <div className="absolute inset-0 flex">
+          {Array.from({ length: clampRailModules(column.railModules) }).map((_, moduleIndex) => (
+            <span key={moduleIndex} className="relative flex-1 border-r border-white/18 last:border-r-0">
+              <span className="absolute inset-y-1 left-0 w-px bg-black/18" />
+            </span>
+          ))}
         </div>
-        {metrics.overflow && <p className="mt-2 text-xs font-bold text-red-100">Texto excede o tamanho da calha física.</p>}
+      </div>
+      {metrics.overflow && <p className="mt-2 text-xs font-bold text-red-100">Texto excede o tamanho da calha física.</p>}
+    </div>
+  )
+}
+
+function PreviewRow({
+  wall,
+  row,
+  maxRowModules,
+  metricsByColumn,
+  railHex,
+  baseLetterHex,
+  accentLetterHex,
+  letterCardHex,
+}: {
+  wall: PhysicalWall
+  row: PhysicalRow
+  maxRowModules: number
+  metricsByColumn: Map<string, PhysicalColumnMetrics>
+  railHex: string
+  baseLetterHex: string
+  accentLetterHex: string
+  letterCardHex: string
+}) {
+  const rowModules = row.columns.reduce((sum, column) => sum + clampRailModules(column.railModules), 0)
+  const rowWidthPercent = `${Math.min(100, (rowModules / Math.max(1, maxRowModules)) * 100)}%`
+
+  if (row.columns.length === 1) {
+    const column = row.columns[0]
+    const justify = column.railAlign === 'right' ? 'justify-end' : column.railAlign === 'center' ? 'justify-center' : 'justify-start'
+    const metrics = metricsByColumn.get(`${row.id}:${column.id}`) ?? getColumnMetrics(row.id, column, wall)
+
+    return (
+      <div className={`flex w-full ${justify}`}>
+        <div style={{ width: rowWidthPercent, minWidth: 'min(100%, 10rem)' }}>
+          <PreviewColumn
+            column={column}
+            metrics={metrics}
+            railHex={railHex}
+            baseLetterHex={baseLetterHex}
+            accentLetterHex={accentLetterHex}
+            letterCardHex={letterCardHex}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex w-full justify-center">
+      <div className="flex min-w-0 gap-3" style={{ width: rowWidthPercent }}>
+        {row.columns.map(column => {
+          const metrics = metricsByColumn.get(`${row.id}:${column.id}`) ?? getColumnMetrics(row.id, column, wall)
+          return (
+            <div key={column.id} className="min-w-0" style={{ flex: `${clampRailModules(column.railModules)} 1 0` }}>
+              <PreviewColumn
+                column={column}
+                metrics={metrics}
+                railHex={railHex}
+                baseLetterHex={baseLetterHex}
+                accentLetterHex={accentLetterHex}
+                letterCardHex={letterCardHex}
+              />
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -588,6 +656,7 @@ function PhysicalGridPreview({
   const baseLetterHex = baseLetterColor?.hex ?? '#f8f4e9'
   const accentLetterHex = accentLetterColor?.hex ?? '#d7b06f'
   const letterCardHex = letterCardColor?.hex ?? '#f7f2e8'
+  const maxRowModules = Math.max(1, ...wall.rows.map(row => row.columns.reduce((sum, column) => sum + clampRailModules(column.railModules), 0)))
 
   return (
     <div className="relative min-h-[640px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#d8d1c3] p-5 text-stone-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-8">
@@ -612,23 +681,17 @@ function PhysicalGridPreview({
             </div>
           ) : (
             wall.rows.map(row => (
-              <div key={row.id} className="grid gap-3">
-                {row.columns.map(column => {
-                  const metrics = metricsByColumn.get(`${row.id}:${column.id}`) ?? getColumnMetrics(row.id, column, wall)
-                  return (
-                    <PreviewColumn
-                      key={column.id}
-                      rowId={row.id}
-                      column={column}
-                      metrics={metrics}
-                      railHex={railHex}
-                      baseLetterHex={baseLetterHex}
-                      accentLetterHex={accentLetterHex}
-                      letterCardHex={letterCardHex}
-                    />
-                  )
-                })}
-              </div>
+              <PreviewRow
+                key={row.id}
+                wall={wall}
+                row={row}
+                maxRowModules={maxRowModules}
+                metricsByColumn={metricsByColumn}
+                railHex={railHex}
+                baseLetterHex={baseLetterHex}
+                accentLetterHex={accentLetterHex}
+                letterCardHex={letterCardHex}
+              />
             ))
           )}
         </div>
@@ -692,18 +755,146 @@ function WallTabs({
   )
 }
 
-function WallInspector({
+function SegmentedControl<T extends RailAlign | TextAlign>({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: T
+  onChange: (value: T) => void
+}) {
+  const options: { value: T; label: string }[] = [
+    { value: 'left' as T, label: 'Esq' },
+    { value: 'center' as T, label: 'Centro' },
+    { value: 'right' as T, label: 'Dir' },
+  ]
+
+  return (
+    <div>
+      <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-stone-500">{label}</p>
+      <div className="mt-2 grid grid-cols-3 rounded-xl border border-stone-200 bg-stone-50 p-1">
+        {options.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`h-8 cursor-pointer rounded-lg text-xs font-black transition ${
+              value === option.value ? 'bg-stone-950 text-white shadow-sm' : 'text-stone-500 hover:bg-white hover:text-stone-950'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ModuleStepper({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (value: number) => void
+}) {
+  const modules = clampRailModules(value)
+
+  return (
+    <div>
+      <p className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-stone-500">Módulos</p>
+      <div className="mt-2 flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 p-1">
+        <button
+          type="button"
+          onClick={() => onChange(modules - 1)}
+          disabled={modules <= 1}
+          className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-stone-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+          aria-label="Reduzir módulos"
+        >
+          <Minus className="size-4" />
+        </button>
+        <span className="min-w-28 text-center text-sm font-black text-stone-950">
+          {modules}x · {(modules * RAIL_LENGTH_MM) / 10}cm
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(modules + 1)}
+          disabled={modules >= 12}
+          className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-stone-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+          aria-label="Aumentar módulos"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WallEditor({
   wall,
   bom,
+  metricsByColumn,
+  onAddTitleRow,
+  onAddItemRow,
+  onRemoveRow,
+  onAddColumnToRow,
+  onRemoveColumn,
+  onUpdateColumnText,
+  onUpdateColumnModules,
+  onUpdateColumnAlignment,
 }: {
   wall: PhysicalWall
   bom: PhysicalWallsBom
+  metricsByColumn: Map<string, PhysicalColumnMetrics>
+  onAddTitleRow: () => void
+  onAddItemRow: () => void
+  onRemoveRow: (rowId: string) => void
+  onAddColumnToRow: (rowId: string) => void
+  onRemoveColumn: (rowId: string, columnId: string) => void
+  onUpdateColumnText: (rowId: string, columnId: string, field: 'leftText' | 'rightText', value: string) => void
+  onUpdateColumnModules: (rowId: string, columnId: string, value: number) => void
+  onUpdateColumnAlignment: (rowId: string, columnId: string, field: 'railAlign' | 'textAlign', value: RailAlign | TextAlign) => void
 }) {
   const wallMetrics = bom.walls.find(metric => metric.wallId === wall.id)
+
+  if (wall.type === 'logo') {
+    return (
+      <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Parede activa</p>
+        <h2 className="mt-2 text-2xl font-black">{wall.name}</h2>
+        <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm leading-6 text-stone-500">
+          O upload SVG do logótipo entra na próxima fatia. Esta parede já fica separada para orçamento manual.
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Parede activa</p>
-      <h2 className="mt-2 text-2xl font-black text-stone-950">{wall.name}</h2>
+    <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Parede activa</p>
+          <h2 className="mt-2 text-2xl font-black">{wall.name}</h2>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onAddTitleRow}
+            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-stone-200 px-3 text-xs font-black text-stone-700 transition hover:border-stone-950 hover:text-stone-950"
+          >
+            <Plus className="size-3.5" />
+            Título
+          </button>
+          <button
+            type="button"
+            onClick={onAddItemRow}
+            className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-stone-950 px-3 text-xs font-black text-white transition hover:bg-[#d4af37] hover:text-stone-950"
+          >
+            <Plus className="size-3.5" />
+            Linha
+          </button>
+        </div>
+      </div>
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-xl bg-stone-50 p-3">
           <p className="text-xs text-stone-500">Linhas</p>
@@ -714,9 +905,182 @@ function WallInspector({
           <p className="mt-1 text-xl font-black">{wallMetrics?.railModules ?? 0}</p>
         </div>
       </div>
-      <p className="mt-4 text-sm leading-6 text-stone-500">
-        Nesta tranche, a edição fina de linhas, colunas, alinhamentos e logo fica preparada para o próximo passo. A navegação e o BOM já são multi-parede.
+
+      <div className="mt-5 space-y-4">
+        {wall.rows.map((row, rowIndex) => {
+          const canAddColumn = row.columns.length < MAX_COLUMNS_PER_ROW
+          return (
+            <div key={row.id} className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-stone-500">Linha {rowIndex + 1}</p>
+                  <p className="mt-1 text-xs text-stone-500">{row.columns.length} coluna{row.columns.length === 1 ? '' : 's'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onAddColumnToRow(row.id)}
+                    disabled={!canAddColumn}
+                    className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-stone-200 bg-white px-3 text-xs font-black text-stone-700 transition hover:border-stone-950 hover:text-stone-950 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={canAddColumn ? 'Adicionar coluna' : 'Limite de 4 colunas por linha'}
+                  >
+                    <Plus className="size-3.5" />
+                    Coluna
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveRow(row.id)}
+                    disabled={wall.rows.length <= 1}
+                    className="flex size-9 cursor-pointer items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 transition hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label={`Remover linha ${rowIndex + 1}`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {row.columns.map((column, columnIndex) => {
+                  const metrics = metricsByColumn.get(`${row.id}:${column.id}`) ?? getColumnMetrics(row.id, column, wall)
+                  return (
+                    <div key={column.id} className={`rounded-2xl border bg-white p-3 ${metrics.overflow ? 'border-red-300 ring-2 ring-red-100' : 'border-stone-200'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.14em] text-stone-500">
+                            {column.kind === 'title' ? 'Título' : `Coluna ${columnIndex + 1}`}
+                          </p>
+                          <p className="mt-1 text-xs text-stone-400">{metrics.totalTextWidthMm}mm / {metrics.availableWidthMm}mm</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveColumn(row.id, column.id)}
+                          disabled={row.columns.length <= 1}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-stone-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-35"
+                          aria-label={`Remover coluna ${columnIndex + 1}`}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="mt-3 grid gap-3">
+                        <label className="grid gap-1.5">
+                          <span className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-stone-500">
+                            {column.kind === 'title' ? 'Título' : 'Texto esquerdo'}
+                          </span>
+                          <input
+                            value={column.leftText ?? ''}
+                            onChange={event => onUpdateColumnText(row.id, column.id, 'leftText', event.target.value)}
+                            onFocus={scrollFocusedInputIntoView}
+                            className="h-10 rounded-xl border border-stone-200 px-3 text-sm font-semibold outline-none transition focus:border-stone-950"
+                            placeholder={column.kind === 'title' ? 'ENTRADAS' : 'Nome do item'}
+                          />
+                        </label>
+                        {column.kind !== 'title' && (
+                          <label className="grid gap-1.5">
+                            <span className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-stone-500">Texto direito/preço</span>
+                            <input
+                              value={column.rightText ?? ''}
+                              onChange={event => onUpdateColumnText(row.id, column.id, 'rightText', event.target.value)}
+                              onFocus={scrollFocusedInputIntoView}
+                              className="h-10 rounded-xl border border-stone-200 px-3 text-sm font-semibold outline-none transition focus:border-stone-950"
+                              placeholder="0,00€"
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      <div className="mt-4 grid gap-3">
+                        <ModuleStepper value={column.railModules} onChange={value => onUpdateColumnModules(row.id, column.id, value)} />
+                        <SegmentedControl<RailAlign>
+                          label="Calha"
+                          value={column.railAlign}
+                          onChange={value => onUpdateColumnAlignment(row.id, column.id, 'railAlign', value)}
+                        />
+                        <SegmentedControl<TextAlign>
+                          label="Texto"
+                          value={column.textAlign}
+                          onChange={value => onUpdateColumnAlignment(row.id, column.id, 'textAlign', value)}
+                        />
+                      </div>
+
+                      {metrics.overflow && (
+                        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+                          Texto excede o tamanho da calha física.
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ExtraLettersSection({
+  groups,
+  colors,
+  onUpdateGroup,
+}: {
+  groups: ExtraLetterGroup[]
+  colors: ProductColor[]
+  onUpdateGroup: (groupId: ExtraLetterGroup['id'], updater: (group: ExtraLetterGroup) => ExtraLetterGroup) => void
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
+      <h3 className="text-base font-black">Letras Extra</h3>
+      <p className="mt-1 text-sm leading-6 text-stone-500">
+        Compre conjuntos extra noutras cores para trocar letras no futuro sem alterar o layout das paredes.
       </p>
+      <div className="mt-5 grid gap-4">
+        {groups.map(group => {
+          const needsColor = group.quantity > 0 && !group.color
+          return (
+            <div key={group.id} className={`rounded-2xl border p-3 ${needsColor ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black">{group.label}</p>
+                  <p className="mt-1 max-w-48 truncate text-xs text-stone-500">{group.charactersPerUnit}</p>
+                </div>
+                <div className="flex items-center rounded-full border border-stone-200 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateGroup(group.id, current => ({ ...current, quantity: current.quantity - 1 }))}
+                    disabled={group.quantity <= 0}
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-35"
+                    aria-label={`Reduzir ${group.label}`}
+                  >
+                    <Minus className="size-4" />
+                  </button>
+                  <span className="min-w-8 text-center text-sm font-black">{group.quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateGroup(group.id, current => ({ ...current, quantity: current.quantity + 1 }))}
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100"
+                    aria-label={`Aumentar ${group.label}`}
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </div>
+              </div>
+              {group.quantity > 0 && (
+                <div className="mt-4">
+                  <SwatchPicker
+                    label="Cor deste extra"
+                    colors={colors}
+                    selected={group.color as ProductColor | undefined}
+                    onSelect={color => onUpdateGroup(group.id, current => ({ ...current, color }))}
+                  />
+                  {needsColor && <p className="mt-2 text-xs font-bold text-red-700">Escolha uma cor para adicionar este extra ao BOM.</p>}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -832,6 +1196,7 @@ export default function ModularBuilderPage() {
     [avulsoUnitPrice, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
   )
   const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
+  const hasExtraLetterColorMissing = extraLetterGroups.some(group => group.quantity > 0 && !group.color)
 
   useEffect(() => {
     const fallbackMessage = window.localStorage.getItem(BUILDER_TOAST_STORAGE_KEY)
@@ -913,6 +1278,159 @@ export default function ModularBuilderPage() {
     })
   }, [activeWallId])
 
+  const updateActiveWall = useCallback((updater: (wall: PhysicalWall) => PhysicalWall) => {
+    setWalls(current => current.map(wall => (wall.id === activeWallId ? updater(wall) : wall)))
+  }, [activeWallId])
+
+  const addTitleRow = useCallback(() => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: [...wall.rows, createTitleRow('Novo título', 1)],
+      }
+    })
+  }, [updateActiveWall])
+
+  const addItemRow = useCallback(() => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: [...wall.rows, createItemRow('Novo item', '0,00€', 2)],
+      }
+    })
+  }, [updateActiveWall])
+
+  const removeRow = useCallback((rowId: string) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo' || wall.rows.length <= 1) return wall
+      return {
+        ...wall,
+        rows: wall.rows.filter(row => row.id !== rowId),
+      }
+    })
+  }, [updateActiveWall])
+
+  const addColumnToRow = useCallback((rowId: string) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: wall.rows.map(row => {
+          if (row.id !== rowId || row.columns.length >= MAX_COLUMNS_PER_ROW) return row
+          return {
+            ...row,
+            columns: [
+              ...row.columns,
+              createColumn({
+                kind: 'item',
+                leftText: 'Novo item',
+                rightText: '0,00€',
+                railModules: 2,
+                railAlign: 'left',
+                textAlign: 'left',
+              }),
+            ],
+          }
+        }),
+      }
+    })
+  }, [updateActiveWall])
+
+  const removeColumn = useCallback((rowId: string, columnId: string) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: wall.rows.map(row => {
+          if (row.id !== rowId || row.columns.length <= 1) return row
+          return {
+            ...row,
+            columns: row.columns.filter(column => column.id !== columnId),
+          }
+        }),
+      }
+    })
+  }, [updateActiveWall])
+
+  const updateColumnText = useCallback((rowId: string, columnId: string, field: 'leftText' | 'rightText', value: string) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: wall.rows.map(row => {
+          if (row.id !== rowId) return row
+          return {
+            ...row,
+            columns: row.columns.map(column => {
+              if (column.id !== columnId) return column
+              const sanitized = sanitizeMenuText(value).slice(0, field === 'leftText' ? 160 : 120)
+              const leftText = field === 'leftText' ? sanitized : String(column.leftText ?? '')
+              const rightText = column.kind === 'title' ? '' : field === 'rightText' ? sanitized : String(column.rightText ?? '')
+              return {
+                ...column,
+                leftText: leftText || '',
+                rightText: rightText || '',
+              }
+            }),
+          }
+        }),
+      }
+    })
+  }, [updateActiveWall])
+
+  const updateColumnModules = useCallback((rowId: string, columnId: string, value: number) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: wall.rows.map(row => {
+          if (row.id !== rowId) return row
+          return {
+            ...row,
+            columns: row.columns.map(column => (
+              column.id === columnId ? { ...column, railModules: clampRailModules(value) } : column
+            )),
+          }
+        }),
+      }
+    })
+  }, [updateActiveWall])
+
+  const updateColumnAlignment = useCallback((rowId: string, columnId: string, field: 'railAlign' | 'textAlign', value: RailAlign | TextAlign) => {
+    updateActiveWall(wall => {
+      if (wall.type === 'logo') return wall
+      return {
+        ...wall,
+        rows: wall.rows.map(row => {
+          if (row.id !== rowId) return row
+          return {
+            ...row,
+            columns: row.columns.map(column => (
+              column.id === columnId ? { ...column, [field]: value } : column
+            )),
+          }
+        }),
+      }
+    })
+  }, [updateActiveWall])
+
+  const updateExtraLetterGroup = useCallback((
+    groupId: ExtraLetterGroup['id'],
+    updater: (group: ExtraLetterGroup) => ExtraLetterGroup,
+  ) => {
+    setExtraLetterGroups(current => current.map(group => {
+      if (group.id !== groupId) return group
+      const next = updater(group)
+      return {
+        ...group,
+        ...next,
+        quantity: Math.max(0, Math.trunc(Number(next.quantity) || 0)),
+      }
+    }))
+  }, [])
+
   async function submitCheckout() {
     if (!selectedRailColor || !selectedBaseLetterColor || !selectedAccentLetterColor || !selectedLetterCardColor) {
       toast.error('Escolha as cores antes de finalizar.')
@@ -920,6 +1438,10 @@ export default function ModularBuilderPage() {
     }
     if (bom.hasOverflow) {
       toast.error('Existe texto maior do que a calha física.')
+      return
+    }
+    if (hasExtraLetterColorMissing) {
+      toast.error('Escolha a cor das Letras Extra antes de finalizar.')
       return
     }
 
@@ -969,6 +1491,10 @@ export default function ModularBuilderPage() {
             avulsoCharacterQuantity: bom.avulsoCharacterQuantity,
             characterFrequencyMap: bom.characterFrequencyMap,
             characterFrequencyByColor: bom.characterFrequencyByColor,
+            extraLetterGroups: extraLetterGroups.map(group => ({
+              ...group,
+              color: group.color ? stripMenuColor(group.color as ProductColor) : undefined,
+            })),
             railColor: railColorPayload,
             letterColor: baseLetterColorPayload,
             baseLetterColor: baseLetterColorPayload,
@@ -1005,8 +1531,20 @@ export default function ModularBuilderPage() {
             />
           </div>
 
-          <aside className="space-y-4">
-            <WallInspector wall={activeWall} bom={bom} />
+          <aside className="max-h-none space-y-4 overflow-y-visible lg:max-h-[calc(100svh-7rem)] lg:overflow-y-auto lg:pr-1">
+            <WallEditor
+              wall={activeWall}
+              bom={bom}
+              metricsByColumn={metricsByColumn}
+              onAddTitleRow={addTitleRow}
+              onAddItemRow={addItemRow}
+              onRemoveRow={removeRow}
+              onAddColumnToRow={addColumnToRow}
+              onRemoveColumn={removeColumn}
+              onUpdateColumnText={updateColumnText}
+              onUpdateColumnModules={updateColumnModules}
+              onUpdateColumnAlignment={updateColumnAlignment}
+            />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Cores globais</h3>
               <p className="mt-1 text-sm text-stone-500">Aplicadas a todas as paredes deste projecto.</p>
@@ -1017,13 +1555,14 @@ export default function ModularBuilderPage() {
                 <SwatchPicker label="Cartões das letras" colors={letterColors} selected={selectedLetterCardColor} onSelect={setLetterCardColor} />
               </div>
             </div>
+            <ExtraLettersSection groups={extraLetterGroups} colors={letterColors} onUpdateGroup={updateExtraLetterGroup} />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Checkout</h3>
               <div className="mt-4 grid gap-3">
-                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Nome" value={customerName} onChange={event => setCustomerName(event.target.value)} />
-                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Email" value={customerEmail} onChange={event => setCustomerEmail(event.target.value)} />
-                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Telefone" value={customerPhone} onChange={event => setCustomerPhone(event.target.value)} />
-                <textarea className="min-h-20 rounded-xl border border-stone-200 px-3 py-2 text-sm outline-none focus:border-stone-500" placeholder="Notas" value={notes} onChange={event => setNotes(event.target.value)} />
+                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Nome" value={customerName} onChange={event => setCustomerName(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Email" value={customerEmail} onChange={event => setCustomerEmail(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+                <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Telefone" value={customerPhone} onChange={event => setCustomerPhone(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+                <textarea className="min-h-20 rounded-xl border border-stone-200 px-3 py-2 text-sm outline-none focus:border-stone-500" placeholder="Notas" value={notes} onChange={event => setNotes(event.target.value)} onFocus={scrollFocusedInputIntoView} />
               </div>
             </div>
           </aside>
@@ -1036,7 +1575,7 @@ export default function ModularBuilderPage() {
           <Button
             type="button"
             onClick={submitCheckout}
-            disabled={isSubmitting || bom.hasOverflow || !bom.totalRailModules}
+            disabled={isSubmitting || bom.hasOverflow || hasExtraLetterColorMissing || !bom.totalRailModules}
             className="h-14 rounded-full bg-[#09090b] px-7 text-white hover:bg-[#26262c]"
           >
             {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
