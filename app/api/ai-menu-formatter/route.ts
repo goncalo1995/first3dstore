@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { generateObject } from 'ai'
 import { z } from 'zod'
 import {
   CHARACTER_WIDTH_MM,
@@ -9,6 +7,7 @@ import {
   RAIL_LENGTH_MM,
 } from '@/lib/modular-inventory-config'
 import { sanitizeMenuText } from '@/lib/menu-calculator'
+import { generateAiObject } from '@/lib/ai-service'
 import {
   clampRailModules,
   inferRailModulesForText,
@@ -21,10 +20,8 @@ export const runtime = 'nodejs'
 
 const AI_TIMEOUT_MS = 18_000
 const LOGO_TRIGGER_PATTERN = /(@logo|\blogo\b|log[oó]tipo|marca)/i
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-})
+const PRICE_OR_DETAIL_PATTERN = /(\d+(?:[,.]\d{1,2})?\s*€|€\s*\d+|desde\s+\d|sob\s+consulta|sob\s+marcação|hor[aá]rio|segunda|terça|quarta|quinta|sexta|s[aá]bado|domingo)/i
+const PLANNING_LANGUAGE_PATTERN = /(criar|adicionar|parede|zona|separada|centrada|principal|incluir|upload|categoria|categorias|à esquerda|a direita|à direita)/i
 
 const columnSchema = z.object({
   id: z.string(),
@@ -54,6 +51,20 @@ type FormatterObject = z.infer<typeof formatterSchema>
 
 function hasLogoIntent(text: string) {
   return LOGO_TRIGGER_PATTERN.test(text)
+}
+
+function shouldParseContentAsRows(text: string) {
+  const lines = sanitizeMenuText(text, { allowNewlines: true })
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  if (!lines.length) return false
+  if (lines.some(line => PRICE_OR_DETAIL_PATTERN.test(line))) return true
+  if (lines.length < 2) return false
+
+  const shortLineCount = lines.filter(line => line.length <= 42 && !PLANNING_LANGUAGE_PATTERN.test(line)).length
+  return shortLineCount >= Math.min(3, lines.length)
 }
 
 function defaultRestaurantWalls(mainWallMaxWidthCm?: number, includeLogo = false): PhysicalWall[] {
@@ -127,14 +138,18 @@ function defaultRestaurantWalls(mainWallMaxWidthCm?: number, includeLogo = false
   return walls
 }
 
-function fallbackFormat(text: string, mainWallMaxWidthCm?: number): PhysicalWall[] {
-  const lines = sanitizeMenuText(text, { allowNewlines: true })
+function fallbackFormat(content: string, logoIntentText: string, mainWallMaxWidthCm?: number): PhysicalWall[] {
+  if (!shouldParseContentAsRows(content)) {
+    return defaultRestaurantWalls(mainWallMaxWidthCm, hasLogoIntent(logoIntentText))
+  }
+
+  const lines = sanitizeMenuText(content, { allowNewlines: true })
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean)
     .slice(0, 24)
 
-  if (!lines.length) return defaultRestaurantWalls(mainWallMaxWidthCm, hasLogoIntent(text))
+  if (!lines.length) return defaultRestaurantWalls(mainWallMaxWidthCm, hasLogoIntent(logoIntentText))
 
   const rows = lines.map((line, index) => {
     const cleaned = line.replace(/\s*\.{2,}\s*/g, ' ')
@@ -162,7 +177,7 @@ function fallbackFormat(text: string, mainWallMaxWidthCm?: number): PhysicalWall
     rows,
   }]
 
-  if (hasLogoIntent(text)) {
+  if (hasLogoIntent(logoIntentText)) {
     walls.push({
       id: 'logo-wall',
       name: 'Identidade de Marca',
@@ -224,35 +239,48 @@ function normalizeWalls(walls: FormatterObject['walls'], originalText: string, m
   return normalized.length ? normalized : defaultRestaurantWalls(mainWallMaxWidthCm, hasLogoIntent(originalText))
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error('AI formatter timeout')), timeoutMs)
-    }),
-  ])
-}
-
-function fallbackResponse(prompt: string, mainWallMaxWidthCm?: number) {
-  const walls = fallbackFormat(prompt, mainWallMaxWidthCm)
+function fallbackResponse({
+  contentDescription,
+  logoIntentText,
+  mainWallMaxWidthCm,
+  failureReason,
+}: {
+  contentDescription: string
+  logoIntentText: string
+  mainWallMaxWidthCm?: number
+  failureReason?: string
+}) {
+  const walls = fallbackFormat(contentDescription, logoIntentText, mainWallMaxWidthCm)
   return NextResponse.json({
     walls,
     source: 'fallback',
     fallback: true,
     redirectTo: '/colecoes/modular/builder?fallback=true',
     message: 'A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!',
+    ...(process.env.NODE_ENV !== 'production' && failureReason ? { failureReason } : {}),
   })
 }
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
-  const promptText = String(body.prompt ?? body.text ?? body.menuText ?? '').trim()
+  const legacyPrompt = String(body.prompt ?? body.text ?? body.menuText ?? '').trim()
+  const spacesDescription = sanitizeMenuText(String(body.spacesDescription ?? ''), { allowNewlines: true }).trim()
+  const contentDescription = sanitizeMenuText(String(body.contentDescription ?? legacyPrompt), { allowNewlines: true }).trim()
+  const hints = Array.isArray(body.hints)
+    ? body.hints.map((hint: unknown) => sanitizeMenuText(String(hint)).trim()).filter(Boolean)
+    : []
+  const logoIntentText = [spacesDescription, contentDescription, legacyPrompt, hints.join(' ')].filter(Boolean).join('\n')
   const mainWallMaxWidthCm = Number.isFinite(Number(body.mainWallMaxWidthCm))
     ? Number(body.mainWallMaxWidthCm)
     : undefined
 
-  if (!promptText || !process.env.OPENROUTER_API_KEY) {
-    return fallbackResponse(promptText, mainWallMaxWidthCm)
+  if (!contentDescription && !spacesDescription) {
+    return fallbackResponse({
+      contentDescription,
+      logoIntentText,
+      mainWallMaxWidthCm,
+      failureReason: 'empty_request',
+    })
   }
 
   const characterWidthSummary = Object.entries(CHARACTER_WIDTH_MM)
@@ -274,6 +302,9 @@ Regras físicas obrigatórias:
 - Se existir largura máxima da parede principal, evita ultrapassá-la repartindo o conteúdo por linhas/colunas.
 
 Regras de planeamento:
+- Recebes três blocos: spacesDescription descreve paredes/dimensões, contentDescription contém o texto a produzir fisicamente, planningHints são só contexto.
+- Nunca transformes planningHints em texto físico. Usa-os apenas para decidir estrutura, paredes e alinhamentos.
+- O texto nas colunas deve vir de contentDescription ou de templates coerentes quando o cliente pedir um exemplo.
 - Cria várias paredes quando o cliente descreve várias áreas.
 - Títulos também são texto físico e devem aparecer como colunas compráveis, normalmente align="center".
 - Preços/detalhes ficam em rightText e align="split".
@@ -283,19 +314,29 @@ Regras de planeamento:
 - Devolve apenas JSON válido no schema pedido.`
 
   try {
-    const { object } = await withTimeout(generateObject({
-      model: openrouter(process.env.OPENROUTER_AI_MODEL ?? 'openai/gpt-4o-mini'),
+    const { object } = await generateAiObject({
       schema: formatterSchema,
       system: systemPrompt,
       prompt: JSON.stringify({
-        customerPrompt: promptText,
+        spacesDescription,
+        contentDescription,
         mainWallMaxWidthCm,
+        planningHints: hints,
       }),
+      feature: 'modular-space-planner',
       temperature: 0.2,
-    }), AI_TIMEOUT_MS)
+      timeoutMs: AI_TIMEOUT_MS,
+    })
 
-    const walls = normalizeWalls(object.walls, promptText, mainWallMaxWidthCm)
-    if (!walls.length) return fallbackResponse(promptText, mainWallMaxWidthCm)
+    const walls = normalizeWalls(object.walls, logoIntentText, mainWallMaxWidthCm)
+    if (!walls.length) {
+      return fallbackResponse({
+        contentDescription,
+        logoIntentText,
+        mainWallMaxWidthCm,
+        failureReason: 'empty_ai_walls',
+      })
+    }
 
     return NextResponse.json({
       walls,
@@ -309,7 +350,12 @@ Regras de planeamento:
         availableWidthMm: column.railModules * RAIL_LENGTH_MM,
       })))),
     })
-  } catch {
-    return fallbackResponse(promptText, mainWallMaxWidthCm)
+  } catch (error) {
+    return fallbackResponse({
+      contentDescription,
+      logoIntentText,
+      mainWallMaxWidthCm,
+      failureReason: error instanceof Error ? error.message : 'unknown_ai_error',
+    })
   }
 }

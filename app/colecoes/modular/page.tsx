@@ -161,18 +161,19 @@ function ColorToggleGroup({
 
 function OnboardingForm() {
   const router = useRouter()
-  const [prompt, setPrompt] = useState('Tenho um café com uma parede principal para menu, uma zona de takeaway e queria incluir o meu @logo.')
+  const [spacesDescription, setSpacesDescription] = useState('Tenho um café com uma parede principal de menu, uma parede pequena junto ao WC e uma zona de takeaway perto da entrada.')
+  const [contentDescription, setContentDescription] = useState('ENTRADAS\nSOPA DO DIA 3,50€\nTÁBUA MINI 8,00€\n\nPRATOS\nBACALHAU DA CASA 14,50€\nBIFE GRELHADO 16,00€\n\nHORÁRIOS\nSEG-SEX 09-19H\nSÁBADO 10-16H\n\n@logo')
   const [mainWallMaxWidthCm, setMainWallMaxWidthCm] = useState('')
   const [selectedHints, setSelectedHints] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
-  const canSubmit = prompt.trim().length > 8 && !loading
+  const canSubmit = (spacesDescription.trim().length > 4 || contentDescription.trim().length > 4) && !loading
+  const selectedPlanningHints = planningHints
+    .filter(hint => selectedHints.includes(hint.label))
+    .map(hint => hint.hint)
 
-  function toggleHint(label: string, hint: string) {
+  function toggleHint(label: string) {
     setSelectedHints(current => current.includes(label) ? current.filter(item => item !== label) : [...current, label])
-    if (!selectedHints.includes(label) && !prompt.includes(hint)) {
-      setPrompt(current => `${current.trim()}\n\n${hint}`.trim())
-    }
   }
 
   async function submitPlanner() {
@@ -183,9 +184,10 @@ function OnboardingForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt,
+          spacesDescription,
+          contentDescription,
           mainWallMaxWidthCm: mainWallMaxWidthCm ? Number(mainWallMaxWidthCm) : undefined,
-          hints: selectedHints,
+          hints: selectedPlanningHints,
         }),
       })
       const data = await response.json().catch(() => null)
@@ -195,7 +197,9 @@ function OnboardingForm() {
         version: 1,
         source: data?.source ?? 'unknown',
         fallback: Boolean(data?.fallback),
-        prompt,
+        spacesDescription,
+        contentDescription,
+        hints: selectedPlanningHints,
         mainWallMaxWidthCm: mainWallMaxWidthCm ? Number(mainWallMaxWidthCm) : undefined,
         walls,
         createdAt: new Date().toISOString(),
@@ -208,6 +212,7 @@ function OnboardingForm() {
         return
       }
 
+      window.localStorage.removeItem(BUILDER_DRAFT_STORAGE_KEY)
       router.push('/colecoes/modular/builder')
     } catch {
       window.localStorage.removeItem(BUILDER_DRAFT_STORAGE_KEY)
@@ -233,15 +238,26 @@ function OnboardingForm() {
         </div>
 
         <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:p-7">
-          <Label htmlFor="planner-prompt" className="text-sm font-semibold text-white">
-            Descreva os seus espaços e o que vai em cada parede
+          <Label htmlFor="planner-spaces" className="text-sm font-semibold text-white">
+            Descreva os espaços disponíveis
           </Label>
           <textarea
-            id="planner-prompt"
-            value={prompt}
-            onChange={event => setPrompt(event.target.value)}
-            className="mt-3 min-h-52 w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-zinc-600 focus:border-[#d4af37]/70 focus:ring-4 focus:ring-[#d4af37]/10"
-            placeholder="Ex.: Parede principal com menu de cafés, uma parede pequena para WC e uma zona de horários junto à entrada..."
+            id="planner-spaces"
+            value={spacesDescription}
+            onChange={event => setSpacesDescription(event.target.value)}
+            className="mt-3 min-h-32 w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-zinc-600 focus:border-[#d4af37]/70 focus:ring-4 focus:ring-[#d4af37]/10"
+            placeholder="Ex.: parede principal de 2m para menu, parede pequena para WC, zona de takeaway junto à entrada..."
+          />
+
+          <Label htmlFor="planner-content" className="mt-5 block text-sm font-semibold text-white">
+            Conteúdo que quer colocar
+          </Label>
+          <textarea
+            id="planner-content"
+            value={contentDescription}
+            onChange={event => setContentDescription(event.target.value)}
+            className="mt-3 min-h-56 w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-zinc-600 focus:border-[#d4af37]/70 focus:ring-4 focus:ring-[#d4af37]/10"
+            placeholder="Ex.: ENTRADAS, SOPA DO DIA 3,50€, PRATOS, BACALHAU 14,50€, WC, HORÁRIOS, @logo..."
           />
 
           <div className="mt-5 grid gap-5 sm:grid-cols-[0.7fr_1.3fr]">
@@ -269,7 +285,7 @@ function OnboardingForm() {
                     <button
                       key={hint.label}
                       type="button"
-                      onClick={() => toggleHint(hint.label, hint.hint)}
+                      onClick={() => toggleHint(hint.label)}
                       className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${selected ? 'border-[#d4af37] bg-[#d4af37]/15 text-white' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/25'}`}
                     >
                       {selected && <Check className="mr-1 inline size-3.5" />}

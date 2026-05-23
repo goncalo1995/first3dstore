@@ -50,6 +50,7 @@ import {
   type PhysicalColumnMetrics,
   type PhysicalGridBom,
   type PhysicalRow,
+  type PhysicalWall,
 } from '@/lib/modular-physical-grid'
 import type { ProductColor } from '@/lib/products'
 
@@ -58,6 +59,7 @@ const MENU_PACK_SLUG = 'menu-letter-pack-standard'
 const MENU_AVULSO_SLUG = 'menu-letter-custom'
 const SHIPPING_COST = 4.99
 const BUILDER_STORAGE_KEY = 'em3d-modular-builder-v3'
+const GENERATED_WALLS_STORAGE_KEY = 'em3d-modular-planner-walls-v1'
 const LEGACY_BUILDER_STORAGE_KEY = 'em3d-modular-builder-v1'
 const BUILDER_TOAST_STORAGE_KEY = 'em3d-modular-builder-toast'
 
@@ -141,6 +143,14 @@ function createColumn(leftText: string, rightText = '', railModules?: number): P
   }
 }
 
+function createTitleRow(title: string): PhysicalRow {
+  const text = sanitizeMenuText(title).replace(/\s+/g, ' ').trim().toUpperCase()
+  return createRow({
+    ...createColumn(text, '', Math.max(1, inferRailModules(text))),
+    align: 'center',
+  })
+}
+
 function createRow(...columns: PhysicalColumn[]): PhysicalRow {
   return {
     id: makeId('row'),
@@ -148,12 +158,18 @@ function createRow(...columns: PhysicalColumn[]): PhysicalRow {
   }
 }
 
-function createCategory(title: string, rows: PhysicalRow[], collapsed = false): PhysicalCategory {
+function createCategory(title: string, rows: PhysicalRow[], collapsed = false, includePhysicalTitle = true): PhysicalCategory {
+  const normalizedTitle = sanitizeMenuText(title).replace(/\s+/g, ' ').trim().toUpperCase()
+  const firstColumn = rows[0]?.columns[0]
+  const alreadyStartsWithTitle = Boolean(firstColumn && firstColumn.leftText.toUpperCase() === normalizedTitle && !firstColumn.rightText)
+
   return {
     id: makeId('cat'),
     title,
     collapsed,
-    rows,
+    rows: includePhysicalTitle && normalizedTitle && !alreadyStartsWithTitle
+      ? [createTitleRow(title), ...rows]
+      : rows,
   }
 }
 
@@ -325,6 +341,7 @@ function normalizeColumn(value: unknown, index: number): PhysicalColumn | null {
     railModules: clampRailModules(Number(value.railModules ?? value.moduleCount ?? inferRailModules(leftText, rightText))),
     leftText,
     rightText,
+    align: value.align === 'left' || value.align === 'center' || value.align === 'right' || value.align === 'split' ? value.align : undefined,
     colorOverride: typeof value.colorOverride === 'string' ? value.colorOverride : undefined,
   }
 }
@@ -361,6 +378,54 @@ function normalizeCategories(value: unknown): PhysicalCategory[] {
       }
     })
     .filter((category): category is PhysicalCategory => Boolean(category))
+}
+
+function normalizeGeneratedWalls(value: unknown): PhysicalWall[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((wall, wallIndex) => {
+      if (!isObject(wall)) return null
+      const type: PhysicalWall['type'] = wall.type === 'logo' ? 'logo' : 'text'
+      const rows = type === 'logo' ? [] : normalizePhysicalRows(wall.rows)
+      if (type !== 'logo' && !rows.length) return null
+      const normalizedWall: PhysicalWall = {
+        id: String(wall.id ?? `wall-${wallIndex + 1}`),
+        name: String(wall.name ?? `Parede ${wallIndex + 1}`).trim() || `Parede ${wallIndex + 1}`,
+        type,
+        maxWidthCm: Number.isFinite(Number(wall.maxWidthCm)) ? Number(wall.maxWidthCm) : undefined,
+        rows,
+        logoSvgUrl: typeof wall.logoSvgUrl === 'string' ? wall.logoSvgUrl : undefined,
+        logoSvgText: typeof wall.logoSvgText === 'string' ? wall.logoSvgText : undefined,
+        brandColor: typeof wall.brandColor === 'string' ? wall.brandColor : undefined,
+      }
+      return normalizedWall
+    })
+    .filter((wall): wall is PhysicalWall => Boolean(wall))
+}
+
+function generatedWallsToCategories(walls: PhysicalWall[]): PhysicalCategory[] {
+  return walls.map((wall, wallIndex) => ({
+    id: `generated-${wall.id || wallIndex}`,
+    title: wall.type === 'logo' ? `${wall.name} · upload SVG no próximo passo` : wall.name,
+    collapsed: false,
+    rows: wall.rows,
+  }))
+}
+
+function readGeneratedWallsCategories(): PhysicalCategory[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(GENERATED_WALLS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!isObject(parsed)) return []
+    const walls = normalizeGeneratedWalls(parsed.walls)
+    if (!walls.length) return []
+    window.localStorage.removeItem(GENERATED_WALLS_STORAGE_KEY)
+    return generatedWallsToCategories(walls)
+  } catch {
+    return []
+  }
 }
 
 function migrateLegacyRows(parsed: Record<string, unknown>): PhysicalCategory[] {
@@ -408,6 +473,24 @@ function normalizeExtraLetterGroups(value: unknown): ExtraLetterGroup[] {
 function readBuilderDraft(): BuilderDraftV3 | null {
   if (typeof window === 'undefined') return null
   try {
+    const generatedCategories = readGeneratedWallsCategories()
+    if (generatedCategories.length) {
+      return {
+        version: 3,
+        currentStep: 'menu',
+        selectedIntentId: 'ai-generated',
+        categories: generatedCategories,
+        fontStyle: 'classic',
+        extraLetterGroups: defaultExtraLetterGroups,
+        customerName: '',
+        customerEmail: '',
+        customerPhone: '',
+        shippingMethod: 'pickup_carcavelos',
+        shippingAddress: '',
+        notes: '',
+      }
+    }
+
     const raw = window.localStorage.getItem(BUILDER_STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as unknown
@@ -719,13 +802,9 @@ const PhysicalGridPreview = memo(function PhysicalGridPreview({
         <div className="mt-8 space-y-5">
           {categories.map(category => (
             <div key={category.id} className="space-y-3">
-              <div className="flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-stone-600">
-                <span>{category.title}</span>
-                <span className="h-px flex-1 bg-stone-950/12" />
-              </div>
               {category.collapsed ? (
                 <div className="rounded-xl border border-stone-950/10 bg-white/48 p-4 text-sm font-semibold text-stone-700 backdrop-blur-sm">
-                  {category.rows.length} linhas recolhidas · continuam no BOM
+                  {category.title}: {category.rows.length} linhas recolhidas · continuam no BOM
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1110,7 +1189,10 @@ export default function ModularMenusPage() {
     const searchParams = new URLSearchParams(window.location.search)
     const fallbackMessage = window.localStorage.getItem(BUILDER_TOAST_STORAGE_KEY)
     if (searchParams.get('fallback') === 'true' || fallbackMessage) {
-      toast.info(fallbackMessage ?? 'A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!')
+      toast.info('Plano automático indisponível', {
+        description: fallbackMessage ?? 'A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!',
+        duration: 9000,
+      })
       window.localStorage.removeItem(BUILDER_TOAST_STORAGE_KEY)
     }
 
