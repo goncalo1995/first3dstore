@@ -17,11 +17,15 @@ import {
 import {
   PHYSICAL_GRID_DIMENSION_SET,
   extraLetterGroupsToText,
+  flattenTextRowsFromWalls,
   getGridBom,
+  getWallsBom,
   physicalGridToMenuRows,
+  type CheckoutLane,
   type ExtraLetterGroup,
   type FontStyle,
   type PhysicalRow,
+  type PhysicalWall,
 } from '@/lib/modular-physical-grid'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
@@ -37,6 +41,7 @@ const MENU_AVULSO_SLUG = 'menu-letter-custom'
 const MENU_PRODUCT_COLOR_CONFIG_ERROR = 'Este produto ainda não tem cores configuradas. Contacte-nos para finalizar o pedido.'
 const MENU_RAIL_COLOR_CONFIG_ERROR = 'As cores das calhas não estão configuradas.'
 const MENU_LETTER_COLOR_REQUEST_MAX_CHARS = 300
+const MAX_LOGO_SVG_BYTES = 150 * 1024
 
 type CheckoutPayload = {
   customer?: {
@@ -52,9 +57,12 @@ type CheckoutPayload = {
   menuSystem?: {
     dimensionSet?: 'v1-standard-250'
     fontStyle?: FontStyle
+    walls?: PhysicalWall[]
     physicalGrid?: PhysicalRow[]
     categories?: unknown[]
     extraLetterGroups?: ExtraLetterGroup[]
+    checkoutLane?: CheckoutLane
+    customBrandColor?: string
     menuText?: string
     extraLettersText?: string
     customIconRequest?: string
@@ -90,6 +98,10 @@ type CheckoutPayload = {
     baseLetterColor?: ProductColor
     accentLetterColor?: ProductColor
     letterCardColor?: ProductColor
+  }
+  manualQuote?: {
+    requested?: boolean
+    spaceType?: string
   }
   items?: {
     productSlug?: string
@@ -139,8 +151,12 @@ function getMenuItemRole(slug: string): MenuItemRole | undefined {
 }
 
 function getMenuRows(menuSystem: NonNullable<CheckoutPayload['menuSystem']>): MenuRowInput[] | undefined {
-  if (Array.isArray(menuSystem.physicalGrid) && menuSystem.physicalGrid.length > 0) {
-    const rows = physicalGridToMenuRows(menuSystem.physicalGrid)
+  const physicalRows = Array.isArray(menuSystem.walls) && menuSystem.walls.length > 0
+    ? flattenTextRowsFromWalls(menuSystem.walls)
+    : menuSystem.physicalGrid
+
+  if (Array.isArray(physicalRows) && physicalRows.length > 0) {
+    const rows = physicalGridToMenuRows(physicalRows)
       .map(row => ({
         id: row.id,
         label: String(row.label ?? '').trim(),
@@ -186,6 +202,28 @@ async function getMenuProductColorRecords() {
 
 function getMenuItemQuantity(items: NonNullable<CheckoutPayload['items']>, slug: string) {
   return items.reduce((sum, item) => sum + (String(item.productSlug ?? '').trim() === slug ? Number(item.quantity) || 0 : 0), 0)
+}
+
+function getByteSize(value: string) {
+  return new TextEncoder().encode(value).byteLength
+}
+
+function hasLogoSvg(walls: PhysicalWall[] | undefined) {
+  return (walls ?? []).some(wall => wall.type === 'logo' && Boolean(wall.logoSvgText || wall.logoSvgUrl))
+}
+
+function validateLogoSvgPayload(walls: PhysicalWall[] | undefined) {
+  for (const wall of walls ?? []) {
+    if (wall.type !== 'logo') continue
+    const svgText = String(wall.logoSvgText ?? '')
+    if (!svgText) continue
+    if (getByteSize(svgText) > MAX_LOGO_SVG_BYTES) {
+      throw new Error('O ficheiro do logótipo é demasiado grande. Por favor, use um SVG otimizado com menos de 150KB.')
+    }
+    if (/<script[\s>]/i.test(svgText) || /<foreignObject[\s>]/i.test(svgText) || /\son[a-z]+\s*=/i.test(svgText)) {
+      throw new Error('O SVG do logótipo contém conteúdo não suportado.')
+    }
+  }
 }
 
 function colorsMatch(left: ProductColor | undefined, right: ProductColor | undefined) {
@@ -321,7 +359,9 @@ function validateMenuPayload(
   if (!body.menuSystem) return null
 
   const items = body.items ?? []
-  const usesPhysicalGrid = Array.isArray(body.menuSystem.physicalGrid) && body.menuSystem.physicalGrid.length > 0
+  const usesWalls = Array.isArray(body.menuSystem.walls) && body.menuSystem.walls.length > 0
+  const physicalGrid = usesWalls ? flattenTextRowsFromWalls(body.menuSystem.walls) : body.menuSystem.physicalGrid
+  const usesPhysicalGrid = usesWalls || (Array.isArray(physicalGrid) && physicalGrid.length > 0)
   if (body.menuSystem.moduleLengthCm !== undefined && body.menuSystem.moduleLengthCm !== MODULE_LENGTH_CM) {
     throw new Error(`Os módulos do Sinalética Modular usam ${MODULE_LENGTH_CM}cm.`)
   }
@@ -342,8 +382,17 @@ function validateMenuPayload(
   }
 
   if (usesPhysicalGrid) {
-    const physicalBom = getGridBom({
-      grid: body.menuSystem.physicalGrid ?? [],
+    validateLogoSvgPayload(body.menuSystem.walls)
+    const physicalBom = usesWalls ? getWallsBom({
+      walls: body.menuSystem.walls ?? [],
+      extraLetterGroups: body.menuSystem.extraLetterGroups ?? [],
+      baseLetterColor: sanitizeMenuColor(body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+      accentLetterColor: sanitizeMenuColor(body.menuSystem.accentLetterColor ?? body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+      standardPackQuantity: Number(body.menuSystem.standardPackQuantity),
+      avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
+      hasCustomBrandColor: Boolean(String(body.menuSystem.customBrandColor ?? '').trim()),
+    }) : getGridBom({
+      grid: physicalGrid ?? [],
       extraLetterGroups: body.menuSystem.extraLetterGroups ?? [],
       baseLetterColor: sanitizeMenuColor(body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
       accentLetterColor: sanitizeMenuColor(body.menuSystem.accentLetterColor ?? body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
@@ -351,7 +400,7 @@ function validateMenuPayload(
       avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
     })
 
-    if (physicalBom.totalRailModules < 1) {
+    if (physicalBom.totalRailModules < 1 && !hasLogoSvg(body.menuSystem.walls)) {
       throw new Error('A grelha física deve ter pelo menos uma calha.')
     }
     if (physicalBom.hasOverflow) {
@@ -361,6 +410,9 @@ function validateMenuPayload(
       if (group.quantity > 0 && !group.color?.name && !group.color?.globalColorId) {
         throw new Error('Escolha a cor de todos os conjuntos de Letras Extra.')
       }
+    }
+    if (usesWalls && (physicalGrid?.length ?? 0) === 0 && hasLogoSvg(body.menuSystem.walls)) {
+      return null
     }
   }
 
@@ -372,7 +424,7 @@ function validateMenuPayload(
       : String(body.menuSystem.extraLettersText ?? ''),
     customIconRequest: String(body.menuSystem.customIconRequest ?? ''),
     globalModuleCount: usesPhysicalGrid
-      ? Math.max(MIN_GLOBAL_MODULES, ...physicalGridToMenuRows(body.menuSystem.physicalGrid ?? []).map(row => row.moduleCount))
+      ? Math.max(MIN_GLOBAL_MODULES, ...physicalGridToMenuRows(physicalGrid ?? []).map(row => row.moduleCount))
       : Number(body.menuSystem.globalModuleCount),
     standardPackQuantity: Number(body.menuSystem.standardPackQuantity),
     avulsoCharacterQuantity: Number(body.menuSystem.avulsoCharacterQuantity),
@@ -451,9 +503,12 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
     role,
     dimensionSet: menuSystem?.dimensionSet,
     fontStyle: menuSystem?.fontStyle,
+    walls: menuSystem?.walls,
     physicalGrid: menuSystem?.physicalGrid,
     categories: menuSystem?.categories,
     extraLetterGroups: menuSystem?.extraLetterGroups,
+    checkoutLane: menuSystem?.checkoutLane,
+    customBrandColor: menuSystem?.customBrandColor,
     moduleLengthCm: quote.moduleLengthCm,
     charsPerModuleEstimate: quote.charsPerModuleEstimate,
     menuText: quote.menuText,
@@ -546,11 +601,21 @@ function getMenuOrderNotes(quote: MenuQuote | null, menuSystem?: CheckoutPayload
     .filter(line => line.widthWarning)
     .map(line => `Linha ${line.index}: ${line.text}`)
     .join('\n') || '-'
-  const productionMap = (menuSystem?.physicalGrid ?? [])
-    .flatMap((row, rowIndex) => row.columns.map((column, columnIndex) => (
-      `Row ${rowIndex + 1}, Col ${columnIndex + 1}: ${column.railModules} módulo(s) / ${column.railModules * 250}mm / ${menuSystem?.fontStyle ?? 'classic'} / ${column.leftText || '-'} / ${column.rightText || '-'}`
-    )))
-    .join('\n') || '-'
+  const productionMap = menuSystem?.walls?.length
+    ? menuSystem.walls.map((wall, wallIndex) => {
+        if (wall.type === 'logo') {
+          return `PAREDE ${wallIndex + 1} (${wall.name}) — LOGÓTIPO SVG: ${wall.logoSvgText ? 'incluído para orçamento/modelação' : 'por carregar'}`
+        }
+        const rows = wall.rows.flatMap((row, rowIndex) => row.columns.map((column, columnIndex) => (
+          `PAREDE ${wallIndex + 1} (${wall.name}) — Row ${rowIndex + 1}, Col ${columnIndex + 1}: ${column.railModules} módulo(s) / ${column.railModules * 250}mm / ${menuSystem?.fontStyle ?? 'classic'} / ${column.leftText || '-'} / ${column.rightText || '-'} / calha ${column.railAlign} / texto ${column.textAlign}`
+        )))
+        return rows.join('\n')
+      }).join('\n')
+    : (menuSystem?.physicalGrid ?? [])
+        .flatMap((row, rowIndex) => row.columns.map((column, columnIndex) => (
+          `Row ${rowIndex + 1}, Col ${columnIndex + 1}: ${column.railModules} módulo(s) / ${column.railModules * 250}mm / ${menuSystem?.fontStyle ?? 'classic'} / ${column.leftText || '-'} / ${column.rightText || '-'}`
+        )))
+        .join('\n') || '-'
 
   return `Sistema Modular — Collection 01
 
@@ -829,12 +894,10 @@ function validateSelectedColors(
 
 export async function POST(request: NextRequest) {
   try {
-    const stripe = getStripe()
-    if (!stripe) {
-      return NextResponse.json({ error: 'Stripe não está configurado.' }, { status: 500 })
-    }
-
     const body = await request.json() as CheckoutPayload
+    const clientRequestedManualQuote = body.manualQuote?.requested === true || body.menuSystem?.checkoutLane === 'manual_quote'
+    const hasLogo = hasLogoSvg(body.menuSystem?.walls)
+    const hasCustomBrandColor = Boolean(String(body.menuSystem?.customBrandColor ?? '').trim())
     const customerName = String(body.customer?.name ?? '').trim()
     const customerEmail = String(body.customer?.email ?? '').trim().toLowerCase()
     const customerPhone = String(body.customer?.phone ?? '').trim()
@@ -850,7 +913,13 @@ export async function POST(request: NextRequest) {
     if (shippingMethod === 'mainland_portugal' && shippingAddress.length < 8) {
       return NextResponse.json({ error: 'Indique uma morada completa.' }, { status: 400 })
     }
-    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > MAX_ITEMS) {
+    if (clientRequestedManualQuote && customerPhone.length < 6) {
+      return NextResponse.json({ error: 'Indique o seu telemóvel.' }, { status: 400 })
+    }
+    if (clientRequestedManualQuote && String(body.manualQuote?.spaceType ?? '').trim().length < 2) {
+      return NextResponse.json({ error: 'Indique o tipo de espaço.' }, { status: 400 })
+    }
+    if (!Array.isArray(body.items) || body.items.length > MAX_ITEMS || (!clientRequestedManualQuote && body.items.length < 1)) {
       return NextResponse.json({ error: 'Carrinho inválido.' }, { status: 400 })
     }
 
@@ -860,6 +929,7 @@ export async function POST(request: NextRequest) {
     const globalColors = (globalColorData.globalColors ?? []) as GlobalColor[]
     const menuProducts = body.menuSystem ? await getMenuProductColorRecords() : {}
     let menuQuote: MenuQuote | null = null
+    let serverWallsBom: ReturnType<typeof getWallsBom> | null = null
     const menuBaseUnitPrices: MenuBaseUnitPrices = {}
     const effectiveLetterColorPriceAdd = body.menuSystem
       ? getEffectiveLetterColorPriceAdd(globalColors, body.menuSystem)
@@ -993,6 +1063,33 @@ export async function POST(request: NextRequest) {
         accentLetterColor: sanitizeMenuColor(body.menuSystem?.accentLetterColor ?? body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
       })
 
+      if (body.menuSystem?.walls?.length) {
+        serverWallsBom = getWallsBom({
+          walls: body.menuSystem.walls,
+          extraLetterGroups: body.menuSystem.extraLetterGroups ?? [],
+          baseLetterColor: sanitizeMenuColor(body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+          accentLetterColor: sanitizeMenuColor(body.menuSystem.accentLetterColor ?? body.menuSystem.baseLetterColor ?? body.menuSystem.letterColor),
+          railModuleUnitPrice: menuBaseUnitPrices.rails ?? 0,
+          standardPackUnitPrice: menuBaseUnitPrices.standard_pack ?? 0,
+          avulsoUnitPrice: menuBaseUnitPrices.avulso ?? 0,
+          hasCustomBrandColor,
+          forceManualQuote: clientRequestedManualQuote || menuQuote.totalRailModules > 30,
+        })
+        if (serverWallsBom.hasOverflow) {
+          return NextResponse.json({ error: 'Há texto que excede o tamanho da calha física.' }, { status: 400 })
+        }
+        const expectedQuantities = [
+          { slug: MENU_RAIL_SLUG, quantity: serverWallsBom.totalRailModules, label: 'módulos de 25cm' },
+          { slug: MENU_PACK_SLUG, quantity: serverWallsBom.standardPackQuantity, label: 'packs standard' },
+          { slug: MENU_AVULSO_SLUG, quantity: serverWallsBom.avulsoCharacterQuantity, label: 'letras avulso' },
+        ]
+        for (const expected of expectedQuantities) {
+          if (getMenuItemQuantity(body.items ?? [], expected.slug) !== expected.quantity) {
+            return NextResponse.json({ error: `A quantidade de ${expected.label} não corresponde ao cálculo do menu.` }, { status: 400 })
+          }
+        }
+      }
+
       for (const orderItem of orderItems) {
         const role = orderItem.menuSystem?.role as MenuItemRole | undefined
         if (!role) continue
@@ -1005,6 +1102,18 @@ export async function POST(request: NextRequest) {
     const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) * 100) / 100
     const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
     const total = Math.round((subtotal + shippingCost) * 100) / 100
+    const serverCheckoutLane: CheckoutLane = (
+      clientRequestedManualQuote ||
+      (menuQuote?.totalRailModules ?? 0) > 30 ||
+      hasCustomBrandColor ||
+      hasLogo
+    )
+      ? 'manual_quote'
+      : 'stripe_auto_pay'
+
+    if (body.menuSystem?.checkoutLane === 'stripe_auto_pay' && serverCheckoutLane === 'manual_quote') {
+      return NextResponse.json({ error: 'Este projecto precisa de orçamento manual.' }, { status: 400 })
+    }
 
     if (shippingCost > 0) {
       lineItems.push({
@@ -1022,6 +1131,71 @@ export async function POST(request: NextRequest) {
 
     const orderId = id()
     const flow = menuQuote ? 'menu_modular' : 'standard_order'
+
+    if (serverCheckoutLane === 'manual_quote') {
+      const now = new Date()
+      const requestId = id()
+      const menuNotes = getMenuOrderNotes(menuQuote, {
+        ...body.menuSystem,
+        checkoutLane: serverCheckoutLane,
+      })
+      const canvasConfig = {
+        version: 1,
+        type: 'modular-list' as const,
+        submittedAt: now.toISOString(),
+        checkoutLane: serverCheckoutLane,
+        spaceType: String(body.manualQuote?.spaceType ?? '').trim(),
+        fontStyle: body.menuSystem?.fontStyle ?? 'classic',
+        walls: body.menuSystem?.walls ?? [],
+        physicalGrid: body.menuSystem?.physicalGrid ?? [],
+        extraLetterGroups: body.menuSystem?.extraLetterGroups ?? [],
+        customBrandColor: String(body.menuSystem?.customBrandColor ?? '').trim() || undefined,
+        railColor: sanitizeMenuColor(body.menuSystem?.railColor),
+        baseLetterColor: sanitizeMenuColor(body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
+        accentLetterColor: sanitizeMenuColor(body.menuSystem?.accentLetterColor ?? body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
+        letterCardColor: sanitizeMenuColor(body.menuSystem?.letterCardColor),
+        totals: {
+          subtotal,
+          shippingCost,
+          total,
+          totalRailModules: serverWallsBom?.totalRailModules ?? menuQuote?.totalRailModules ?? 0,
+          standardPackQuantity: serverWallsBom?.standardPackQuantity ?? menuQuote?.standardPackQuantity ?? 0,
+          avulsoCharacterQuantity: serverWallsBom?.avulsoCharacterQuantity ?? menuQuote?.avulsoCharacterQuantity ?? 0,
+          characterFrequencyMap: serverWallsBom?.characterFrequencyMap ?? menuQuote?.characterFrequencyMap ?? {},
+          characterFrequencyByColor: serverWallsBom?.characterFrequencyByColor ?? menuQuote?.characterFrequencyByColor ?? {},
+        },
+      }
+
+      await dbAdmin.transact(
+        dbAdmin.tx.orderRequests[requestId].update({
+          customerName,
+          customerEmail,
+          customerPhone: customerPhone || undefined,
+          productSlug: 'modular-space-planner',
+          productName: 'EM3D Modular Space Planner',
+          selectedPrice: total,
+          estimatedPrice: total,
+          canvasConfig,
+          leadType: 'b2b',
+          isPaid: false,
+          notes: [menuNotes, notes].filter(Boolean).join('\n\n'),
+          status: 'PENDING_REVIEW',
+          createdAt: now,
+          updatedAt: now,
+        }),
+      )
+
+      return NextResponse.json({
+        ok: true,
+        requestId,
+        redirectTo: `${siteUrl()}/checkout/success?request_id=${requestId}`,
+      })
+    }
+
+    const stripe = getStripe()
+    if (!stripe) {
+      return NextResponse.json({ error: 'Stripe não está configurado.' }, { status: 500 })
+    }
 
     // Create Stripe session first to ensure it succeeds before saving order
     const session = await stripe.checkout.sessions.create({

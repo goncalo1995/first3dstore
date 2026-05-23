@@ -37,17 +37,17 @@
 - [x] Add/remove column.
 - [x] Per-column rail module controls.
 - [x] Per-column alignment controls.
-- [ ] Logo wall SVG upload mode.
+- [x] Logo wall SVG upload mode.
 - [x] Global BOM aggregates all walls.
-- [ ] Mobile sticky preview + bottom controls.
+- [x] Mobile sticky preview + bottom controls.
 
 ## Step 4 - Checkout Lanes
 
-- [ ] Stripe auto-pay lane for simple jobs.
-- [ ] Manual quote lane for >30 rails, custom colours or logo SVG.
-- [ ] Checkout payload sends `walls`.
-- [ ] Server validates `walls` and recalculates BOM.
-- [ ] Manual quote saves `orderRequests.PENDING_REVIEW`.
+- [x] Stripe auto-pay lane for simple jobs.
+- [x] Manual quote lane for >30 rails, custom colours or logo SVG.
+- [x] Checkout payload sends `walls`.
+- [x] Server validates `walls` and recalculates BOM.
+- [x] Manual quote saves `orderRequests.PENDING_REVIEW`.
 
 ## Step 5 - Admin / Production / OpenSCAD
 

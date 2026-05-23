@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState, type FocusEvent } from 'react'
 import type { InstaQLEntity } from '@instantdb/react'
-import { Check, Loader2, Minus, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Check, Loader2, Minus, Palette, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { db } from '@/lib/db'
 import type { AppSchema } from '@/instant.schema'
+import { sanitizeSvg } from '@/lib/puzzle/svg'
 import {
   RAIL_LENGTH_MM,
   sanitizeMenuText,
@@ -24,6 +25,7 @@ import {
   physicalGridToMenuRows,
   type ExtraLetterGroup,
   type FontStyle,
+  type CheckoutLane,
   type PhysicalColumn,
   type PhysicalColumnMetrics,
   type PhysicalRow,
@@ -42,6 +44,7 @@ const BUILDER_STORAGE_KEY = 'em3d-modular-builder-active'
 const GENERATED_WALLS_STORAGE_KEY = 'em3d-modular-planner-walls-v1'
 const BUILDER_TOAST_STORAGE_KEY = 'em3d-modular-builder-toast'
 const MAX_COLUMNS_PER_ROW = 4
+const MAX_LOGO_SVG_BYTES = 150 * 1024
 
 type CatalogProductBase = InstaQLEntity<AppSchema, 'catalogProducts'>
 type ProductInventoryRecord = InstaQLEntity<AppSchema, 'productInventory'>
@@ -61,10 +64,12 @@ type BuilderDraftActive = {
   baseLetterColor?: ProductColor
   accentLetterColor?: ProductColor
   letterCardColor?: ProductColor
+  customBrandColor?: string
   extraLetterGroups: ExtraLetterGroup[]
   customerName: string
   customerEmail: string
   customerPhone: string
+  spaceType: string
   shippingMethod: 'pickup_carcavelos' | 'mainland_portugal'
   shippingAddress: string
   notes: string
@@ -95,6 +100,23 @@ function formatMoney(value: number) {
     style: 'currency',
     currency: 'EUR',
   }).format(value)
+}
+
+function getByteSize(value: string) {
+  return new TextEncoder().encode(value).byteLength
+}
+
+function svgToDataUrl(svg: string) {
+  return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svg)))}`
+}
+
+function tintSvgForPreview(svg: string, color: string) {
+  const tinted = svg
+    .replace(/\sfill=(["'])(?!none\b|transparent\b|url\(|currentColor\b)[^"']*\1/gi, ` fill="${color}"`)
+    .replace(/\sstroke=(["'])(?!none\b|transparent\b|url\(|currentColor\b)[^"']*\1/gi, ` stroke="${color}"`)
+    .replace(/fill\s*:\s*(?!none\b|transparent\b|url\(|currentColor\b)[^;"']+/gi, `fill: ${color}`)
+    .replace(/stroke\s*:\s*(?!none\b|transparent\b|url\(|currentColor\b)[^;"']+/gi, `stroke: ${color}`)
+  return tinted.replace(/<(path|rect|circle|ellipse|polygon|polyline|text|line)\b(?![^>]*\sfill=)/gi, `<$1 fill="${color}"`)
 }
 
 function createColumn({
@@ -320,10 +342,12 @@ function readInitialDraft(): BuilderDraftActive {
               baseLetterColor: normalizeDraftColor(parsed.baseLetterColor),
               accentLetterColor: normalizeDraftColor(parsed.accentLetterColor),
               letterCardColor: normalizeDraftColor(parsed.letterCardColor),
+              customBrandColor: typeof parsed.customBrandColor === 'string' ? parsed.customBrandColor : undefined,
               extraLetterGroups: normalizeExtraLetterGroups(parsed.extraLetterGroups),
               customerName: String(parsed.customerName ?? ''),
               customerEmail: String(parsed.customerEmail ?? ''),
               customerPhone: String(parsed.customerPhone ?? ''),
+              spaceType: String(parsed.spaceType ?? ''),
               shippingMethod: parsed.shippingMethod === 'mainland_portugal' ? 'mainland_portugal' : 'pickup_carcavelos',
               shippingAddress: String(parsed.shippingAddress ?? ''),
               notes: String(parsed.notes ?? ''),
@@ -362,6 +386,7 @@ function createDefaultDraft(walls: PhysicalWall[]): BuilderDraftActive {
     customerName: '',
     customerEmail: '',
     customerPhone: '',
+    spaceType: '',
     shippingMethod: 'pickup_carcavelos',
     shippingAddress: '',
     notes: '',
@@ -644,6 +669,7 @@ function PhysicalGridPreview({
   baseLetterColor,
   accentLetterColor,
   letterCardColor,
+  customBrandColor,
 }: {
   wall: PhysicalWall
   metricsByColumn: Map<string, PhysicalColumnMetrics>
@@ -651,33 +677,51 @@ function PhysicalGridPreview({
   baseLetterColor?: ProductColor
   accentLetterColor?: ProductColor
   letterCardColor?: ProductColor
+  customBrandColor?: string
 }) {
   const railHex = railColor?.hex ?? '#111111'
   const baseLetterHex = baseLetterColor?.hex ?? '#f8f4e9'
   const accentLetterHex = accentLetterColor?.hex ?? '#d7b06f'
   const letterCardHex = letterCardColor?.hex ?? '#f7f2e8'
   const maxRowModules = Math.max(1, ...wall.rows.map(row => row.columns.reduce((sum, column) => sum + clampRailModules(column.railModules), 0)))
+  const logoTint = customBrandColor || baseLetterHex
+  const logoPreviewSvg = wall.logoSvgText ? tintSvgForPreview(wall.logoSvgText, logoTint) : ''
 
   return (
-    <div className="relative min-h-[640px] overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#d8d1c3] p-5 text-stone-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-8">
+    <div className="relative h-[calc(60svh-5.5rem)] min-h-0 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#d8d1c3] p-5 text-stone-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] sm:p-8 lg:h-auto lg:min-h-[640px]">
       <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.78),rgba(255,255,255,0.25)_42%,rgba(70,55,35,0.24)),radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.55),transparent_26%)]" />
       <div className="absolute inset-0 opacity-[0.14] [background-image:linear-gradient(90deg,rgba(90,73,52,.22)_1px,transparent_1px),linear-gradient(rgba(90,73,52,.18)_1px,transparent_1px)] [background-size:38px_38px]" />
-      <div className="relative z-10">
+      <div className="relative z-10 h-full overflow-y-auto lg:h-auto lg:overflow-visible">
         <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-[#6a5130]">
           <Sparkles className="size-4" />
           {wall.name} · grelha física
         </p>
-        <h1 className="mt-4 max-w-4xl font-serif text-4xl font-bold leading-[0.98] tracking-tight text-stone-950 sm:text-6xl">
+        <h1 className="mt-3 max-w-4xl font-serif text-3xl font-bold leading-[0.98] tracking-tight text-stone-950 sm:text-6xl lg:mt-4">
           {wall.type === 'logo' ? 'Identidade em vector.' : 'Calha por calha.'}
         </h1>
-        <p className="mt-4 max-w-2xl text-base leading-7 text-stone-700">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-700 sm:text-base sm:leading-7 lg:mt-4">
           Esta vista mostra apenas a parede activa. O BOM no rodapé soma todas as paredes do projecto.
         </p>
 
-        <div className="mt-8 space-y-4">
+        <div className="mt-5 space-y-4 lg:mt-8">
           {wall.type === 'logo' ? (
-            <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-stone-950/10 bg-white/45 p-8 text-center text-sm font-semibold text-stone-700">
-              Upload SVG entra no próximo passo. Esta parede já conta como pedido manual.
+            <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-stone-950/10 bg-white/55 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)]">
+              {logoPreviewSvg ? (
+                <div className="flex size-full min-h-[220px] items-center justify-center rounded-xl border border-stone-950/10 bg-white p-8 shadow-sm">
+                  <div
+                    className="max-h-[210px] w-full max-w-[520px] [&_svg]:mx-auto [&_svg]:h-full [&_svg]:max-h-[210px] [&_svg]:w-full"
+                    style={{ color: logoTint }}
+                    dangerouslySetInnerHTML={{ __html: logoPreviewSvg }}
+                  />
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-sm font-black text-stone-800">Logótipo vectorial</p>
+                  <p className="mt-2 max-w-sm text-sm leading-6 text-stone-500">
+                    Faça upload do SVG no painel para ver a identidade da marca nesta parede.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             wall.rows.map(row => (
@@ -834,6 +878,8 @@ function WallEditor({
   wall,
   bom,
   metricsByColumn,
+  baseLetterColor,
+  customBrandColor,
   onAddTitleRow,
   onAddItemRow,
   onRemoveRow,
@@ -842,10 +888,13 @@ function WallEditor({
   onUpdateColumnText,
   onUpdateColumnModules,
   onUpdateColumnAlignment,
+  onUploadLogoSvg,
 }: {
   wall: PhysicalWall
   bom: PhysicalWallsBom
   metricsByColumn: Map<string, PhysicalColumnMetrics>
+  baseLetterColor?: ProductColor
+  customBrandColor?: string
   onAddTitleRow: () => void
   onAddItemRow: () => void
   onRemoveRow: (rowId: string) => void
@@ -854,17 +903,56 @@ function WallEditor({
   onUpdateColumnText: (rowId: string, columnId: string, field: 'leftText' | 'rightText', value: string) => void
   onUpdateColumnModules: (rowId: string, columnId: string, value: number) => void
   onUpdateColumnAlignment: (rowId: string, columnId: string, field: 'railAlign' | 'textAlign', value: RailAlign | TextAlign) => void
+  onUploadLogoSvg: (file: File) => void
 }) {
   const wallMetrics = bom.walls.find(metric => metric.wallId === wall.id)
+  const logoTint = customBrandColor || baseLetterColor?.hex || '#111111'
+  const logoPreviewSvg = wall.logoSvgText ? tintSvgForPreview(wall.logoSvgText, logoTint) : ''
 
   if (wall.type === 'logo') {
     return (
       <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Parede activa</p>
         <h2 className="mt-2 text-2xl font-black">{wall.name}</h2>
-        <div className="mt-5 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-sm leading-6 text-stone-500">
-          O upload SVG do logótipo entra na próxima fatia. Esta parede já fica separada para orçamento manual.
-        </div>
+        <label
+          className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center transition hover:border-stone-950 hover:bg-white"
+          onDragOver={event => event.preventDefault()}
+          onDrop={event => {
+            event.preventDefault()
+            const file = event.dataTransfer.files?.[0]
+            if (file) onUploadLogoSvg(file)
+          }}
+        >
+          <input
+            type="file"
+            accept=".svg,image/svg+xml"
+            className="sr-only"
+            onChange={event => {
+              const file = event.target.files?.[0]
+              if (file) onUploadLogoSvg(file)
+              event.currentTarget.value = ''
+            }}
+          />
+          <span className="flex size-12 items-center justify-center rounded-full bg-stone-950 text-white">
+            <Upload className="size-5" />
+          </span>
+          <span className="mt-4 text-sm font-black">Carregar logótipo SVG</span>
+          <span className="mt-2 max-w-xs text-xs leading-5 text-stone-500">
+            Use um SVG vectorial optimizado com menos de 150KB. O ficheiro fica sanitizado antes de entrar no pedido.
+          </span>
+        </label>
+        {logoPreviewSvg && (
+          <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-stone-500">Preview sanitizada</p>
+            <div className="mt-3 flex min-h-36 items-center justify-center rounded-xl bg-white p-5">
+              <div
+                className="max-h-32 w-full max-w-64 [&_svg]:mx-auto [&_svg]:h-full [&_svg]:max-h-32 [&_svg]:w-full"
+                style={{ color: logoTint }}
+                dangerouslySetInnerHTML={{ __html: logoPreviewSvg }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1085,7 +1173,126 @@ function ExtraLettersSection({
   )
 }
 
-function BomSummary({ bom, shippingCost }: { bom: PhysicalWallsBom; shippingCost: number }) {
+function BrandColorSection({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white">
+          <Palette className="size-4" />
+        </span>
+        <div>
+          <h3 className="text-base font-black">Cor de marca personalizada</h3>
+          <p className="mt-1 text-sm leading-6 text-stone-500">
+            Use apenas quando precisar de uma cor exacta da marca. Isto muda o fluxo para orçamento manual.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <input
+          type="color"
+          value={value || '#d4af37'}
+          onChange={event => onChange(event.target.value)}
+          className="h-11 w-14 cursor-pointer rounded-xl border border-stone-200 bg-white p-1"
+          aria-label="Escolher cor de marca"
+        />
+        <input
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          onFocus={scrollFocusedInputIntoView}
+          placeholder="#d4af37"
+          className="h-11 min-w-0 flex-1 rounded-xl border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-stone-500"
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:text-stone-950"
+            aria-label="Remover cor de marca"
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ManualQuoteModal({
+  open,
+  customerName,
+  customerEmail,
+  customerPhone,
+  spaceType,
+  isSubmitting,
+  onClose,
+  onSubmit,
+  onCustomerNameChange,
+  onCustomerEmailChange,
+  onCustomerPhoneChange,
+  onSpaceTypeChange,
+}: {
+  open: boolean
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  spaceType: string
+  isSubmitting: boolean
+  onClose: () => void
+  onSubmit: () => void
+  onCustomerNameChange: (value: string) => void
+  onCustomerEmailChange: (value: string) => void
+  onCustomerPhoneChange: (value: string) => void
+  onSpaceTypeChange: (value: string) => void
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 py-5 backdrop-blur-sm sm:items-center">
+      <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-white p-5 text-stone-950 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-stone-500">Orçamento gratuito</p>
+            <h2 className="mt-2 text-2xl font-black">Vamos rever o projecto consigo.</h2>
+            <p className="mt-2 text-sm leading-6 text-stone-500">
+              Para projectos maiores, logótipos ou cores de marca, confirmamos produção e preço final manualmente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-stone-100 text-stone-500 transition hover:text-stone-950"
+            aria-label="Fechar"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-3">
+          <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Nome" value={customerName} onChange={event => onCustomerNameChange(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+          <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Email" value={customerEmail} onChange={event => onCustomerEmailChange(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+          <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Telemóvel" value={customerPhone} onChange={event => onCustomerPhoneChange(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+          <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Tipo de espaço, ex: café, bar, clínica" value={spaceType} onChange={event => onSpaceTypeChange(event.target.value)} onFocus={scrollFocusedInputIntoView} />
+        </div>
+        <Button
+          type="button"
+          onClick={onSubmit}
+          disabled={isSubmitting}
+          className="mt-5 h-12 w-full rounded-full bg-stone-950 text-white hover:bg-[#d4af37] hover:text-stone-950"
+        >
+          {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
+          Enviar pedido de orçamento
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function BomSummary({ bom, shippingCost, checkoutLane }: { bom: PhysicalWallsBom; shippingCost: number; checkoutLane: CheckoutLane }) {
   return (
     <div className="rounded-2xl border border-stone-200 bg-white/96 p-4 shadow-[0_-18px_42px_rgba(15,23,42,0.12)] backdrop-blur-xl">
       <div className="flex items-start justify-between gap-4">
@@ -1094,6 +1301,9 @@ function BomSummary({ bom, shippingCost }: { bom: PhysicalWallsBom; shippingCost
           <p className="mt-1 text-2xl font-black">{formatMoney(bom.totalAfterDiscount + shippingCost)}</p>
           <p className="mt-1 text-xs leading-5 text-stone-500">
             {bom.wallCount} paredes · {bom.totalRailModules} calhas · {bom.standardPackQuantity} packs · {bom.avulsoCharacterQuantity} letras avulso
+          </p>
+          <p className="mt-1 text-xs font-bold text-stone-500">
+            {checkoutLane === 'manual_quote' ? 'Fluxo: orçamento manual' : 'Fluxo: pagamento automático Stripe'}
           </p>
         </div>
         <div className={`rounded-full p-2 ${bom.hasOverflow ? 'bg-red-100 text-red-700' : 'bg-[#eef7f0] text-[#1f5138]'}`} title={bom.hasOverflow ? 'Existe texto em overflow' : 'BOM sem overflow'}>
@@ -1114,12 +1324,15 @@ export default function ModularBuilderPage() {
   const [baseLetterColor, setBaseLetterColor] = useState<ProductColor | undefined>()
   const [accentLetterColor, setAccentLetterColor] = useState<ProductColor | undefined>()
   const [letterCardColor, setLetterCardColor] = useState<ProductColor | undefined>()
+  const [customBrandColor, setCustomBrandColor] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [spaceType, setSpaceType] = useState('')
   const [shippingMethod, setShippingMethod] = useState<'pickup_carcavelos' | 'mainland_portugal'>('pickup_carcavelos')
   const [shippingAddress, setShippingAddress] = useState('')
   const [notes, setNotes] = useState('')
+  const [manualQuoteModalOpen, setManualQuoteModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const query = db.useQuery({
@@ -1189,14 +1402,17 @@ export default function ModularBuilderPage() {
       })),
       baseLetterColor: selectedBaseLetterColor ? stripMenuColor(selectedBaseLetterColor) : undefined,
       accentLetterColor: selectedAccentLetterColor ? stripMenuColor(selectedAccentLetterColor) : undefined,
+      hasCustomBrandColor: Boolean(customBrandColor.trim()),
       railModuleUnitPrice,
       standardPackUnitPrice,
       avulsoUnitPrice,
     }),
-    [avulsoUnitPrice, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
+    [avulsoUnitPrice, customBrandColor, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
   )
   const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
   const hasExtraLetterColorMissing = extraLetterGroups.some(group => group.quantity > 0 && !group.color)
+  const hasUploadedLogo = walls.some(wall => wall.type === 'logo' && Boolean(wall.logoSvgText || wall.logoSvgUrl))
+  const checkoutLane: CheckoutLane = bom.totalRailModules > 30 || customBrandColor.trim() || hasUploadedLogo ? 'manual_quote' : 'stripe_auto_pay'
 
   useEffect(() => {
     const fallbackMessage = window.localStorage.getItem(BUILDER_TOAST_STORAGE_KEY)
@@ -1213,10 +1429,12 @@ export default function ModularBuilderPage() {
     setBaseLetterColor(draft.baseLetterColor)
     setAccentLetterColor(draft.accentLetterColor)
     setLetterCardColor(draft.letterCardColor)
+    setCustomBrandColor(draft.customBrandColor ?? '')
     setExtraLetterGroups(draft.extraLetterGroups)
     setCustomerName(draft.customerName)
     setCustomerEmail(draft.customerEmail)
     setCustomerPhone(draft.customerPhone)
+    setSpaceType(draft.spaceType)
     setShippingMethod(draft.shippingMethod)
     setShippingAddress(draft.shippingAddress)
     setNotes(draft.notes)
@@ -1234,10 +1452,12 @@ export default function ModularBuilderPage() {
       baseLetterColor: selectedBaseLetterColor,
       accentLetterColor: selectedAccentLetterColor,
       letterCardColor: selectedLetterCardColor,
+      customBrandColor: customBrandColor.trim() || undefined,
       extraLetterGroups,
       customerName,
       customerEmail,
       customerPhone,
+      spaceType,
       shippingMethod,
       shippingAddress,
       notes,
@@ -1245,6 +1465,7 @@ export default function ModularBuilderPage() {
     window.localStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify(draft))
   }, [
     activeWallId,
+    customBrandColor,
     customerEmail,
     customerName,
     customerPhone,
@@ -1258,6 +1479,7 @@ export default function ModularBuilderPage() {
     selectedRailColor,
     shippingAddress,
     shippingMethod,
+    spaceType,
     walls,
   ])
 
@@ -1431,7 +1653,44 @@ export default function ModularBuilderPage() {
     }))
   }, [])
 
-  async function submitCheckout() {
+  const uploadLogoSvg = useCallback((file: File) => {
+    if (file.size > MAX_LOGO_SVG_BYTES) {
+      toast.error('O ficheiro do logótipo é demasiado grande. Por favor, use um SVG otimizado com menos de 150KB.')
+      return
+    }
+    if (file.type && file.type !== 'image/svg+xml' && !file.name.toLowerCase().endsWith('.svg')) {
+      toast.error('Carregue um ficheiro SVG válido.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const rawSvg = String(reader.result ?? '')
+      const analysis = sanitizeSvg(rawSvg)
+      if (!analysis.ok) {
+        toast.error(analysis.errors[0] || 'O SVG não é válido para produção.')
+        return
+      }
+      if (getByteSize(analysis.sanitizedSvg) > MAX_LOGO_SVG_BYTES) {
+        toast.error('O ficheiro do logótipo é demasiado grande. Por favor, use um SVG otimizado com menos de 150KB.')
+        return
+      }
+
+      updateActiveWall(wall => {
+        if (wall.type !== 'logo') return wall
+        return {
+          ...wall,
+          logoSvgText: analysis.sanitizedSvg,
+          logoSvgUrl: svgToDataUrl(analysis.sanitizedSvg),
+        }
+      })
+      toast.success('Logótipo SVG sanitizado e aplicado.')
+    }
+    reader.onerror = () => toast.error('Não foi possível ler o ficheiro SVG.')
+    reader.readAsText(file)
+  }, [updateActiveWall])
+
+  async function submitCheckout(forceManualSubmit = false) {
     if (!selectedRailColor || !selectedBaseLetterColor || !selectedAccentLetterColor || !selectedLetterCardColor) {
       toast.error('Escolha as cores antes de finalizar.')
       return
@@ -1443,6 +1702,28 @@ export default function ModularBuilderPage() {
     if (hasExtraLetterColorMissing) {
       toast.error('Escolha a cor das Letras Extra antes de finalizar.')
       return
+    }
+    if (checkoutLane === 'manual_quote' && !forceManualSubmit) {
+      setManualQuoteModalOpen(true)
+      return
+    }
+    if (checkoutLane === 'manual_quote') {
+      if (customerName.trim().length < 2) {
+        toast.error('Indique o seu nome.')
+        return
+      }
+      if (!customerEmail.includes('@')) {
+        toast.error('Indique um email válido.')
+        return
+      }
+      if (customerPhone.trim().length < 6) {
+        toast.error('Indique o seu telemóvel.')
+        return
+      }
+      if (spaceType.trim().length < 2) {
+        toast.error('Indique o tipo de espaço.')
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -1460,6 +1741,10 @@ export default function ModularBuilderPage() {
           customer: { name: customerName, email: customerEmail, phone: customerPhone },
           shipping: { method: shippingMethod, address: shippingAddress },
           notes,
+          manualQuote: {
+            requested: checkoutLane === 'manual_quote',
+            spaceType: spaceType.trim() || undefined,
+          },
           items: [
             {
               productSlug: MENU_RAIL_SLUG,
@@ -1491,6 +1776,8 @@ export default function ModularBuilderPage() {
             avulsoCharacterQuantity: bom.avulsoCharacterQuantity,
             characterFrequencyMap: bom.characterFrequencyMap,
             characterFrequencyByColor: bom.characterFrequencyByColor,
+            checkoutLane,
+            customBrandColor: customBrandColor.trim() || undefined,
             extraLetterGroups: extraLetterGroups.map(group => ({
               ...group,
               color: group.color ? stripMenuColor(group.color as ProductColor) : undefined,
@@ -1505,7 +1792,11 @@ export default function ModularBuilderPage() {
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.error || 'Não foi possível iniciar o checkout.')
-      if (payload?.url) window.location.href = payload.url
+      if (payload?.checkoutUrl || payload?.url) window.location.href = payload.checkoutUrl ?? payload.url
+      if (payload?.redirectTo) {
+        window.localStorage.removeItem(BUILDER_STORAGE_KEY)
+        window.location.href = payload.redirectTo
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível iniciar o checkout.')
     } finally {
@@ -1519,7 +1810,7 @@ export default function ModularBuilderPage() {
       <section className="relative overflow-hidden px-5 py-8 sm:px-8 lg:px-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(212,175,55,0.14),transparent_34%),radial-gradient(circle_at_76%_4%,rgba(56,189,248,0.10),transparent_30%)]" />
         <div className="relative mx-auto grid max-w-[1600px] gap-6 xl:grid-cols-[minmax(0,1.35fr)_420px]">
-          <div className="space-y-5">
+          <div className="sticky top-0 z-20 h-[60svh] space-y-3 overflow-hidden pb-2 lg:static lg:h-auto lg:space-y-5 lg:overflow-visible lg:pb-0">
             <WallTabs walls={walls} activeWallId={activeWall.id} onSelect={setActiveWallId} onAdd={addWall} onRemove={removeWall} />
             <PhysicalGridPreview
               wall={activeWall}
@@ -1528,14 +1819,17 @@ export default function ModularBuilderPage() {
               baseLetterColor={selectedBaseLetterColor}
               accentLetterColor={selectedAccentLetterColor}
               letterCardColor={selectedLetterCardColor}
+              customBrandColor={customBrandColor.trim() || undefined}
             />
           </div>
 
-          <aside className="max-h-none space-y-4 overflow-y-visible lg:max-h-[calc(100svh-7rem)] lg:overflow-y-auto lg:pr-1">
+          <aside className="max-h-[40svh] space-y-4 overflow-y-auto rounded-t-3xl border border-white/10 bg-white/[0.04] p-2 backdrop-blur-xl lg:max-h-[calc(100svh-7rem)] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pr-1">
             <WallEditor
               wall={activeWall}
               bom={bom}
               metricsByColumn={metricsByColumn}
+              baseLetterColor={selectedBaseLetterColor}
+              customBrandColor={customBrandColor.trim() || undefined}
               onAddTitleRow={addTitleRow}
               onAddItemRow={addItemRow}
               onRemoveRow={removeRow}
@@ -1544,6 +1838,7 @@ export default function ModularBuilderPage() {
               onUpdateColumnText={updateColumnText}
               onUpdateColumnModules={updateColumnModules}
               onUpdateColumnAlignment={updateColumnAlignment}
+              onUploadLogoSvg={uploadLogoSvg}
             />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Cores globais</h3>
@@ -1555,6 +1850,7 @@ export default function ModularBuilderPage() {
                 <SwatchPicker label="Cartões das letras" colors={letterColors} selected={selectedLetterCardColor} onSelect={setLetterCardColor} />
               </div>
             </div>
+            <BrandColorSection value={customBrandColor} onChange={setCustomBrandColor} />
             <ExtraLettersSection groups={extraLetterGroups} colors={letterColors} onUpdateGroup={updateExtraLetterGroup} />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Checkout</h3>
@@ -1571,18 +1867,32 @@ export default function ModularBuilderPage() {
 
       <div className="sticky bottom-0 z-30 border-t border-stone-200 bg-white/86 px-5 py-4 text-stone-950 backdrop-blur-xl sm:px-8 lg:px-10">
         <div className="mx-auto grid max-w-[1600px] gap-3 md:grid-cols-[1fr_auto] md:items-center">
-          <BomSummary bom={bom} shippingCost={shippingCost} />
+          <BomSummary bom={bom} shippingCost={shippingCost} checkoutLane={checkoutLane} />
           <Button
             type="button"
-            onClick={submitCheckout}
-            disabled={isSubmitting || bom.hasOverflow || hasExtraLetterColorMissing || !bom.totalRailModules}
+            onClick={() => submitCheckout()}
+            disabled={isSubmitting || bom.hasOverflow || hasExtraLetterColorMissing || (!bom.totalRailModules && !hasUploadedLogo)}
             className="h-14 rounded-full bg-[#09090b] px-7 text-white hover:bg-[#26262c]"
           >
             {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            Adicionar ao carrinho
+            {checkoutLane === 'manual_quote' ? 'Pedir Orçamento Gratuito' : 'Pagar e Finalizar Encomenda (Stripe)'}
           </Button>
         </div>
       </div>
+      <ManualQuoteModal
+        open={manualQuoteModalOpen}
+        customerName={customerName}
+        customerEmail={customerEmail}
+        customerPhone={customerPhone}
+        spaceType={spaceType}
+        isSubmitting={isSubmitting}
+        onClose={() => setManualQuoteModalOpen(false)}
+        onSubmit={() => submitCheckout(true)}
+        onCustomerNameChange={setCustomerName}
+        onCustomerEmailChange={setCustomerEmail}
+        onCustomerPhoneChange={setCustomerPhone}
+        onSpaceTypeChange={setSpaceType}
+      />
       <Footer />
     </main>
   )
