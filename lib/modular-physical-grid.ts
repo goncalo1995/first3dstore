@@ -17,16 +17,19 @@ import {
 
 export type FontStyle = 'classic' | 'modern'
 export type PhysicalGridDimensionSet = 'v1-standard-250'
-export type PhysicalColumnAlignment = 'left' | 'center' | 'right' | 'split'
-export type PhysicalWallType = 'text' | 'logo'
+export type RailAlign = 'left' | 'center' | 'right'
+export type TextAlign = 'left' | 'center' | 'right'
+export type PhysicalColumnKind = 'title' | 'item'
 export type CheckoutLane = 'stripe_auto_pay' | 'manual_quote'
 
 export type PhysicalColumn = {
   id: string
+  kind: PhysicalColumnKind
   railModules: number
   leftText: string
   rightText: string
-  align?: PhysicalColumnAlignment
+  railAlign: RailAlign
+  textAlign: TextAlign
   colorOverride?: string
 }
 
@@ -38,19 +41,11 @@ export type PhysicalRow = {
 export type PhysicalWall = {
   id: string
   name: string
-  type?: PhysicalWallType
+  type: 'text' | 'logo'
   maxWidthCm?: number
   rows: PhysicalRow[]
   logoSvgUrl?: string
   logoSvgText?: string
-  brandColor?: string
-}
-
-export type PhysicalCategory = {
-  id: string
-  title: string
-  collapsed: boolean
-  rows: PhysicalRow[]
 }
 
 export type ExtraLetterGroup = {
@@ -97,7 +92,7 @@ export type PhysicalWallFootprint = {
 export type PhysicalWallMetrics = {
   wallId: string
   wallName: string
-  wallType: PhysicalWallType
+  wallType: 'text' | 'logo'
   maxWidthMm?: number
   railModules: number
   rowCount: number
@@ -257,7 +252,7 @@ export function getWallFootprint(wall: PhysicalWall, options: { rowHeightMm?: nu
 }
 
 export function getWallMetrics(wall: PhysicalWall, options: { rowHeightMm?: number } = {}): PhysicalWallMetrics {
-  const wallType = wall.type ?? 'text'
+  const wallType = wall.type
   const rowMetrics = wall.rows.map(row => getRowMetrics(row, wall))
   const columnMetrics = rowMetrics.flatMap(row => row.columnMetrics)
   const railModules = columnMetrics.reduce((sum, metric) => sum + metric.railModules, 0)
@@ -325,7 +320,7 @@ function countCharacters(map: Record<string, number>) {
 }
 
 function isLogoWall(wall: PhysicalWall) {
-  return (wall.type ?? 'text') === 'logo' || Boolean(wall.logoSvgUrl || wall.logoSvgText)
+  return wall.type === 'logo' || Boolean(wall.logoSvgUrl || wall.logoSvgText)
 }
 
 type BomPricingInput = {
@@ -475,7 +470,7 @@ export function wallsToProductionMap(walls: PhysicalWall[] = []) {
     wallIndex: wallIndex + 1,
     wallId: wall.id,
     wallName: wall.name,
-    wallType: wall.type ?? 'text',
+    wallType: wall.type,
     rows: wall.rows.map((row, rowIndex) => ({
       rowIndex: rowIndex + 1,
       rowId: row.id,
@@ -486,7 +481,9 @@ export function wallsToProductionMap(walls: PhysicalWall[] = []) {
         widthMm: getColumnAvailableMm(column),
         leftText: sanitizeMenuText(column.leftText),
         rightText: sanitizeMenuText(column.rightText),
-        align: column.align ?? 'split',
+        railAlign: column.railAlign,
+        textAlign: column.textAlign,
+        kind: column.kind,
         colorOverride: column.colorOverride,
       })),
     })),

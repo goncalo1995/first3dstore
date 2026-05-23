@@ -21,7 +21,6 @@ import {
   physicalGridToMenuRows,
   type ExtraLetterGroup,
   type FontStyle,
-  type PhysicalCategory,
   type PhysicalRow,
 } from '@/lib/modular-physical-grid'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
@@ -54,7 +53,7 @@ type CheckoutPayload = {
     dimensionSet?: 'v1-standard-250'
     fontStyle?: FontStyle
     physicalGrid?: PhysicalRow[]
-    categories?: PhysicalCategory[]
+    categories?: unknown[]
     extraLetterGroups?: ExtraLetterGroup[]
     menuText?: string
     extraLettersText?: string
