@@ -38,6 +38,7 @@ const MAX_MENU_QUANTITY = 2000
 const MENU_RAIL_SLUG = 'menu-rail-25cm'
 const MENU_PACK_SLUG = 'menu-letter-pack-standard'
 const MENU_AVULSO_SLUG = 'menu-letter-custom'
+const MENU_PRODUCT_SLUGS = [MENU_RAIL_SLUG, MENU_PACK_SLUG, MENU_AVULSO_SLUG]
 const MENU_PRODUCT_COLOR_CONFIG_ERROR = 'Este produto ainda não tem cores configuradas. Contacte-nos para finalizar o pedido.'
 const MENU_RAIL_COLOR_CONFIG_ERROR = 'As cores das calhas não estão configuradas.'
 const MENU_LETTER_COLOR_REQUEST_MAX_CHARS = 300
@@ -63,6 +64,7 @@ type CheckoutPayload = {
     extraLetterGroups?: ExtraLetterGroup[]
     checkoutLane?: CheckoutLane
     customBrandColor?: string
+    customBrandColorTarget?: 'rails' | 'letters'
     menuText?: string
     extraLettersText?: string
     customIconRequest?: string
@@ -132,6 +134,9 @@ type MenuProductColorRecord = {
     }[]
   }
 }
+type MenuProductInventoryRecord = NonNullable<MenuProductColorRecord['inventory']> & {
+  productSlug?: string
+}
 
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
@@ -188,15 +193,32 @@ async function getMenuProductColorRecords() {
     catalogProducts: {
       $: {
         where: {
-          slug: { $in: [MENU_RAIL_SLUG, MENU_PACK_SLUG, MENU_AVULSO_SLUG] },
+          slug: { $in: MENU_PRODUCT_SLUGS },
         },
       },
       inventory: {},
     },
+    productInventory: {
+      $: {
+        where: {
+          productSlug: { $in: MENU_PRODUCT_SLUGS },
+        },
+      },
+    },
   })
 
+  const inventoryBySlug = new Map(
+    ((data.productInventory ?? []) as MenuProductInventoryRecord[]).map(inventory => [String(inventory.productSlug ?? ''), inventory]),
+  )
+
   return Object.fromEntries(
-    ((data.catalogProducts ?? []) as MenuProductColorRecord[]).map(product => [String(product.slug ?? ''), product]),
+    ((data.catalogProducts ?? []) as MenuProductColorRecord[]).map(product => {
+      const slug = String(product.slug ?? '')
+      return [slug, {
+        ...product,
+        inventory: product.inventory ?? inventoryBySlug.get(slug),
+      }]
+    }),
   ) as Record<string, MenuProductColorRecord | undefined>
 }
 
@@ -509,6 +531,7 @@ function getMenuItemDetails(role: MenuItemRole | undefined, quote: MenuQuote | n
     extraLetterGroups: menuSystem?.extraLetterGroups,
     checkoutLane: menuSystem?.checkoutLane,
     customBrandColor: menuSystem?.customBrandColor,
+    customBrandColorTarget: menuSystem?.customBrandColorTarget,
     moduleLengthCm: quote.moduleLengthCm,
     charsPerModuleEstimate: quote.charsPerModuleEstimate,
     menuText: quote.menuText,
@@ -594,6 +617,8 @@ function getMenuOrderNotes(quote: MenuQuote | null, menuSystem?: CheckoutPayload
   const letterColorRequest = menuSystem?.letterColorRequest?.enabled
     ? String(menuSystem.letterColorRequest.description ?? '').trim()
     : ''
+  const customBrandColor = String(menuSystem?.customBrandColor ?? '').trim()
+  const customBrandColorTarget = menuSystem?.customBrandColorTarget === 'rails' ? 'calhas' : 'letras'
   const baseLetterColor = menuSystem?.baseLetterColor ?? menuSystem?.letterColor
   const accentLetterColor = menuSystem?.accentLetterColor ?? baseLetterColor
   const letterCardColor = menuSystem?.letterCardColor
@@ -652,6 +677,7 @@ ${formatLettersByColor(quote)}
 
 PEDIDOS ESPECIAIS
 Letras/símbolos extra: ${quote.extraLettersText || '-'}
+Cor personalizada: ${customBrandColor ? `${customBrandColor} (${customBrandColorTarget})` : '-'}
 Pedido de cor especial: ${letterColorRequest || '-'}
 Pedido de símbolo/logótipo: ${quote.customIconRequest || '-'}
 
@@ -897,7 +923,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as CheckoutPayload
     const clientRequestedManualQuote = body.manualQuote?.requested === true || body.menuSystem?.checkoutLane === 'manual_quote'
     const hasLogo = hasLogoSvg(body.menuSystem?.walls)
-    const hasCustomBrandColor = Boolean(String(body.menuSystem?.customBrandColor ?? '').trim())
+    const customBrandColor = String(body.menuSystem?.customBrandColor ?? '').trim()
+    const hasCustomBrandColor = Boolean(customBrandColor)
+    if (hasCustomBrandColor && !/^#[0-9a-fA-F]{6}$/.test(customBrandColor)) {
+      return NextResponse.json({ error: 'A cor personalizada deve usar um HEX válido.' }, { status: 400 })
+    }
     const customerName = String(body.customer?.name ?? '').trim()
     const customerEmail = String(body.customer?.email ?? '').trim().toLowerCase()
     const customerPhone = String(body.customer?.phone ?? '').trim()
@@ -1150,6 +1180,7 @@ export async function POST(request: NextRequest) {
         physicalGrid: body.menuSystem?.physicalGrid ?? [],
         extraLetterGroups: body.menuSystem?.extraLetterGroups ?? [],
         customBrandColor: String(body.menuSystem?.customBrandColor ?? '').trim() || undefined,
+        customBrandColorTarget: body.menuSystem?.customBrandColorTarget === 'rails' ? 'rails' : body.menuSystem?.customBrandColorTarget === 'letters' ? 'letters' : undefined,
         railColor: sanitizeMenuColor(body.menuSystem?.railColor),
         baseLetterColor: sanitizeMenuColor(body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
         accentLetterColor: sanitizeMenuColor(body.menuSystem?.accentLetterColor ?? body.menuSystem?.baseLetterColor ?? body.menuSystem?.letterColor),
@@ -1238,6 +1269,7 @@ export async function POST(request: NextRequest) {
         subtotal,
         shippingCost,
         total,
+        status: 'AWAITING_PAYMENT',
         paymentStatus: 'pending',
         fulfillmentStatus: 'new',
         ...(menuQuote || notes ? { notes: [getMenuOrderNotes(menuQuote, body.menuSystem), notes].filter(Boolean).join('\n\n') } : {}),

@@ -51,13 +51,20 @@
 
 ## Step 5 - Admin / Production / OpenSCAD
 
-- [ ] Admin BOM grouped by wall and colour.
-- [ ] Stripe webhook understands `menuSystem.walls`.
-- [ ] Order status enum cleaned.
-- [ ] OpenSCAD rail/letter tooling updated for face-down production.
+- [x] Admin BOM grouped by wall and colour.
+- [x] Stripe webhook understands `menuSystem.walls`.
+- [x] Order status enum cleaned.
+- [x] OpenSCAD rail/letter tooling updated for face-down production.
+- [x] `menu_rail_v1.scad` adds a support-free 45-degree rear wedge for 3M tape mounting.
+- [x] Production queue can be viewed by client, colour and bagging checklist.
+- [x] Print-farm routing schema fields are ready for Step 6.
 
 ## Step 6 — The "Print Farm Network" (Scale to Millions)
 
+- [ ] Think if better to make like a blind sale where i send links to all
+      propose a price and time for items and colors and in the end of the day
+      user could see the print farms that replied and choose the best one. If i
+      wanted to print inhouse i could bypass this step and print myself.
 - [ ] Implement the "Stripe Connect" split-payment logic (Platform takes 40%,
       Farm gets 60% automatically).
 - [ ] Connect the `printFarms` database table to the order routing logic.

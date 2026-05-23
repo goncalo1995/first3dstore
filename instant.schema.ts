@@ -256,6 +256,7 @@ const _schema = i.schema({
       stripePaymentIntentId: i.string().indexed().optional(),
       paymentUrl: i.string().optional(),
       paidAt: i.date().optional(),
+      status: i.string<'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'>().indexed().optional(),
       items: i.json<{
         productId?: string
         productName: string
@@ -302,6 +303,27 @@ const _schema = i.schema({
           role: 'rails' | 'standard_pack' | 'avulso'
           dimensionSet?: 'v1-standard-250'
           fontStyle?: 'classic' | 'modern'
+          walls?: {
+            id: string
+            name: string
+            type: 'text' | 'logo'
+            maxWidthCm?: number
+            rows: {
+              id: string
+              columns: {
+                id: string
+                kind?: 'title' | 'item'
+                railModules: number
+                leftText: string
+                rightText: string
+                railAlign?: 'left' | 'center' | 'right'
+                textAlign?: 'left' | 'center' | 'right'
+                colorOverride?: string
+              }[]
+            }[]
+            logoSvgUrl?: string
+            logoSvgText?: string
+          }[]
           physicalGrid?: {
             id: string
             columns: {
@@ -482,7 +504,7 @@ const _schema = i.schema({
       leadType: i.string<'custom_idea' | 'photo_request' | 'b2b'>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
-      status: i.string<'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'>().indexed(),
+      status: i.string<'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'>().indexed(),
       createdAt: i.date().indexed(),
       updatedAt: i.date(),
     }),
@@ -575,6 +597,7 @@ const _schema = i.schema({
       }[]>().optional(),
       outsourced: i.boolean().indexed(),
       assignedFarmId: i.string().indexed().optional(),
+      farmPayoutAmount: i.number().optional(),
       customText: i.string().optional(),
       notes: i.string().optional(),
       createdAt: i.date().indexed(),

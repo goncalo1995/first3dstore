@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cancelJob, requeueJob } from '@/app/admin/production/actions'
 import { toast } from 'sonner'
 import { recheckStripeOrderPayment } from './actions'
+import { ModularProductionBomInline } from '@/app/admin/_components/modular-production-bom'
 
 type OrderItem = OrderRecord['items'][number]
 type OrderItemStatus = NonNullable<OrderItem['itemStatus']>
@@ -352,6 +353,7 @@ function OrderEditDialog({
                 ))}
               </div>
             </div>
+            <ModularProductionBomInline record={order.isRequest ? order : draft} />
             {/* Production Breakdown */}
             <div className="rounded-lg border border-border bg-violet-50/30 p-4">
               <h3 className="mb-3 flex items-center gap-2 font-semibold text-violet-900">
@@ -437,6 +439,9 @@ function OrderEditDialog({
   )
 }
 
+type OrderPipelineStatus = 'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'
+type LegacyOrderRequestStatus = OrderPipelineStatus | 'MODELING' | 'B2B_LEAD'
+
 type OrderRequest = {
   id: string
   customerName: string
@@ -445,30 +450,38 @@ type OrderRequest = {
   companyName?: string
   productName?: string
   productSlug?: string
-  status: 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+  status: LegacyOrderRequestStatus
+  leadType?: 'custom_idea' | 'photo_request' | 'b2b'
   isPaid?: boolean
   selectedPrice?: number
   createdAt: Date | string
 }
 
-const orderRequestStatusLabels: Record<OrderRequest['status'], string> = {
+function normalizeRequestStatus(status: LegacyOrderRequestStatus): OrderPipelineStatus {
+  if (status === 'MODELING' || status === 'B2B_LEAD') return 'PENDING_REVIEW'
+  return status
+}
+
+const orderRequestStatusLabels: Record<OrderPipelineStatus, string> = {
+  DRAFT: 'Rascunho',
   PENDING_REVIEW: 'Pendente',
-  MODELING: 'Modelação',
   AWAITING_PAYMENT: 'Aguarda pagamento',
+  PAID: 'Pago',
   READY_FOR_PRODUCTION: 'Pronto para produção',
   IN_PRODUCTION: 'Em produção',
   SHIPPED: 'Enviado',
-  B2B_LEAD: 'Lead B2B',
+  CANCELLED: 'Cancelado',
 }
 
-const orderRequestStatusTone: Record<OrderRequest['status'], string> = {
+const orderRequestStatusTone: Record<OrderPipelineStatus, string> = {
+  DRAFT: 'bg-secondary text-muted-foreground',
   PENDING_REVIEW: 'bg-sky-100 text-sky-900',
-  MODELING: 'bg-violet-100 text-violet-900',
   AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
+  PAID: 'bg-green-100 text-green-900',
   READY_FOR_PRODUCTION: 'bg-lime-100 text-lime-900',
   IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
   SHIPPED: 'bg-indigo-100 text-indigo-900',
-  B2B_LEAD: 'bg-orange-100 text-orange-900',
+  CANCELLED: 'bg-destructive/10 text-destructive',
 }
 
 export function OrdersManager({
@@ -498,7 +511,7 @@ export function OrdersManager({
   const [draftOrder, setDraftOrder] = useState<any | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [activeTab, setActiveTab] = useState<'orders' | 'requests'>('orders')
-  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | OrderRequest['status']>('all')
+  const [requestStatusFilter, setRequestStatusFilter] = useState<'all' | OrderPipelineStatus>('all')
   const [requestPaymentFilter, setRequestPaymentFilter] = useState<'all' | 'paid' | 'unpaid' | 'not_applicable'>('all')
   const [pendingPaymentSyncId, setPendingPaymentSyncId] = useState<string | null>(null)
   const router = useRouter()
@@ -537,6 +550,7 @@ export function OrdersManager({
         subtotal: Number(subtotal) || 0,
         shippingCost,
         total,
+        status: 'PENDING_REVIEW',
         paymentStatus: 'pending',
         fulfillmentStatus: 'new',
         notes,
@@ -624,6 +638,12 @@ export function OrdersManager({
   const saveEditedOrder = async () => {
     if (!editingOrder || !draftOrder) return
     setIsEditing(true)
+    const orderStatus: OrderPipelineStatus =
+      draftOrder.fulfillmentStatus === 'cancelled' ? 'CANCELLED'
+        : draftOrder.fulfillmentStatus === 'shipped' || draftOrder.fulfillmentStatus === 'completed' ? 'SHIPPED'
+          : draftOrder.fulfillmentStatus === 'printing' ? 'IN_PRODUCTION'
+            : draftOrder.paymentStatus === 'paid' ? 'PAID'
+              : 'AWAITING_PAYMENT'
 
     if (editingOrder.isRequest) {
       // Update order request
@@ -632,7 +652,7 @@ export function OrdersManager({
           customerName: draftOrder.customerName,
           customerEmail: draftOrder.customerEmail,
           customerPhone: draftOrder.customerPhone,
-          status: draftOrder.fulfillmentStatus === 'shipped' ? 'SHIPPED' : draftOrder.fulfillmentStatus === 'printing' ? 'IN_PRODUCTION' : 'PENDING_REVIEW',
+          status: orderStatus === 'AWAITING_PAYMENT' ? 'PENDING_REVIEW' : orderStatus,
           isPaid: draftOrder.paymentStatus === 'paid',
           selectedPrice: draftOrder.total || draftOrder.subtotal,
           notes: draftOrder.notes,
@@ -652,6 +672,7 @@ export function OrdersManager({
         subtotal: draftOrder.subtotal,
         shippingCost: draftOrder.shippingCost,
         total: draftOrder.total,
+        status: orderStatus,
         paymentStatus: draftOrder.paymentStatus,
         fulfillmentStatus: draftOrder.fulfillmentStatus,
         notes: draftOrder.notes,
@@ -715,10 +736,12 @@ export function OrdersManager({
     const normalizedQuery = query.trim().toLowerCase()
     return orderRequests
       .filter(request => {
-        if (requestStatusFilter !== 'all' && request.status !== requestStatusFilter) return false
+        const normalizedStatus = normalizeRequestStatus(request.status)
+        const isB2BLead = request.leadType === 'b2b' || request.status === 'B2B_LEAD'
+        if (requestStatusFilter !== 'all' && normalizedStatus !== requestStatusFilter) return false
         if (requestPaymentFilter === 'paid' && !request.isPaid) return false
-        if (requestPaymentFilter === 'unpaid' && (request.isPaid || request.status === 'B2B_LEAD')) return false
-        if (requestPaymentFilter === 'not_applicable' && request.status !== 'B2B_LEAD') return false
+        if (requestPaymentFilter === 'unpaid' && (request.isPaid || isB2BLead)) return false
+        if (requestPaymentFilter === 'not_applicable' && !isB2BLead) return false
         if (!normalizedQuery) return true
         const haystack = [
           request.id,
@@ -1002,7 +1025,7 @@ export function OrdersManager({
                         {request.companyName && <p className="mt-1 text-[10px] text-muted-foreground">{request.companyName}</p>}
                       </div>
                       <div className="space-y-1">
-                        <span className="text-xs font-medium">{request.status === 'B2B_LEAD' ? 'Para Empresas' : request.productName || request.productSlug || 'Custom product'}</span>
+                        <span className="text-xs font-medium">{request.leadType === 'b2b' || request.status === 'B2B_LEAD' ? 'Para Empresas' : request.productName || request.productSlug || 'Custom product'}</span>
                       </div>
                       <div>
                         <Badge variant="outline" className={`text-[9px] uppercase font-bold px-1.5 h-5 border-none shadow-none ${factory.tone}`}>
@@ -1011,12 +1034,12 @@ export function OrdersManager({
                       </div>
                       <div>
                         <Badge variant={request.isPaid ? 'default' : 'outline'} className="text-[10px] h-5">
-                          {request.status === 'B2B_LEAD' ? 'N/A' : request.isPaid ? 'Paid' : 'Pending'}
+                          {request.leadType === 'b2b' || request.status === 'B2B_LEAD' ? 'N/A' : request.isPaid ? 'Paid' : 'Pending'}
                         </Badge>
                       </div>
                       <div>
-                        <Badge className={`text-[10px] h-5 ${orderRequestStatusTone[request.status]}`}>
-                          {orderRequestStatusLabels[request.status]}
+                        <Badge className={`text-[10px] h-5 ${orderRequestStatusTone[normalizeRequestStatus(request.status)]}`}>
+                          {request.leadType === 'b2b' || request.status === 'B2B_LEAD' ? 'B2B · ' : ''}{orderRequestStatusLabels[normalizeRequestStatus(request.status)]}
                         </Badge>
                       </div>
                       <div>

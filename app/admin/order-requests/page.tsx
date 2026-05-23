@@ -13,9 +13,11 @@ import { Label } from '@/components/ui/label'
 import { buildPuzzleOpenScad, buildPuzzleParamsJson, getCutParamsFromConfig } from '@/lib/puzzle/openscad'
 import { buildPuzzleGridPath } from '@/lib/puzzle/preview'
 import type { SvgPuzzleConfig } from '@/lib/puzzle/types'
+import { ModularProductionBom } from '@/app/admin/_components/modular-production-bom'
 import { approveOrderRequestForProduction, approveOrderRequestPhoto, sendPuzzlePaymentApproval, updateOrderRequestPaymentReceived, updateOrderRequestStatus } from './actions'
 
-type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+type OrderRequestStatus = 'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'
+type LegacyOrderRequestStatus = OrderRequestStatus | 'MODELING' | 'B2B_LEAD'
 
 type OrderRequest = {
   id: string
@@ -41,7 +43,7 @@ type OrderRequest = {
   isPaid?: boolean
   notes?: string
   leadType?: 'custom_idea' | 'photo_request' | 'b2b'
-  status: OrderRequestStatus
+  status: LegacyOrderRequestStatus
   createdAt: Date | string
   updatedAt: Date | string
 }
@@ -53,33 +55,41 @@ type ProductionJob = {
 }
 
 const statusLabels: Record<OrderRequestStatus, string> = {
+  DRAFT: 'Rascunho',
   PENDING_REVIEW: 'Pendente',
-  MODELING: 'Modelação',
   AWAITING_PAYMENT: 'Aguarda pagamento',
+  PAID: 'Pago',
   READY_FOR_PRODUCTION: 'Pronto para produção',
   IN_PRODUCTION: 'Em produção',
   SHIPPED: 'Enviado',
-  B2B_LEAD: 'Lead B2B',
+  CANCELLED: 'Cancelado',
 }
 
 const statusDescriptions: Record<OrderRequestStatus, string> = {
+  DRAFT: 'rascunho ainda sem revisão',
   PENDING_REVIEW: 'recebido para análise',
-  MODELING: 'ficheiros/modelação em preparação',
   AWAITING_PAYMENT: 'aprovado, pagamento pendente',
+  PAID: 'pagamento confirmado',
   READY_FOR_PRODUCTION: 'pagamento confirmado, pronto para criar produção',
   IN_PRODUCTION: 'em impressão/montagem',
   SHIPPED: 'enviado ao cliente',
-  B2B_LEAD: 'pedido empresarial por qualificar',
+  CANCELLED: 'cancelado',
 }
 
 const statusTone: Record<OrderRequestStatus, string> = {
+  DRAFT: 'bg-secondary text-muted-foreground',
   PENDING_REVIEW: 'bg-sky-100 text-sky-900',
-  MODELING: 'bg-violet-100 text-violet-900',
   AWAITING_PAYMENT: 'bg-amber-100 text-amber-900',
+  PAID: 'bg-green-100 text-green-900',
   READY_FOR_PRODUCTION: 'bg-lime-100 text-lime-900',
   IN_PRODUCTION: 'bg-emerald-100 text-emerald-900',
   SHIPPED: 'bg-indigo-100 text-indigo-900',
-  B2B_LEAD: 'bg-orange-100 text-orange-900',
+  CANCELLED: 'bg-destructive/10 text-destructive',
+}
+
+function normalizeRequestStatus(status: LegacyOrderRequestStatus): OrderRequestStatus {
+  if (status === 'MODELING' || status === 'B2B_LEAD') return 'PENDING_REVIEW'
+  return status
 }
 
 function formatDate(value: Date | string) {
@@ -195,12 +205,13 @@ function RequestDrawer({
   const [paymentUrl, setPaymentUrl] = useState(request.paymentUrl || '')
   const [quotedPrice, setQuotedPrice] = useState(String(request.quotedPrice ?? request.selectedPrice ?? request.estimatedPrice ?? puzzleConfig?.estimatedPrice ?? ''))
   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
-  const isB2BLead = request.status === 'B2B_LEAD'
+  const normalizedStatus = normalizeRequestStatus(request.status)
+  const isB2BLead = request.leadType === 'b2b' || request.status === 'B2B_LEAD'
   const isHexaRequest = request.canvasConfig?.type === 'hexa-memoria'
   const hexaProductionSummary = getHexaProductionSummary(request)
   const canApproveProduction = isHexaRequest
-    ? request.status === 'READY_FOR_PRODUCTION' && request.isPaid === true
-    : request.status === 'AWAITING_PAYMENT' && request.isPaid === true
+    ? normalizedStatus === 'READY_FOR_PRODUCTION' && request.isPaid === true
+    : (normalizedStatus === 'PAID' || normalizedStatus === 'READY_FOR_PRODUCTION') && request.isPaid === true
 
   const runStatusUpdate = (status: OrderRequestStatus) => {
     startTransition(async () => {
@@ -327,7 +338,7 @@ function RequestDrawer({
                 <Label htmlFor="request-status">Estado do pedido</Label>
                 <select
                   id="request-status"
-                  value={request.status}
+                  value={normalizedStatus}
                   onChange={(event) => runStatusUpdate(event.target.value as OrderRequestStatus)}
                   disabled={isPending}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -336,7 +347,7 @@ function RequestDrawer({
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-                <p className="text-sm text-muted-foreground">{statusDescriptions[request.status]}</p>
+                <p className="text-sm text-muted-foreground">{statusDescriptions[normalizedStatus]}</p>
               </CardContent>
             </Card>
 
@@ -403,6 +414,8 @@ function RequestDrawer({
           </section>
 
           <section className="space-y-4">
+            <ModularProductionBom record={request} />
+
             <Card>
               <CardHeader>
                 <CardTitle>{puzzleConfig ? 'Pré-visualização do puzzle' : isHexaRequest ? 'Mosaico HexaMemória' : 'Fotografia'}</CardTitle>
@@ -518,7 +531,7 @@ function RequestDrawer({
                 ) : (
                   <p className="text-sm text-muted-foreground">Ainda não existe job de produção.</p>
                 )}
-                {!isHexaRequest && request.status === 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
+                {!isHexaRequest && normalizedStatus === 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
                   <label className="flex items-start gap-3 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
                     <input
                       type="checkbox"
@@ -534,7 +547,7 @@ function RequestDrawer({
                   </label>
                 )}
                 {!isHexaRequest && (
-                  <Button onClick={approvePhoto} disabled={isPending || isB2BLead || request.status === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
+                  <Button onClick={approvePhoto} disabled={isPending || isB2BLead || normalizedStatus === 'AWAITING_PAYMENT' || relatedJobs.length > 0} variant="outline" className="w-full">
                     {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
                     Aprovar Foto
                   </Button>
@@ -548,7 +561,7 @@ function RequestDrawer({
                     Este pedido é um lead empresarial. Qualifique o contacto antes de criar um orçamento ou produção.
                   </p>
                 )}
-                {!isB2BLead && !isHexaRequest && request.status !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
+                {!isB2BLead && !isHexaRequest && normalizedStatus !== 'AWAITING_PAYMENT' && relatedJobs.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     A produção só fica disponível depois de aprovar a fotografia e confirmar o pagamento.
                   </p>
@@ -558,7 +571,7 @@ function RequestDrawer({
                     A produção HexaMemória fica disponível automaticamente depois do pagamento Stripe ser confirmado.
                   </p>
                 )}
-                {!isHexaRequest && request.status === 'AWAITING_PAYMENT' && request.isPaid !== true && relatedJobs.length === 0 && (
+                {!isHexaRequest && normalizedStatus === 'AWAITING_PAYMENT' && request.isPaid !== true && relatedJobs.length === 0 && (
                   <p className="text-xs text-muted-foreground">
                     Marque “Pagamento Recebido?” para desbloquear a produção.
                   </p>
@@ -588,14 +601,15 @@ export default function AdminOrderRequestsPage() {
   const jobs = (query.data?.productionJobs ?? []) as ProductionJob[]
   const visibleRequests = statusFilter === 'ALL'
     ? requests
-    : requests.filter((request) => request.status === statusFilter)
+    : requests.filter((request) => normalizeRequestStatus(request.status) === statusFilter)
   const selectedRequest = requests.find((request) => request.id === selectedId)
 
   const counts = useMemo(() => {
     return requests.reduce<Record<OrderRequestStatus, number>>((acc, request) => {
-      acc[request.status] = (acc[request.status] ?? 0) + 1
+      const status = normalizeRequestStatus(request.status)
+      acc[status] = (acc[status] ?? 0) + 1
       return acc
-    }, { PENDING_REVIEW: 0, MODELING: 0, AWAITING_PAYMENT: 0, READY_FOR_PRODUCTION: 0, IN_PRODUCTION: 0, SHIPPED: 0, B2B_LEAD: 0 })
+    }, { DRAFT: 0, PENDING_REVIEW: 0, AWAITING_PAYMENT: 0, PAID: 0, READY_FOR_PRODUCTION: 0, IN_PRODUCTION: 0, SHIPPED: 0, CANCELLED: 0 })
   }, [requests])
 
   if (query.isLoading) {
@@ -615,7 +629,7 @@ export default function AdminOrderRequestsPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-8">
         {Object.entries(statusLabels).map(([status, label]) => (
           <Card
             key={status}
@@ -667,7 +681,8 @@ export default function AdminOrderRequestsPage() {
               <tbody className="divide-y divide-border">
                 {visibleRequests.map((request) => {
                   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
-                  const isB2BLead = request.status === 'B2B_LEAD'
+                  const normalizedStatus = normalizeRequestStatus(request.status)
+                  const isB2BLead = request.leadType === 'b2b' || request.status === 'B2B_LEAD'
                   return (
                     <tr
                       key={request.id}
@@ -684,7 +699,7 @@ export default function AdminOrderRequestsPage() {
                         <p className="text-xs text-muted-foreground">{request.variantName || '-'}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge className={statusTone[request.status]}>{statusLabels[request.status]}</Badge>
+                        <Badge className={statusTone[normalizedStatus]}>{isB2BLead ? 'B2B · ' : ''}{statusLabels[normalizedStatus]}</Badge>
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={request.isPaid === true ? 'default' : 'outline'}>

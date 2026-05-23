@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { 
   LayoutDashboard, Printer as PrinterIcon, Calendar, Layers, HardDrive, 
   ExternalLink, History, RefreshCw, ArrowRight, PackageCheck, Play, Download,
@@ -80,9 +80,7 @@ export function ProductionHub() {
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [selectedJobDetails, setSelectedJobDetails] = useState<ProductionJob | null>(null)
-
-  if (isLoading) return <div className="flex h-[400px] items-center justify-center font-black uppercase tracking-[0.2em] animate-pulse text-muted-foreground/30">Syncing MRP Hub...</div>
-  if (error) return <div className="p-8 text-destructive font-bold">Error loading hub: {error.message}</div>
+  const [queueGroupingMode, setQueueGroupingMode] = useState<'queue' | 'client' | 'color' | 'bagging'>('queue')
 
   const { 
     productionJobs = [] as ProductionJob[], 
@@ -100,6 +98,12 @@ export function ProductionHub() {
 
   const selectedJobs = queuedJobs.filter((job: any) => selectedJobIds.includes(job.id))
   const allQueuedSelected = queuedJobs.length > 0 && selectedJobs.length === queuedJobs.length
+  const jobsByClient = useMemo(() => groupJobsByClient(queuedJobs), [queuedJobs])
+  const jobsByColor = useMemo(() => groupJobsByColor(queuedJobs), [queuedJobs])
+  const baggingGroups = useMemo(() => getBaggingGroups(queuedJobs), [queuedJobs])
+
+  if (isLoading) return <div className="flex h-[400px] items-center justify-center font-black uppercase tracking-[0.2em] animate-pulse text-muted-foreground/30">Syncing MRP Hub...</div>
+  if (error) return <div className="p-8 text-destructive font-bold">Error loading hub: {error.message}</div>
 
   const getJobProduct = (job: any) => {
     return catalogProducts.find((product: any) => product.id === job.productId)
@@ -288,28 +292,64 @@ export function ProductionHub() {
               </div>
             </div>
 
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
-              {queuedJobs.length === 0 ? (
-                <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20">
-                  <PrinterIcon className="h-10 w-10 mx-auto mb-4 opacity-20" />
-                  <p className="font-bold uppercase tracking-widest text-xs">Queue is empty</p>
-                  <p className="text-[10px] mt-1">All jobs are scheduled or in production</p>
-                </div>
-              ) : queuedJobs.map((job: ProductionJob) => (
-                <JobCard 
-                  key={job.id} 
-                  job={job} 
-                  printInfo={getJobPrintInfo(job)}
-                  selected={selectedJobIds.includes(job.id)}
-                  onSelectedChange={(selected) => toggleJobSelection(job.id, selected)}
-                  onReorder={handleReorder}
-                  onAction={() => setAssigningJob(job)}
-                  actionLabel="Schedule"
-                  onOutsource={() => toggleOutsourced(job.id, true)}
-                  onOpenDetails={() => setSelectedJobDetails(job)}
-                />
+            <div className="flex flex-wrap gap-2 rounded-xl border bg-background p-2">
+              {[
+                ['queue', 'Queue'],
+                ['client', 'By Client'],
+                ['color', 'By Color'],
+                ['bagging', 'Bagging Checklist'],
+              ].map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={queueGroupingMode === value ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 text-[10px] font-black uppercase tracking-widest"
+                  onClick={() => setQueueGroupingMode(value as typeof queueGroupingMode)}
+                >
+                  {label}
+                </Button>
               ))}
             </div>
+
+            {queuedJobs.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20">
+                <PrinterIcon className="h-10 w-10 mx-auto mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Queue is empty</p>
+                <p className="text-[10px] mt-1">All jobs are scheduled or in production</p>
+              </div>
+            ) : queueGroupingMode === 'client' ? (
+              <ClientGroupedQueue
+                groups={jobsByClient}
+                getJobPrintInfo={getJobPrintInfo}
+                onOpenDetails={(job) => setSelectedJobDetails(job)}
+              />
+            ) : queueGroupingMode === 'color' ? (
+              <ColorGroupedQueue
+                groups={jobsByColor}
+                getJobPrintInfo={getJobPrintInfo}
+                onOpenDetails={(job) => setSelectedJobDetails(job)}
+              />
+            ) : queueGroupingMode === 'bagging' ? (
+              <BaggingChecklist groups={baggingGroups} />
+            ) : (
+              <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+                {queuedJobs.map((job: ProductionJob) => (
+                  <JobCard 
+                    key={job.id} 
+                    job={job} 
+                    printInfo={getJobPrintInfo(job)}
+                    selected={selectedJobIds.includes(job.id)}
+                    onSelectedChange={(selected) => toggleJobSelection(job.id, selected)}
+                    onReorder={handleReorder}
+                    onAction={() => setAssigningJob(job)}
+                    actionLabel="Schedule"
+                    onOutsource={() => toggleOutsourced(job.id, true)}
+                    onOpenDetails={() => setSelectedJobDetails(job)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           <Separator className="my-6" />
@@ -375,6 +415,234 @@ export function ProductionHub() {
           onClose={() => setSelectedJobDetails(null)}
         />
       )}
+    </div>
+  )
+}
+
+type JobGroup = {
+  key: string
+  label: string
+  detail: string
+  colorHex?: string
+  jobs: any[]
+}
+
+type BaggingGroup = {
+  key: string
+  client: string
+  orderLabel: string
+  items: {
+    key: string
+    quantity: number
+    partLabel: string
+    productName: string
+    colorName: string
+    colorHex?: string
+  }[]
+}
+
+function getJobOrderKey(job: any) {
+  return String(job.orderId || job.orderRequestId || job.id || 'unassigned')
+}
+
+function getJobOrderLabel(job: any) {
+  if (job.orderId) return `Order #${String(job.orderId).slice(0, 8)}`
+  if (job.orderRequestId) return `Request #${String(job.orderRequestId).slice(0, 8)}`
+  return `Job #${String(job.id).slice(0, 8)}`
+}
+
+function getJobClientName(job: any) {
+  return String(job.order?.customerName || job.customerName || getJobOrderLabel(job))
+}
+
+function getJobColorKey(job: any) {
+  return String(job.globalColor?.id || job.colorName || job.colorHex || 'unassigned').toLowerCase()
+}
+
+function getJobQuantity(job: any) {
+  return Math.max(1, Number(job.quantity || 1))
+}
+
+function groupJobsByClient(jobs: any[]): JobGroup[] {
+  const groups = new Map<string, JobGroup>()
+  for (const job of jobs) {
+    const key = getJobOrderKey(job)
+    const existing = groups.get(key) ?? {
+      key,
+      label: getJobClientName(job),
+      detail: getJobOrderLabel(job),
+      jobs: [] as any[],
+    }
+    existing.jobs.push(job)
+    groups.set(key, existing)
+  }
+  return Array.from(groups.values()).sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function groupJobsByColor(jobs: any[]): JobGroup[] {
+  const groups = new Map<string, JobGroup>()
+  for (const job of jobs) {
+    const key = getJobColorKey(job)
+    const existing = groups.get(key) ?? {
+      key,
+      label: String(job.colorName || 'Unassigned'),
+      detail: String(job.materialType || 'PLA'),
+      colorHex: job.colorHex,
+      jobs: [] as any[],
+    }
+    existing.jobs.push(job)
+    groups.set(key, existing)
+  }
+  return Array.from(groups.values()).sort((left, right) => left.label.localeCompare(right.label))
+}
+
+function getBaggingGroups(jobs: any[]): BaggingGroup[] {
+  return groupJobsByClient(jobs).map(group => {
+    const items = new Map<string, BaggingGroup['items'][number]>()
+    for (const job of group.jobs) {
+      const partLabel = String(job.partLabel || 'Part')
+      const productName = String(job.productName || 'Product')
+      const colorName = String(job.colorName || 'Unassigned')
+      const key = `${productName}::${partLabel}::${colorName}`
+      const existing = items.get(key) ?? {
+        key,
+        quantity: 0,
+        partLabel,
+        productName,
+        colorName,
+        colorHex: job.colorHex,
+      }
+      existing.quantity += getJobQuantity(job)
+      items.set(key, existing)
+    }
+
+    return {
+      key: group.key,
+      client: group.label,
+      orderLabel: group.detail,
+      items: Array.from(items.values()).sort((left, right) => (
+        left.colorName.localeCompare(right.colorName) || left.partLabel.localeCompare(right.partLabel)
+      )),
+    }
+  })
+}
+
+function GroupedJobSection({
+  group,
+  getJobPrintInfo,
+  onOpenDetails,
+}: {
+  group: JobGroup
+  getJobPrintInfo: (job: any) => any
+  onOpenDetails: (job: any) => void
+}) {
+  const totalQuantity = group.jobs.reduce((sum, job) => sum + getJobQuantity(job), 0)
+
+  return (
+    <div className="overflow-hidden rounded-xl border bg-background">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 p-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-black uppercase tracking-tight">
+            {group.colorHex && <span className="h-4 w-4 rounded-md border shadow-sm" style={{ backgroundColor: group.colorHex }} />}
+            {group.label}
+          </p>
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group.detail}</p>
+        </div>
+        <Badge variant="outline" className="h-6 font-black uppercase tracking-widest">
+          {totalQuantity} part{totalQuantity === 1 ? '' : 's'}
+        </Badge>
+      </div>
+      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+        {group.jobs.map(job => (
+          <JobCard
+            key={job.id}
+            job={job}
+            printInfo={getJobPrintInfo(job)}
+            compact
+            onOpenDetails={() => onOpenDetails(job)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ClientGroupedQueue({
+  groups,
+  getJobPrintInfo,
+  onOpenDetails,
+}: {
+  groups: JobGroup[]
+  getJobPrintInfo: (job: any) => any
+  onOpenDetails: (job: any) => void
+}) {
+  return (
+    <div className="space-y-4">
+      {groups.map(group => (
+        <GroupedJobSection
+          key={group.key}
+          group={group}
+          getJobPrintInfo={getJobPrintInfo}
+          onOpenDetails={onOpenDetails}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ColorGroupedQueue({
+  groups,
+  getJobPrintInfo,
+  onOpenDetails,
+}: {
+  groups: JobGroup[]
+  getJobPrintInfo: (job: any) => any
+  onOpenDetails: (job: any) => void
+}) {
+  return (
+    <div className="space-y-4">
+      {groups.map(group => (
+        <GroupedJobSection
+          key={group.key}
+          group={group}
+          getJobPrintInfo={getJobPrintInfo}
+          onOpenDetails={onOpenDetails}
+        />
+      ))}
+    </div>
+  )
+}
+
+function BaggingChecklist({ groups }: { groups: BaggingGroup[] }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {groups.map(group => (
+        <div key={group.key} className="overflow-hidden rounded-xl border bg-background">
+          <div className="border-b bg-muted/30 p-4">
+            <p className="text-sm font-black uppercase tracking-tight">Client: {group.client}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group.orderLabel}</p>
+          </div>
+          <div className="divide-y">
+            {group.items.map(item => (
+              <label key={item.key} className="flex cursor-pointer items-center justify-between gap-3 p-3 hover:bg-muted/30">
+                <span className="flex min-w-0 items-center gap-3">
+                  <input type="checkbox" className="h-4 w-4 rounded border-border" aria-label={`Packed ${item.partLabel}`} />
+                  <span className="h-4 w-4 rounded-md border shadow-sm" style={{ backgroundColor: item.colorHex || '#d1d5db' }} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold">
+                      {item.quantity}x {item.partLabel} {item.colorName}
+                    </span>
+                    <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      {item.productName}
+                    </span>
+                  </span>
+                </span>
+                <PackageCheck className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

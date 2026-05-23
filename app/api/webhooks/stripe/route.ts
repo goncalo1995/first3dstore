@@ -4,6 +4,7 @@ import { Resend } from 'resend'
 import { dbAdmin, id } from '@/lib/db-admin'
 import { HexaOrderConfirmationEmail } from '@/components/email-template'
 import { getHexaOrderAdminNotificationEmail } from '@/lib/email-templates'
+import { formatModularProductionBomText } from '@/lib/modular-production-bom'
 
 export const runtime = 'nodejs'
 
@@ -140,6 +141,23 @@ function getMenuOrderSummary(order: any) {
   const menuItem = menuItems.find((item: any) => (item.menuSystem?.lines ?? []).length > 0) ?? menuItems[0]
   const menuSystem = menuItem?.menuSystem
   if (!menuSystem) return ''
+  const wallSummary = Array.isArray(menuSystem.walls) && menuSystem.walls.length > 0
+    ? formatModularProductionBomText(menuSystem)
+    : ''
+
+  if (wallSummary) {
+    return `\n\nSistema Modular — Collection 01
+
+${wallSummary}
+
+PREÇO
+Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
+Caracteres extra: ${menuSystem.extraCharacters ?? 0}
+Total de caracteres: ${menuSystem.totalCharacters ?? 0}
+Subtotal antes desconto: ${formatPrice(Number(menuSystem.subtotalBeforeDiscount ?? 0))}
+Desconto campanha: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
+Total Sinalética Modular após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}`
+  }
 
   const lineBreakdown = (menuSystem.lines ?? [])
     .map((line: any) => `- Linha ${line.index}: ${line.characterCount} caracteres${line.widthWarning ? ' | aviso: pode ficar apertada' : ''} | ${line.text}`)
@@ -327,6 +345,7 @@ export async function POST(req: NextRequest) {
       if (orderId) {
         transactions.push(
           dbAdmin.tx.orders[orderId].update({
+            status: 'PAID',
             paymentStatus: 'paid',
             paidAt: now,
             stripeSessionId,

@@ -11,16 +11,17 @@ import {
   type ProductionJobTemplate,
 } from '@/lib/products'
 
-type OrderRequestStatus = 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'B2B_LEAD'
+type OrderRequestStatus = 'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'
 
 const validStatuses = new Set<OrderRequestStatus>([
+  'DRAFT',
   'PENDING_REVIEW',
-  'MODELING',
   'AWAITING_PAYMENT',
+  'PAID',
   'READY_FOR_PRODUCTION',
   'IN_PRODUCTION',
   'SHIPPED',
-  'B2B_LEAD',
+  'CANCELLED',
 ])
 
 function getSender() {
@@ -157,13 +158,14 @@ export async function updateOrderRequestPaymentReceived(requestId: string, isPai
 
   const request = requestResult.orderRequests?.[0] as any
   if (!request) throw new Error('Pedido não encontrado.')
-  if (request.status !== 'AWAITING_PAYMENT') {
+  if (!['AWAITING_PAYMENT', 'PAID'].includes(request.status)) {
     throw new Error('O pagamento só pode ser confirmado quando o pedido aguarda pagamento.')
   }
 
   await dbAdmin.transact(
     dbAdmin.tx.orderRequests[requestId].update({
       isPaid,
+      status: isPaid ? 'PAID' : 'AWAITING_PAYMENT',
       updatedAt: new Date(),
     }),
   )
@@ -236,10 +238,10 @@ export async function approveOrderRequestForProduction(requestId: string) {
   const request = requestResult.orderRequests?.[0] as any
   if (!request) throw new Error('Pedido não encontrado.')
   const isHexa = request.canvasConfig?.type === 'hexa-memoria'
-  if (isHexa && request.status !== 'READY_FOR_PRODUCTION') {
+  if (isHexa && !['READY_FOR_PRODUCTION', 'PAID'].includes(request.status)) {
     throw new Error('A encomenda HexaMemória tem de estar paga antes de criar a produção.')
   }
-  if (!isHexa && request.status !== 'AWAITING_PAYMENT') {
+  if (!isHexa && !['PAID', 'READY_FOR_PRODUCTION'].includes(request.status)) {
     throw new Error('A fotografia deve ser aprovada e o pagamento confirmado antes de criar a produção.')
   }
   if (request.isPaid !== true) {

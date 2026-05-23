@@ -35,6 +35,7 @@ export type OrderRecord = {
   stripePaymentIntentId?: string
   paymentUrl?: string
   paidAt?: Date
+  status?: 'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'
   items: {
     productId?: string
     productName: string
@@ -77,6 +78,7 @@ export type OrderRecord = {
         priceAdd?: number
       }[]
     }
+    menuSystem?: any
     customText?: string
     unitPrice: number
     itemStatus?: 'new' | 'waiting_color' | 'scheduled' | 'printing' | 'printed' | 'assembled' | 'done' | 'blocked'

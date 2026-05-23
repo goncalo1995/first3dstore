@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type FocusEvent } from 'react'
 import type { InstaQLEntity } from '@instantdb/react'
-import { Check, Loader2, Minus, Palette, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Minus, Palette, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { db } from '@/lib/db'
 import type { AppSchema } from '@/instant.schema'
 import { sanitizeSvg } from '@/lib/puzzle/svg'
@@ -39,6 +40,7 @@ import type { ProductColor } from '@/lib/products'
 const MENU_RAIL_SLUG = 'menu-rail-25cm'
 const MENU_PACK_SLUG = 'menu-letter-pack-standard'
 const MENU_AVULSO_SLUG = 'menu-letter-custom'
+const MENU_PRODUCT_SLUGS = [MENU_RAIL_SLUG, MENU_PACK_SLUG, MENU_AVULSO_SLUG]
 const SHIPPING_COST = 4.99
 const BUILDER_STORAGE_KEY = 'em3d-modular-builder-active'
 const GENERATED_WALLS_STORAGE_KEY = 'em3d-modular-planner-walls-v1'
@@ -54,6 +56,13 @@ type CatalogProduct = Omit<CatalogProductBase, 'updatedAt'> & {
   inventory?: (Omit<ProductInventoryRecord, 'updatedAt'> & { updatedAt: ProductInventoryRecord['updatedAt'] | Date })
 }
 type GlobalColorRecord = Omit<GlobalColorBase, 'updatedAt'> & { updatedAt: GlobalColorBase['updatedAt'] | Date }
+type CustomBrandColorTarget = 'rails' | 'letters'
+type ResolvedColorSource = 'explicit' | 'default' | 'custom' | 'missing' | 'invalid'
+type ResolvedBuilderColor = {
+  color?: ProductColor
+  source: ResolvedColorSource
+  error?: string
+}
 
 type BuilderDraftActive = {
   version: 4
@@ -65,6 +74,7 @@ type BuilderDraftActive = {
   accentLetterColor?: ProductColor
   letterCardColor?: ProductColor
   customBrandColor?: string
+  customBrandColorTarget?: CustomBrandColorTarget
   extraLetterGroups: ExtraLetterGroup[]
   customerName: string
   customerEmail: string
@@ -80,6 +90,11 @@ type MenuColorPayload = {
   hex?: string
   globalColorId?: string
   priceAdd?: number
+}
+
+function normalizeProductInventoryRecord(value: unknown) {
+  if (Array.isArray(value)) return value[0] as CatalogProduct['inventory'] | undefined
+  return value as CatalogProduct['inventory'] | undefined
 }
 
 const defaultExtraLetterGroups: ExtraLetterGroup[] = [
@@ -120,6 +135,7 @@ function tintSvgForPreview(svg: string, color: string) {
 }
 
 function createColumn({
+  id,
   kind,
   leftText,
   rightText = '',
@@ -127,6 +143,7 @@ function createColumn({
   railAlign,
   textAlign,
 }: {
+  id?: string
   kind: 'title' | 'item'
   leftText: string
   rightText?: string
@@ -135,7 +152,7 @@ function createColumn({
   textAlign: TextAlign
 }): PhysicalColumn {
   return {
-    id: makeId('col'),
+    id: id ?? makeId('col'),
     kind,
     railModules: railModules ?? inferRailModulesForText(leftText, rightText),
     leftText,
@@ -145,24 +162,25 @@ function createColumn({
   }
 }
 
-function createRow(columns: PhysicalColumn[]): PhysicalRow {
+function createRow(columns: PhysicalColumn[], id?: string): PhysicalRow {
   return {
-    id: makeId('row'),
+    id: id ?? makeId('row'),
     columns,
   }
 }
 
-function createTitleRow(title: string, railModules = 2) {
+function createTitleRow(title: string, railModules = 2, id?: string, columnId?: string) {
   const text = sanitizeMenuText(title).replace(/\s+/g, ' ').trim().toUpperCase()
   return createRow([
     createColumn({
+      id: columnId,
       kind: 'title',
       leftText: text,
       railModules: Math.max(railModules, inferRailModulesForText(text)),
       railAlign: 'center',
       textAlign: 'center',
     }),
-  ])
+  ], id)
 }
 
 function createItemRow(leftText: string, rightText: string, railModules = 2, railAlign: RailAlign = 'left') {
@@ -186,24 +204,24 @@ function createDefaultWalls(): PhysicalWall[] {
       type: 'text',
       maxWidthCm: 200,
       rows: [
-        createTitleRow('Entradas', 2),
+        createTitleRow('Entradas', 2, 'main-wall-row-entradas-title', 'main-wall-col-entradas-title'),
         createRow([
-          createColumn({ kind: 'item', leftText: 'SOPA DO DIA', rightText: '3,50€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'BRUSCHETTA', rightText: '5,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'TÁBUA MINI', rightText: '8,00€', railModules: 2, railAlign: 'right', textAlign: 'left' }),
-        ]),
-        createTitleRow('Pratos', 2),
+          createColumn({ id: 'main-wall-col-sopa', kind: 'item', leftText: 'SOPA DO DIA', rightText: '3,50€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-bruschetta', kind: 'item', leftText: 'BRUSCHETTA', rightText: '5,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-tabua-mini', kind: 'item', leftText: 'TÁBUA MINI', rightText: '8,00€', railModules: 2, railAlign: 'right', textAlign: 'left' }),
+        ], 'main-wall-row-entradas-items'),
+        createTitleRow('Pratos', 2, 'main-wall-row-pratos-title', 'main-wall-col-pratos-title'),
         createRow([
-          createColumn({ kind: 'item', leftText: 'BACALHAU DA CASA', rightText: '14,50€', railModules: 3, railAlign: 'left', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'RISOTTO', rightText: '13,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'BIFE GRELHADO', rightText: '16,00€', railModules: 3, railAlign: 'right', textAlign: 'left' }),
-        ]),
-        createTitleRow('Sobremesas', 2),
+          createColumn({ id: 'main-wall-col-bacalhau', kind: 'item', leftText: 'BACALHAU DA CASA', rightText: '14,50€', railModules: 3, railAlign: 'left', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-risotto', kind: 'item', leftText: 'RISOTTO', rightText: '13,00€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-bife', kind: 'item', leftText: 'BIFE GRELHADO', rightText: '16,00€', railModules: 3, railAlign: 'right', textAlign: 'left' }),
+        ], 'main-wall-row-pratos-items'),
+        createTitleRow('Sobremesas', 2, 'main-wall-row-sobremesas-title', 'main-wall-col-sobremesas-title'),
         createRow([
-          createColumn({ kind: 'item', leftText: 'MOUSSE', rightText: '4,00€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'PUDIM', rightText: '4,50€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
-          createColumn({ kind: 'item', leftText: 'CAFÉ', rightText: '1,20€', railModules: 1, railAlign: 'right', textAlign: 'left' }),
-        ]),
+          createColumn({ id: 'main-wall-col-mousse', kind: 'item', leftText: 'MOUSSE', rightText: '4,00€', railModules: 2, railAlign: 'left', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-pudim', kind: 'item', leftText: 'PUDIM', rightText: '4,50€', railModules: 2, railAlign: 'center', textAlign: 'left' }),
+          createColumn({ id: 'main-wall-col-cafe', kind: 'item', leftText: 'CAFÉ', rightText: '1,20€', railModules: 1, railAlign: 'right', textAlign: 'left' }),
+        ], 'main-wall-row-sobremesas-items'),
       ],
     },
     {
@@ -212,9 +230,9 @@ function createDefaultWalls(): PhysicalWall[] {
       type: 'text',
       rows: [
         createRow([
-          createColumn({ kind: 'title', leftText: 'WC', railModules: 1, railAlign: 'left', textAlign: 'center' }),
-          createColumn({ kind: 'item', leftText: 'ABERTO', rightText: '09-19H', railModules: 2, railAlign: 'right', textAlign: 'left' }),
-        ]),
+          createColumn({ id: 'signal-wall-col-wc', kind: 'title', leftText: 'WC', railModules: 1, railAlign: 'left', textAlign: 'center' }),
+          createColumn({ id: 'signal-wall-col-aberto', kind: 'item', leftText: 'ABERTO', rightText: '09-19H', railModules: 2, railAlign: 'right', textAlign: 'left' }),
+        ], 'signal-wall-row-main'),
       ],
     },
   ]
@@ -309,6 +327,10 @@ function normalizeDraftColor(value: unknown): ProductColor | undefined {
   }
 }
 
+function normalizeCustomBrandColorTarget(value: unknown): CustomBrandColorTarget {
+  return value === 'rails' ? 'rails' : 'letters'
+}
+
 function normalizeExtraLetterGroups(value: unknown): ExtraLetterGroup[] {
   if (!Array.isArray(value)) return defaultExtraLetterGroups
   return defaultExtraLetterGroups.map(defaultGroup => {
@@ -343,6 +365,7 @@ function readInitialDraft(): BuilderDraftActive {
               accentLetterColor: normalizeDraftColor(parsed.accentLetterColor),
               letterCardColor: normalizeDraftColor(parsed.letterCardColor),
               customBrandColor: typeof parsed.customBrandColor === 'string' ? parsed.customBrandColor : undefined,
+              customBrandColorTarget: normalizeCustomBrandColorTarget(parsed.customBrandColorTarget),
               extraLetterGroups: normalizeExtraLetterGroups(parsed.extraLetterGroups),
               customerName: String(parsed.customerName ?? ''),
               customerEmail: String(parsed.customerEmail ?? ''),
@@ -414,24 +437,25 @@ function intersectColorSets(colorSets: ProductColor[][]) {
 }
 
 function getProductOfferedColors(product: CatalogProduct | undefined, activeGlobalColors: GlobalColorRecord[]) {
-  const inventoryColors = product?.inventory?.colorInventory ?? []
+  const inventory = normalizeProductInventoryRecord(product?.inventory)
+  const inventoryColors = inventory?.colorInventory ?? []
   const colors = inventoryColors
     .filter(color => color.offered)
-    .map((color): ProductColor | null => {
+    .map((color): ProductColor => {
       const globalColor = activeGlobalColors.find(candidate => {
         if (color.globalColorId && candidate.id === color.globalColorId) return true
         return candidate.name.trim().toLowerCase() === color.colorName.trim().toLowerCase()
       })
-      if (!globalColor) return null
 
       return {
-        name: globalColor.name,
-        hex: globalColor.hex,
-        globalColorId: globalColor.id,
-        priceAdd: globalColor.priceAdd ?? 0,
+        name: globalColor?.name ?? color.colorName,
+        hex: globalColor?.hex ?? color.colorHex,
+        globalColorId: globalColor?.id ?? color.globalColorId,
+        priceAdd: globalColor?.priceAdd ?? color.priceAdd ?? 0,
+        stockQuantity: color.stockQuantity,
+        gramsAvailable: color.gramsAvailable,
       }
     })
-    .filter((color): color is ProductColor => Boolean(color))
 
   return uniqueColors(colors)
 }
@@ -457,9 +481,126 @@ function stripMenuColor(color: ProductColor): MenuColorPayload {
   }
 }
 
+function normalizeHexColor(value: string) {
+  const trimmed = value.trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase()
+  if (/^[0-9a-fA-F]{6}$/.test(trimmed)) return `#${trimmed.toLowerCase()}`
+  return ''
+}
+
+function resolveColorSlot({
+  explicitColor,
+  availableColors,
+  defaultNames,
+  label,
+}: {
+  explicitColor?: ProductColor
+  availableColors: ProductColor[]
+  defaultNames: string[]
+  label: string
+}): ResolvedBuilderColor {
+  if (explicitColor) {
+    const matchedColor = availableColors.find(color => colorMatches(color, explicitColor))
+    if (matchedColor) return { color: matchedColor, source: 'explicit' }
+    return {
+      source: 'invalid',
+      error: `${label}: "${explicitColor.name}" já não está disponível para este produto.`,
+    }
+  }
+
+  const defaultColor = findColor(availableColors, defaultNames)
+  if (defaultColor) return { color: defaultColor, source: 'default' }
+
+  return {
+    source: 'missing',
+    error: `${label}: não há cores disponíveis no inventário activo.`,
+  }
+}
+
+function resolveBuilderCheckoutColors({
+  railColor,
+  baseLetterColor,
+  accentLetterColor,
+  letterCardColor,
+  railColors,
+  letterColors,
+  customBrandColor,
+  customBrandColorTarget,
+}: {
+  railColor?: ProductColor
+  baseLetterColor?: ProductColor
+  accentLetterColor?: ProductColor
+  letterCardColor?: ProductColor
+  railColors: ProductColor[]
+  letterColors: ProductColor[]
+  customBrandColor: string
+  customBrandColorTarget: CustomBrandColorTarget
+}) {
+  const rail = resolveColorSlot({
+    explicitColor: railColor,
+    availableColors: railColors,
+    defaultNames: ['preto', 'black'],
+    label: 'Cor das calhas',
+  })
+  const baseLetter = resolveColorSlot({
+    explicitColor: baseLetterColor,
+    availableColors: letterColors,
+    defaultNames: ['branco', 'white'],
+    label: 'Letras base',
+  })
+  const accentLetter = resolveColorSlot({
+    explicitColor: accentLetterColor,
+    availableColors: letterColors,
+    defaultNames: ['amarelo', 'dourado', 'gold'],
+    label: 'Letras destaque',
+  })
+  const letterCard = resolveColorSlot({
+    explicitColor: letterCardColor,
+    availableColors: letterColors,
+    defaultNames: ['branco', 'white', 'marfim', 'ivory', 'bege'],
+    label: 'Cartões das letras',
+  })
+  const customHex = normalizeHexColor(customBrandColor)
+  const customColor = customHex
+    ? {
+        hex: customHex,
+        target: customBrandColorTarget,
+        source: 'custom' as const,
+      }
+    : undefined
+  const customColorError = customBrandColor.trim() && !customHex
+    ? 'Cor personalizada: use um HEX válido, por exemplo #d4af37.'
+    : undefined
+  const errors = [rail.error, baseLetter.error, accentLetter.error, letterCard.error, customColorError].filter((error): error is string => Boolean(error))
+
+  return {
+    railColor: rail,
+    baseLetterColor: baseLetter,
+    accentLetterColor: accentLetter.color ? accentLetter : baseLetter,
+    letterCardColor: letterCard,
+    customColor,
+    errors,
+  }
+}
+
 function scrollFocusedInputIntoView(event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  const element = event.currentTarget
+  const rect = element.getBoundingClientRect()
+  const parentRect = element.offsetParent?.getBoundingClientRect()
+  const topPadding = 112
+
+  let top = rect.top
+  if (parentRect) {
+    top = rect.top - parentRect.top
+  }
+
+  const neededScroll = top - topPadding
+
   window.setTimeout(() => {
-    event.currentTarget.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+    element.parentElement?.scrollTo({
+      top: neededScroll > 0 ? neededScroll : 0,
+      behavior: 'smooth',
+    })
   }, 120)
 }
 
@@ -670,6 +811,7 @@ function PhysicalGridPreview({
   accentLetterColor,
   letterCardColor,
   customBrandColor,
+  customBrandColorTarget,
 }: {
   wall: PhysicalWall
   metricsByColumn: Map<string, PhysicalColumnMetrics>
@@ -678,13 +820,15 @@ function PhysicalGridPreview({
   accentLetterColor?: ProductColor
   letterCardColor?: ProductColor
   customBrandColor?: string
+  customBrandColorTarget: CustomBrandColorTarget
 }) {
-  const railHex = railColor?.hex ?? '#111111'
-  const baseLetterHex = baseLetterColor?.hex ?? '#f8f4e9'
-  const accentLetterHex = accentLetterColor?.hex ?? '#d7b06f'
+  const customHex = customBrandColor ? normalizeHexColor(customBrandColor) : ''
+  const railHex = customHex && customBrandColorTarget === 'rails' ? customHex : railColor?.hex ?? '#111111'
+  const baseLetterHex = customHex && customBrandColorTarget === 'letters' ? customHex : baseLetterColor?.hex ?? '#f8f4e9'
+  const accentLetterHex = customHex && customBrandColorTarget === 'letters' ? customHex : accentLetterColor?.hex ?? '#d7b06f'
   const letterCardHex = letterCardColor?.hex ?? '#f7f2e8'
   const maxRowModules = Math.max(1, ...wall.rows.map(row => row.columns.reduce((sum, column) => sum + clampRailModules(column.railModules), 0)))
-  const logoTint = customBrandColor || baseLetterHex
+  const logoTint = customHex && customBrandColorTarget === 'letters' ? customHex : baseLetterHex
   const logoPreviewSvg = wall.logoSvgText ? tintSvgForPreview(wall.logoSvgText, logoTint) : ''
 
   return (
@@ -880,6 +1024,7 @@ function WallEditor({
   metricsByColumn,
   baseLetterColor,
   customBrandColor,
+  customBrandColorTarget,
   onAddTitleRow,
   onAddItemRow,
   onRemoveRow,
@@ -895,6 +1040,7 @@ function WallEditor({
   metricsByColumn: Map<string, PhysicalColumnMetrics>
   baseLetterColor?: ProductColor
   customBrandColor?: string
+  customBrandColorTarget: CustomBrandColorTarget
   onAddTitleRow: () => void
   onAddItemRow: () => void
   onRemoveRow: (rowId: string) => void
@@ -905,9 +1051,18 @@ function WallEditor({
   onUpdateColumnAlignment: (rowId: string, columnId: string, field: 'railAlign' | 'textAlign', value: RailAlign | TextAlign) => void
   onUploadLogoSvg: (file: File) => void
 }) {
+  const [openRowId, setOpenRowId] = useState(wall.rows[0]?.id ?? '')
   const wallMetrics = bom.walls.find(metric => metric.wallId === wall.id)
-  const logoTint = customBrandColor || baseLetterColor?.hex || '#111111'
+  const customHex = customBrandColor ? normalizeHexColor(customBrandColor) : ''
+  const logoTint = customHex && customBrandColorTarget === 'letters' ? customHex : baseLetterColor?.hex || '#111111'
   const logoPreviewSvg = wall.logoSvgText ? tintSvgForPreview(wall.logoSvgText, logoTint) : ''
+
+  useEffect(() => {
+    if (wall.type === 'logo') return
+    if (!wall.rows.some(row => row.id === openRowId)) {
+      setOpenRowId(wall.rows[0]?.id ?? '')
+    }
+  }, [openRowId, wall.id, wall.rows, wall.type])
 
   if (wall.type === 'logo') {
     return (
@@ -997,17 +1152,43 @@ function WallEditor({
       <div className="mt-5 space-y-4">
         {wall.rows.map((row, rowIndex) => {
           const canAddColumn = row.columns.length < MAX_COLUMNS_PER_ROW
+          const rowSummary = row.columns
+            .map(column => [column.leftText, column.rightText].filter(Boolean).join(' '))
+            .filter(Boolean)
+            .join(' · ')
+          const rowLabel = `Linha ${rowIndex + 1}: ${row.columns.length} coluna${row.columns.length === 1 ? '' : 's'}`
+          const isOpen = openRowId === row.id
           return (
-            <div key={row.id} className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+            <Collapsible
+              key={row.id}
+              open={isOpen}
+              onOpenChange={open => {
+                if (open) setOpenRowId(row.id)
+              }}
+              className="rounded-2xl border border-stone-200 bg-stone-50 p-3 transition hover:border-stone-300"
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-stone-500">Linha {rowIndex + 1}</p>
-                  <p className="mt-1 text-xs text-stone-500">{row.columns.length} coluna{row.columns.length === 1 ? '' : 's'}</p>
-                </div>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 cursor-pointer rounded-xl px-1 py-1 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-stone-950/20"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <ChevronDown className={`size-4 shrink-0 text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-black uppercase tracking-[0.16em] text-stone-500">{rowLabel}</span>
+                        <span className="mt-1 block truncate text-xs text-stone-500">{rowSummary || 'Sem texto definido'}</span>
+                      </span>
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => onAddColumnToRow(row.id)}
+                    onClick={() => {
+                      setOpenRowId(row.id)
+                      onAddColumnToRow(row.id)
+                    }}
                     disabled={!canAddColumn}
                     className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-stone-200 bg-white px-3 text-xs font-black text-stone-700 transition hover:border-stone-950 hover:text-stone-950 disabled:cursor-not-allowed disabled:opacity-40"
                     title={canAddColumn ? 'Adicionar coluna' : 'Limite de 4 colunas por linha'}
@@ -1027,11 +1208,12 @@ function WallEditor({
                 </div>
               </div>
 
-              <div className="mt-3 space-y-3">
+              <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+                <div className="mt-3 space-y-3">
                 {row.columns.map((column, columnIndex) => {
                   const metrics = metricsByColumn.get(`${row.id}:${column.id}`) ?? getColumnMetrics(row.id, column, wall)
                   return (
-                    <div key={column.id} className={`rounded-2xl border bg-white p-3 ${metrics.overflow ? 'border-red-300 ring-2 ring-red-100' : 'border-stone-200'}`}>
+                    <div key={column.id} className={`rounded-2xl border p-3 ${metrics.overflow ? 'border-red-300 bg-white ring-2 ring-red-100' : columnIndex % 2 === 0 ? 'border-stone-200 bg-white' : 'border-stone-200 bg-stone-100/70'}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-xs font-black uppercase tracking-[0.14em] text-stone-500">
@@ -1099,8 +1281,9 @@ function WallEditor({
                     </div>
                   )
                 })}
-              </div>
-            </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           )
         })}
       </div>
@@ -1125,7 +1308,8 @@ function ExtraLettersSection({
       </p>
       <div className="mt-5 grid gap-4">
         {groups.map(group => {
-          const needsColor = group.quantity > 0 && !group.color
+          const hasUnavailableColor = group.quantity > 0 && group.color && !colors.some(color => colorMatches(color, group.color as ProductColor))
+          const needsColor = group.quantity > 0 && (!group.color || hasUnavailableColor)
           return (
             <div key={group.id} className={`rounded-2xl border p-3 ${needsColor ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
               <div className="flex items-center justify-between gap-3">
@@ -1162,7 +1346,11 @@ function ExtraLettersSection({
                     selected={group.color as ProductColor | undefined}
                     onSelect={color => onUpdateGroup(group.id, current => ({ ...current, color }))}
                   />
-                  {needsColor && <p className="mt-2 text-xs font-bold text-red-700">Escolha uma cor para adicionar este extra ao BOM.</p>}
+                  {needsColor && (
+                    <p className="mt-2 text-xs font-bold text-red-700">
+                      {hasUnavailableColor ? 'Esta cor já não está disponível para Letras Extra.' : 'Escolha uma cor para adicionar este extra ao BOM.'}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1175,11 +1363,19 @@ function ExtraLettersSection({
 
 function BrandColorSection({
   value,
+  target,
   onChange,
+  onTargetChange,
 }: {
   value: string
+  target: CustomBrandColorTarget
   onChange: (value: string) => void
+  onTargetChange: (value: CustomBrandColorTarget) => void
 }) {
+  const normalizedValue = normalizeHexColor(value)
+  const pickerValue = normalizedValue || '#d4af37'
+  const hasValue = Boolean(value.trim())
+
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
       <div className="flex items-start gap-3">
@@ -1187,38 +1383,78 @@ function BrandColorSection({
           <Palette className="size-4" />
         </span>
         <div>
-          <h3 className="text-base font-black">Cor de marca personalizada</h3>
+          <h3 className="text-base font-black">Cor Personalizada</h3>
           <p className="mt-1 text-sm leading-6 text-stone-500">
-            Use apenas quando precisar de uma cor exacta da marca. Isto muda o fluxo para orçamento manual.
+            Simule uma cor exacta da marca nas calhas ou nas letras. Isto muda o fluxo para orçamento manual.
           </p>
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <input
-          type="color"
-          value={value || '#d4af37'}
-          onChange={event => onChange(event.target.value)}
-          className="h-11 w-14 cursor-pointer rounded-xl border border-stone-200 bg-white p-1"
-          aria-label="Escolher cor de marca"
-        />
-        <input
-          value={value}
-          onChange={event => onChange(event.target.value)}
-          onFocus={scrollFocusedInputIntoView}
-          placeholder="#d4af37"
-          className="h-11 min-w-0 flex-1 rounded-xl border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-stone-500"
-        />
-        {value && (
-          <button
-            type="button"
-            onClick={() => onChange('')}
-            className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:text-stone-950"
-            aria-label="Remover cor de marca"
-          >
-            <X className="size-4" />
-          </button>
-        )}
-      </div>
+      {!hasValue ? (
+        <button
+          type="button"
+          onClick={() => onChange('#d4af37')}
+          className="mt-4 inline-flex h-11 cursor-pointer items-center gap-2 rounded-full border border-stone-200 px-4 text-sm font-black text-stone-800 transition hover:border-stone-950 hover:bg-stone-50"
+        >
+          <Palette className="size-4" />
+          Activar Cor Personalizada
+        </button>
+      ) : (
+        <div className="mt-4 grid gap-4">
+          <div className="grid grid-cols-2 rounded-full border border-stone-200 bg-stone-50 p-1 text-xs font-black">
+            {([
+              ['rails', 'Calhas'],
+              ['letters', 'Letras'],
+            ] as const).map(([targetValue, label]) => (
+              <button
+                key={targetValue}
+                type="button"
+                onClick={() => onTargetChange(targetValue)}
+                className={`h-9 cursor-pointer rounded-full transition ${
+                  target === targetValue ? 'bg-stone-950 text-white shadow-sm' : 'text-stone-500 hover:text-stone-950'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={pickerValue}
+              onChange={event => onChange(event.target.value)}
+              className="h-11 w-14 cursor-pointer rounded-xl border border-stone-200 bg-white p-1"
+              aria-label="Escolher cor de marca"
+            />
+            <input
+              value={value}
+              onChange={event => onChange(event.target.value)}
+              onFocus={scrollFocusedInputIntoView}
+              placeholder="#d4af37"
+              className={`h-11 min-w-0 flex-1 rounded-xl border px-3 text-sm font-semibold outline-none transition focus:border-stone-500 ${
+                value.trim() && !normalizedValue ? 'border-red-300 bg-red-50 text-red-800' : 'border-stone-200'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:text-stone-950"
+              aria-label="Remover cor de marca"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          {value.trim() && !normalizedValue && (
+            <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+              Use um HEX válido, por exemplo #d4af37.
+            </p>
+          )}
+          {normalizedValue && (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+              Orçamento manual activo para sourcing de filamento personalizado.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1325,6 +1561,7 @@ export default function ModularBuilderPage() {
   const [accentLetterColor, setAccentLetterColor] = useState<ProductColor | undefined>()
   const [letterCardColor, setLetterCardColor] = useState<ProductColor | undefined>()
   const [customBrandColor, setCustomBrandColor] = useState('')
+  const [customBrandColorTarget, setCustomBrandColorTarget] = useState<CustomBrandColorTarget>('letters')
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -1339,10 +1576,17 @@ export default function ModularBuilderPage() {
     catalogProducts: {
       $: {
         where: {
-          slug: { $in: [MENU_RAIL_SLUG, MENU_PACK_SLUG, MENU_AVULSO_SLUG] },
+          slug: { $in: MENU_PRODUCT_SLUGS },
         },
       },
       inventory: {},
+    },
+    productInventory: {
+      $: {
+        where: {
+          productSlug: { $in: MENU_PRODUCT_SLUGS },
+        },
+      },
     },
     globalColors: {
       $: {
@@ -1353,7 +1597,14 @@ export default function ModularBuilderPage() {
     },
   })
 
-  const products = useMemo(() => query.data?.catalogProducts ?? [], [query.data?.catalogProducts])
+  const products = useMemo(() => {
+    const inventoryBySlug = new Map((query.data?.productInventory ?? []).map(inventory => [inventory.productSlug, inventory]))
+    return (query.data?.catalogProducts ?? []).map(product => ({
+      ...product,
+      inventory: normalizeProductInventoryRecord(product.inventory) ?? inventoryBySlug.get(product.slug),
+    }))
+  }, [query.data?.catalogProducts, query.data?.productInventory])
+  const catalogLoading = query.isLoading
   const activeGlobalColors = useMemo(
     () => (query.data?.globalColors ?? []).filter(color => color.isActive !== false && color.spoolStatus !== 'archived'),
     [query.data?.globalColors],
@@ -1369,10 +1620,24 @@ export default function ModularBuilderPage() {
     return uniqueColors([...packColors, ...avulsoColors])
   }, [avulsoColors, packColors])
 
-  const selectedRailColor = railColor && railColors.some(color => colorMatches(color, railColor)) ? railColor : findColor(railColors, ['preto', 'black'])
-  const selectedBaseLetterColor = baseLetterColor && letterColors.some(color => colorMatches(color, baseLetterColor)) ? baseLetterColor : findColor(letterColors, ['branco', 'white'])
-  const selectedAccentLetterColor = accentLetterColor && letterColors.some(color => colorMatches(color, accentLetterColor)) ? accentLetterColor : findColor(letterColors, ['amarelo', 'dourado', 'gold']) ?? selectedBaseLetterColor
-  const selectedLetterCardColor = letterCardColor && letterColors.some(color => colorMatches(color, letterCardColor)) ? letterCardColor : findLightCardColor(letterColors)
+  const colorResolution = useMemo(
+    () => resolveBuilderCheckoutColors({
+      railColor,
+      baseLetterColor,
+      accentLetterColor,
+      letterCardColor,
+      railColors,
+      letterColors,
+      customBrandColor,
+      customBrandColorTarget,
+    }),
+    [accentLetterColor, baseLetterColor, customBrandColor, customBrandColorTarget, letterCardColor, letterColors, railColor, railColors],
+  )
+  const selectedRailColor = colorResolution.railColor.color
+  const selectedBaseLetterColor = colorResolution.baseLetterColor.color
+  const selectedAccentLetterColor = colorResolution.accentLetterColor.color
+  const selectedLetterCardColor = colorResolution.letterCardColor.color
+  const activeCustomBrandColor = colorResolution.customColor?.hex ?? ''
 
   const activeWall = useMemo(() => walls.find(wall => wall.id === activeWallId) ?? walls[0] ?? createDefaultWalls()[0], [activeWallId, walls])
   const metricsByColumn = useMemo(() => {
@@ -1402,17 +1667,25 @@ export default function ModularBuilderPage() {
       })),
       baseLetterColor: selectedBaseLetterColor ? stripMenuColor(selectedBaseLetterColor) : undefined,
       accentLetterColor: selectedAccentLetterColor ? stripMenuColor(selectedAccentLetterColor) : undefined,
-      hasCustomBrandColor: Boolean(customBrandColor.trim()),
+      hasCustomBrandColor: Boolean(activeCustomBrandColor),
       railModuleUnitPrice,
       standardPackUnitPrice,
       avulsoUnitPrice,
     }),
-    [avulsoUnitPrice, customBrandColor, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
+    [activeCustomBrandColor, avulsoUnitPrice, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
   )
   const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
-  const hasExtraLetterColorMissing = extraLetterGroups.some(group => group.quantity > 0 && !group.color)
+  const extraLetterColorErrors = extraLetterGroups.flatMap(group => {
+    if (group.quantity <= 0) return []
+    if (!group.color) return [`${group.label}: escolha uma cor para adicionar este extra.`]
+    if (!letterColors.some(color => colorMatches(color, group.color as ProductColor))) {
+      return [`${group.label}: "${(group.color as ProductColor).name}" já não está disponível para letras extra.`]
+    }
+    return []
+  })
+  const hasExtraLetterColorMissing = extraLetterColorErrors.length > 0
   const hasUploadedLogo = walls.some(wall => wall.type === 'logo' && Boolean(wall.logoSvgText || wall.logoSvgUrl))
-  const checkoutLane: CheckoutLane = bom.totalRailModules > 30 || customBrandColor.trim() || hasUploadedLogo ? 'manual_quote' : 'stripe_auto_pay'
+  const checkoutLane: CheckoutLane = bom.totalRailModules > 30 || Boolean(activeCustomBrandColor) || hasUploadedLogo ? 'manual_quote' : 'stripe_auto_pay'
 
   useEffect(() => {
     const fallbackMessage = window.localStorage.getItem(BUILDER_TOAST_STORAGE_KEY)
@@ -1430,6 +1703,7 @@ export default function ModularBuilderPage() {
     setAccentLetterColor(draft.accentLetterColor)
     setLetterCardColor(draft.letterCardColor)
     setCustomBrandColor(draft.customBrandColor ?? '')
+    setCustomBrandColorTarget(draft.customBrandColorTarget ?? 'letters')
     setExtraLetterGroups(draft.extraLetterGroups)
     setCustomerName(draft.customerName)
     setCustomerEmail(draft.customerEmail)
@@ -1452,7 +1726,8 @@ export default function ModularBuilderPage() {
       baseLetterColor: selectedBaseLetterColor,
       accentLetterColor: selectedAccentLetterColor,
       letterCardColor: selectedLetterCardColor,
-      customBrandColor: customBrandColor.trim() || undefined,
+      customBrandColor: activeCustomBrandColor || undefined,
+      customBrandColorTarget,
       extraLetterGroups,
       customerName,
       customerEmail,
@@ -1465,7 +1740,9 @@ export default function ModularBuilderPage() {
     window.localStorage.setItem(BUILDER_STORAGE_KEY, JSON.stringify(draft))
   }, [
     activeWallId,
+    activeCustomBrandColor,
     customBrandColor,
+    customBrandColorTarget,
     customerEmail,
     customerName,
     customerPhone,
@@ -1691,8 +1968,14 @@ export default function ModularBuilderPage() {
   }, [updateActiveWall])
 
   async function submitCheckout(forceManualSubmit = false) {
-    if (!selectedRailColor || !selectedBaseLetterColor || !selectedAccentLetterColor || !selectedLetterCardColor) {
-      toast.error('Escolha as cores antes de finalizar.')
+    if (catalogLoading) {
+      toast.info('A carregar cores e preços do inventário.')
+      return
+    }
+    if (colorResolution.errors.length || !selectedRailColor || !selectedBaseLetterColor || !selectedAccentLetterColor || !selectedLetterCardColor) {
+      toast.error('Corrija as cores antes de finalizar.', {
+        description: colorResolution.errors[0] ?? 'Escolha cores disponíveis no inventário activo.',
+      })
       return
     }
     if (bom.hasOverflow) {
@@ -1700,7 +1983,9 @@ export default function ModularBuilderPage() {
       return
     }
     if (hasExtraLetterColorMissing) {
-      toast.error('Escolha a cor das Letras Extra antes de finalizar.')
+      toast.error('Escolha a cor das Letras Extra antes de finalizar.', {
+        description: extraLetterColorErrors[0],
+      })
       return
     }
     if (checkoutLane === 'manual_quote' && !forceManualSubmit) {
@@ -1777,7 +2062,8 @@ export default function ModularBuilderPage() {
             characterFrequencyMap: bom.characterFrequencyMap,
             characterFrequencyByColor: bom.characterFrequencyByColor,
             checkoutLane,
-            customBrandColor: customBrandColor.trim() || undefined,
+            customBrandColor: activeCustomBrandColor || undefined,
+            customBrandColorTarget: activeCustomBrandColor ? customBrandColorTarget : undefined,
             extraLetterGroups: extraLetterGroups.map(group => ({
               ...group,
               color: group.color ? stripMenuColor(group.color as ProductColor) : undefined,
@@ -1819,17 +2105,20 @@ export default function ModularBuilderPage() {
               baseLetterColor={selectedBaseLetterColor}
               accentLetterColor={selectedAccentLetterColor}
               letterCardColor={selectedLetterCardColor}
-              customBrandColor={customBrandColor.trim() || undefined}
+              customBrandColor={activeCustomBrandColor || undefined}
+              customBrandColorTarget={customBrandColorTarget}
             />
           </div>
 
-          <aside className="max-h-[40svh] space-y-4 overflow-y-auto rounded-t-3xl border border-white/10 bg-white/[0.04] p-2 backdrop-blur-xl lg:max-h-[calc(100svh-7rem)] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pr-1">
+          <aside className="flex max-h-[40svh] min-h-0 flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-white/[0.04] p-2 backdrop-blur-xl lg:max-h-[calc(100svh-7rem)] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pr-1">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <WallEditor
               wall={activeWall}
               bom={bom}
               metricsByColumn={metricsByColumn}
               baseLetterColor={selectedBaseLetterColor}
-              customBrandColor={customBrandColor.trim() || undefined}
+              customBrandColor={activeCustomBrandColor || undefined}
+              customBrandColorTarget={customBrandColorTarget}
               onAddTitleRow={addTitleRow}
               onAddItemRow={addItemRow}
               onRemoveRow={removeRow}
@@ -1850,7 +2139,12 @@ export default function ModularBuilderPage() {
                 <SwatchPicker label="Cartões das letras" colors={letterColors} selected={selectedLetterCardColor} onSelect={setLetterCardColor} />
               </div>
             </div>
-            <BrandColorSection value={customBrandColor} onChange={setCustomBrandColor} />
+            <BrandColorSection
+              value={customBrandColor}
+              target={customBrandColorTarget}
+              onChange={setCustomBrandColor}
+              onTargetChange={setCustomBrandColorTarget}
+            />
             <ExtraLettersSection groups={extraLetterGroups} colors={letterColors} onUpdateGroup={updateExtraLetterGroup} />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Checkout</h3>
@@ -1860,6 +2154,7 @@ export default function ModularBuilderPage() {
                 <input className="h-11 rounded-xl border border-stone-200 px-3 text-sm outline-none focus:border-stone-500" placeholder="Telefone" value={customerPhone} onChange={event => setCustomerPhone(event.target.value)} onFocus={scrollFocusedInputIntoView} />
                 <textarea className="min-h-20 rounded-xl border border-stone-200 px-3 py-2 text-sm outline-none focus:border-stone-500" placeholder="Notas" value={notes} onChange={event => setNotes(event.target.value)} onFocus={scrollFocusedInputIntoView} />
               </div>
+            </div>
             </div>
           </aside>
         </div>
@@ -1871,11 +2166,11 @@ export default function ModularBuilderPage() {
           <Button
             type="button"
             onClick={() => submitCheckout()}
-            disabled={isSubmitting || bom.hasOverflow || hasExtraLetterColorMissing || (!bom.totalRailModules && !hasUploadedLogo)}
+            disabled={catalogLoading || isSubmitting || bom.hasOverflow || hasExtraLetterColorMissing || (!bom.totalRailModules && !hasUploadedLogo)}
             className="h-14 rounded-full bg-[#09090b] px-7 text-white hover:bg-[#26262c]"
           >
             {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {checkoutLane === 'manual_quote' ? 'Pedir Orçamento Gratuito' : 'Pagar e Finalizar Encomenda (Stripe)'}
+            {catalogLoading ? 'A carregar inventário...' : checkoutLane === 'manual_quote' ? 'Pedir Orçamento Gratuito' : 'Pagar e Finalizar Encomenda (Stripe)'}
           </Button>
         </div>
       </div>
