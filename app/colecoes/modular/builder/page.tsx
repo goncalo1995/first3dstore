@@ -2,6 +2,7 @@
 
 import { FormEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { InstaQLEntity } from '@instantdb/react'
+import { toast } from 'sonner'
 import {
   ArrowRight,
   Check,
@@ -58,6 +59,7 @@ const MENU_AVULSO_SLUG = 'menu-letter-custom'
 const SHIPPING_COST = 4.99
 const BUILDER_STORAGE_KEY = 'em3d-modular-builder-v3'
 const LEGACY_BUILDER_STORAGE_KEY = 'em3d-modular-builder-v1'
+const BUILDER_TOAST_STORAGE_KEY = 'em3d-modular-builder-toast'
 
 type CatalogProductBase = InstaQLEntity<AppSchema, 'catalogProducts'>
 type ProductInventoryRecord = InstaQLEntity<AppSchema, 'productInventory'>
@@ -1105,6 +1107,13 @@ export default function ModularMenusPage() {
   const extraColorError = getExtraColorError(extraLetterGroups)
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const fallbackMessage = window.localStorage.getItem(BUILDER_TOAST_STORAGE_KEY)
+    if (searchParams.get('fallback') === 'true' || fallbackMessage) {
+      toast.info(fallbackMessage ?? 'A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!')
+      window.localStorage.removeItem(BUILDER_TOAST_STORAGE_KEY)
+    }
+
     const draft = readBuilderDraft()
     if (draft) {
       setSelectedIntentId(draft.selectedIntentId)

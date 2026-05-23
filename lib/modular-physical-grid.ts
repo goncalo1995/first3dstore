@@ -3,6 +3,7 @@ import {
   FALLBACK_CHARACTER_WIDTH_MM,
   MAX_GLOBAL_MODULES,
   MIN_GLOBAL_MODULES,
+  PHYSICAL_GRID_DIMENSION_SET as CONFIG_DIMENSION_SET,
   RAIL_LENGTH_MM,
   STANDARD_PACK_DISTRIBUTION,
 } from './modular-inventory-config'
@@ -16,18 +17,33 @@ import {
 
 export type FontStyle = 'classic' | 'modern'
 export type PhysicalGridDimensionSet = 'v1-standard-250'
+export type PhysicalColumnAlignment = 'left' | 'center' | 'right' | 'split'
+export type PhysicalWallType = 'text' | 'logo'
+export type CheckoutLane = 'stripe_auto_pay' | 'manual_quote'
 
 export type PhysicalColumn = {
   id: string
   railModules: number
   leftText: string
   rightText: string
+  align?: PhysicalColumnAlignment
   colorOverride?: string
 }
 
 export type PhysicalRow = {
   id: string
   columns: PhysicalColumn[]
+}
+
+export type PhysicalWall = {
+  id: string
+  name: string
+  type?: PhysicalWallType
+  maxWidthCm?: number
+  rows: PhysicalRow[]
+  logoSvgUrl?: string
+  logoSvgText?: string
+  brandColor?: string
 }
 
 export type PhysicalCategory = {
@@ -46,6 +62,8 @@ export type ExtraLetterGroup = {
 }
 
 export type PhysicalColumnMetrics = {
+  wallId?: string
+  wallName?: string
   rowId: string
   columnId: string
   railModules: number
@@ -55,6 +73,42 @@ export type PhysicalColumnMetrics = {
   totalTextWidthMm: number
   overflow: boolean
   characterCount: number
+}
+
+export type PhysicalRowMetrics = {
+  wallId?: string
+  rowId: string
+  railModules: number
+  widthMm: number
+  columnMetrics: PhysicalColumnMetrics[]
+  overflow: boolean
+}
+
+export type PhysicalWallFootprint = {
+  wallId: string
+  wallName: string
+  widthMm: number
+  heightMm: number
+  perimeterMm: number
+  rowCount: number
+  railModules: number
+}
+
+export type PhysicalWallMetrics = {
+  wallId: string
+  wallName: string
+  wallType: PhysicalWallType
+  maxWidthMm?: number
+  railModules: number
+  rowCount: number
+  columnCount: number
+  widthMm: number
+  overflow: boolean
+  exceedsMaxWidth: boolean
+  hasLogo: boolean
+  footprint: PhysicalWallFootprint
+  rowMetrics: PhysicalRowMetrics[]
+  columnMetrics: PhysicalColumnMetrics[]
 }
 
 export type PhysicalGridBom = {
@@ -87,21 +141,27 @@ export type PhysicalGridBom = {
   hasOverflow: boolean
 }
 
-export const PHYSICAL_GRID_DIMENSION_SET: PhysicalGridDimensionSet = 'v1-standard-250'
+export type PhysicalWallsBom = PhysicalGridBom & {
+  walls: PhysicalWallMetrics[]
+  wallCount: number
+  textWallCount: number
+  logoWallCount: number
+  hasLogoWall: boolean
+  checkoutLane: CheckoutLane
+}
+
+export const PHYSICAL_GRID_DIMENSION_SET: PhysicalGridDimensionSet = CONFIG_DIMENSION_SET
 
 export const V1_PHYSICAL_DIMENSION_SET = {
   id: PHYSICAL_GRID_DIMENSION_SET,
   railLengthMm: RAIL_LENGTH_MM,
   characterWidthMm: CHARACTER_WIDTH_MM,
+  fallbackCharacterWidthMm: FALLBACK_CHARACTER_WIDTH_MM,
 } as const
 
 export function clampRailModules(value: number | undefined) {
   if (!Number.isFinite(value)) return MIN_GLOBAL_MODULES
   return Math.min(MAX_GLOBAL_MODULES, Math.max(MIN_GLOBAL_MODULES, Math.trunc(Number(value))))
-}
-
-export function inferRailModulesForText(leftText: string, rightText = '') {
-  return clampRailModules(Math.ceil((measureTextMm(leftText) + measureTextMm(rightText)) / RAIL_LENGTH_MM) || MIN_GLOBAL_MODULES)
 }
 
 export function getCharacterWidthMm(character: string) {
@@ -119,7 +179,11 @@ export function countVisibleCharacters(text: string) {
   return Array.from(sanitizeMenuText(String(text ?? '')).replace(/\n/g, '')).length
 }
 
-export function getColumnAvailableMm(column: PhysicalColumn) {
+export function inferRailModulesForText(leftText: string, rightText = '') {
+  return clampRailModules(Math.ceil((measureTextMm(leftText) + measureTextMm(rightText)) / RAIL_LENGTH_MM) || MIN_GLOBAL_MODULES)
+}
+
+export function getColumnAvailableMm(column: Pick<PhysicalColumn, 'railModules'>) {
   return clampRailModules(column.railModules) * RAIL_LENGTH_MM
 }
 
@@ -131,7 +195,11 @@ export function columnOverflows(column: PhysicalColumn) {
   return measureColumnTextMm(column) > getColumnAvailableMm(column)
 }
 
-export function getColumnMetrics(rowId: string, column: PhysicalColumn): PhysicalColumnMetrics {
+export function getColumnTileWidthPercent(character: string, column: Pick<PhysicalColumn, 'railModules'>) {
+  return (getCharacterWidthMm(character) / getColumnAvailableMm(column)) * 100
+}
+
+export function getColumnMetrics(rowId: string, column: PhysicalColumn, wall?: Pick<PhysicalWall, 'id' | 'name'>): PhysicalColumnMetrics {
   const railModules = clampRailModules(column.railModules)
   const leftWidthMm = measureTextMm(column.leftText)
   const rightWidthMm = measureTextMm(column.rightText)
@@ -139,6 +207,8 @@ export function getColumnMetrics(rowId: string, column: PhysicalColumn): Physica
   const availableWidthMm = railModules * RAIL_LENGTH_MM
 
   return {
+    wallId: wall?.id,
+    wallName: wall?.name,
     rowId,
     columnId: column.id,
     railModules,
@@ -151,12 +221,81 @@ export function getColumnMetrics(rowId: string, column: PhysicalColumn): Physica
   }
 }
 
+export function getRowWidthMm(row: PhysicalRow) {
+  return row.columns.reduce((sum, column) => sum + getColumnAvailableMm(column), 0)
+}
+
+export function getRowMetrics(row: PhysicalRow, wall?: Pick<PhysicalWall, 'id' | 'name'>): PhysicalRowMetrics {
+  const columnMetrics = row.columns.map(column => getColumnMetrics(row.id, column, wall))
+  const railModules = columnMetrics.reduce((sum, metric) => sum + metric.railModules, 0)
+
+  return {
+    wallId: wall?.id,
+    rowId: row.id,
+    railModules,
+    widthMm: railModules * RAIL_LENGTH_MM,
+    columnMetrics,
+    overflow: columnMetrics.some(metric => metric.overflow),
+  }
+}
+
+export function getWallFootprint(wall: PhysicalWall, options: { rowHeightMm?: number } = {}): PhysicalWallFootprint {
+  const rowHeightMm = Math.max(0, Number(options.rowHeightMm ?? 0))
+  const rowWidths = wall.rows.map(getRowWidthMm)
+  const widthMm = Math.max(0, ...rowWidths)
+  const heightMm = wall.rows.length * rowHeightMm
+
+  return {
+    wallId: wall.id,
+    wallName: wall.name,
+    widthMm,
+    heightMm,
+    perimeterMm: heightMm > 0 || widthMm > 0 ? 2 * (widthMm + heightMm) : 0,
+    rowCount: wall.rows.length,
+    railModules: wall.rows.reduce((sum, row) => sum + row.columns.reduce((rowSum, column) => rowSum + clampRailModules(column.railModules), 0), 0),
+  }
+}
+
+export function getWallMetrics(wall: PhysicalWall, options: { rowHeightMm?: number } = {}): PhysicalWallMetrics {
+  const wallType = wall.type ?? 'text'
+  const rowMetrics = wall.rows.map(row => getRowMetrics(row, wall))
+  const columnMetrics = rowMetrics.flatMap(row => row.columnMetrics)
+  const railModules = columnMetrics.reduce((sum, metric) => sum + metric.railModules, 0)
+  const widthMm = Math.max(0, ...rowMetrics.map(row => row.widthMm))
+  const maxWidthMm = Number.isFinite(wall.maxWidthCm) ? Number(wall.maxWidthCm) * 10 : undefined
+
+  return {
+    wallId: wall.id,
+    wallName: wall.name,
+    wallType,
+    maxWidthMm,
+    railModules,
+    rowCount: wall.rows.length,
+    columnCount: columnMetrics.length,
+    widthMm,
+    overflow: columnMetrics.some(metric => metric.overflow),
+    exceedsMaxWidth: Number.isFinite(maxWidthMm) ? widthMm > Number(maxWidthMm) : false,
+    hasLogo: wallType === 'logo' || Boolean(wall.logoSvgUrl || wall.logoSvgText),
+    footprint: getWallFootprint(wall, options),
+    rowMetrics,
+    columnMetrics,
+  }
+}
+
 function colorKey(color: MenuColorPayload | undefined, fallback: string) {
   return color?.globalColorId || color?.name?.trim().toLowerCase() || fallback
 }
 
 function addCharacter(map: Record<string, number>, character: string, count = 1) {
   map[character] = (map[character] ?? 0) + count
+}
+
+function resolveOverrideColor(
+  override: string | undefined,
+  colorOverrides: Record<string, MenuColorPayload> | undefined,
+) {
+  if (!override) return undefined
+  return colorOverrides?.[override] ?? { name: override, globalColorId: override }
 }
 
 function addTextToMaps({
@@ -185,27 +324,35 @@ function countCharacters(map: Record<string, number>) {
   return Object.values(map).reduce((sum, count) => sum + count, 0)
 }
 
-export function getGridBom({
-  grid,
-  extraLetterGroups = [],
-  baseLetterColor = { name: 'Base' },
-  accentLetterColor,
-  railModuleUnitPrice = 0,
-  standardPackUnitPrice = 0,
-  avulsoUnitPrice = 0,
-  standardPackQuantity,
-  avulsoCharacterQuantity,
-}: {
-  grid: PhysicalRow[]
+function isLogoWall(wall: PhysicalWall) {
+  return (wall.type ?? 'text') === 'logo' || Boolean(wall.logoSvgUrl || wall.logoSvgText)
+}
+
+type BomPricingInput = {
   extraLetterGroups?: ExtraLetterGroup[]
   baseLetterColor?: MenuColorPayload
   accentLetterColor?: MenuColorPayload
+  colorOverrides?: Record<string, MenuColorPayload>
   railModuleUnitPrice?: number
   standardPackUnitPrice?: number
   avulsoUnitPrice?: number
   standardPackQuantity?: number
   avulsoCharacterQuantity?: number
-}): PhysicalGridBom {
+}
+
+function calculateBomFromRows(grid: PhysicalRow[], options: BomPricingInput = {}): PhysicalGridBom {
+  const {
+    extraLetterGroups = [],
+    baseLetterColor = { name: 'Base' },
+    accentLetterColor,
+    colorOverrides,
+    railModuleUnitPrice = 0,
+    standardPackUnitPrice = 0,
+    avulsoUnitPrice = 0,
+    standardPackQuantity,
+    avulsoCharacterQuantity,
+  } = options
+
   const characterFrequencyMap: Record<string, number> = {}
   const characterFrequencyByColor: CharacterFrequencyByColor = {}
   const columnMetrics = grid.flatMap(row => row.columns.map(column => getColumnMetrics(row.id, column)))
@@ -214,17 +361,18 @@ export function getGridBom({
 
   for (const row of grid) {
     for (const column of row.columns) {
+      const overrideColor = resolveOverrideColor(column.colorOverride, colorOverrides)
       addTextToMaps({
         text: column.leftText,
-        color: baseLetterColor,
-        fallbackKey: 'base',
+        color: overrideColor ?? baseLetterColor,
+        fallbackKey: overrideColor ? `override-${column.colorOverride}` : 'base',
         characterFrequencyMap,
         characterFrequencyByColor,
       })
       addTextToMaps({
         text: column.rightText,
-        color: accentLetterColor ?? baseLetterColor,
-        fallbackKey: accentLetterColor ? 'accent' : 'base',
+        color: overrideColor ?? accentLetterColor ?? baseLetterColor,
+        fallbackKey: overrideColor ? `override-${column.colorOverride}` : accentLetterColor ? 'accent' : 'base',
         characterFrequencyMap,
         characterFrequencyByColor,
       })
@@ -279,6 +427,70 @@ export function getGridBom({
     columnMetrics,
     hasOverflow: columnMetrics.some(metric => metric.overflow),
   }
+}
+
+export function getGridBom({
+  grid,
+  ...options
+}: BomPricingInput & {
+  grid: PhysicalRow[]
+}): PhysicalGridBom {
+  return calculateBomFromRows(grid, options)
+}
+
+export function getWallsBom({
+  walls,
+  forceManualQuote = false,
+  hasCustomBrandColor = false,
+  ...options
+}: BomPricingInput & {
+  walls: PhysicalWall[]
+  forceManualQuote?: boolean
+  hasCustomBrandColor?: boolean
+}): PhysicalWallsBom {
+  const wallMetrics = walls.map(wall => getWallMetrics(wall))
+  const textRows = walls.filter(wall => !isLogoWall(wall)).flatMap(wall => wall.rows)
+  const baseBom = calculateBomFromRows(textRows, options)
+  const hasLogoWall = wallMetrics.some(metric => metric.hasLogo)
+  const hasManualQuoteTrigger = forceManualQuote || hasCustomBrandColor || hasLogoWall
+
+  return {
+    ...baseBom,
+    walls: wallMetrics,
+    wallCount: walls.length,
+    textWallCount: wallMetrics.filter(metric => metric.wallType === 'text' && !metric.hasLogo).length,
+    logoWallCount: wallMetrics.filter(metric => metric.hasLogo).length,
+    hasLogoWall,
+    hasOverflow: baseBom.hasOverflow || wallMetrics.some(metric => metric.exceedsMaxWidth),
+    checkoutLane: hasManualQuoteTrigger ? 'manual_quote' : 'stripe_auto_pay',
+  }
+}
+
+export function flattenTextRowsFromWalls(walls: PhysicalWall[] = []) {
+  return walls.filter(wall => !isLogoWall(wall)).flatMap(wall => wall.rows)
+}
+
+export function wallsToProductionMap(walls: PhysicalWall[] = []) {
+  return walls.map((wall, wallIndex) => ({
+    wallIndex: wallIndex + 1,
+    wallId: wall.id,
+    wallName: wall.name,
+    wallType: wall.type ?? 'text',
+    rows: wall.rows.map((row, rowIndex) => ({
+      rowIndex: rowIndex + 1,
+      rowId: row.id,
+      columns: row.columns.map((column, columnIndex) => ({
+        columnIndex: columnIndex + 1,
+        columnId: column.id,
+        railModules: clampRailModules(column.railModules),
+        widthMm: getColumnAvailableMm(column),
+        leftText: sanitizeMenuText(column.leftText),
+        rightText: sanitizeMenuText(column.rightText),
+        align: column.align ?? 'split',
+        colorOverride: column.colorOverride,
+      })),
+    })),
+  }))
 }
 
 export function physicalGridToMenuRows(grid: PhysicalRow[]) {

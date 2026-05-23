@@ -1,24 +1,30 @@
 export const RAIL_LENGTH_MM = 250
 export const MODULE_LENGTH_MM = RAIL_LENGTH_MM
+export const PHYSICAL_GRID_DIMENSION_SET = 'v1-standard-250'
 export const CHARS_PER_MODULE_ESTIMATE = 5
 export const MIN_GLOBAL_MODULES = 1
 export const MAX_GLOBAL_MODULES = 12
 export const LAUNCH_DISCOUNT_PERCENT = 20
+export const AUTO_PAY_RAIL_LIMIT = 30
 
+export const NORMAL_CHARACTER_WIDTH_MM = 38
+export const NARROW_CHARACTER_WIDTH_MM = 22
+export const WIDE_CHARACTER_WIDTH_MM = 52
+export const SPACE_CHARACTER_WIDTH_MM = 24
 export const FALLBACK_CHARACTER_WIDTH_MM = 38
 
-const narrowCharacters = ['i', 'I', 'l', '1', '.', ',', ':', ';', "'", '"', '`', '´', '!', '|']
-const wideCharacters = ['m', 'M', 'w', 'W', '@', '#', '%', '&', '€']
-const mediumCharacters = [
+export const NARROW_CHARACTERS = ['i', 'I', 'l', '1', '.', ',', ':', ';', "'", '"', '`', '´', '!', '|']
+export const WIDE_CHARACTERS = ['m', 'M', 'w', 'W', '@', '#', '%', '&', '€']
+export const NORMAL_CHARACTERS = [
   ...'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
   ...'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ',
 ]
 
 export const CHARACTER_WIDTH_MM: Record<string, number> = {
-  ...Object.fromEntries(mediumCharacters.map(character => [character, 38])),
-  ...Object.fromEntries(narrowCharacters.map(character => [character, 22])),
-  ...Object.fromEntries(wideCharacters.map(character => [character, 52])),
-  ' ': 24,
+  ...Object.fromEntries(NORMAL_CHARACTERS.map(character => [character, NORMAL_CHARACTER_WIDTH_MM])),
+  ...Object.fromEntries(NARROW_CHARACTERS.map(character => [character, NARROW_CHARACTER_WIDTH_MM])),
+  ...Object.fromEntries(WIDE_CHARACTERS.map(character => [character, WIDE_CHARACTER_WIDTH_MM])),
+  ' ': SPACE_CHARACTER_WIDTH_MM,
   '-': 28,
   '+': 36,
   '/': 32,
@@ -125,3 +131,10 @@ export const STANDARD_PACK_DISTRIBUTION: Record<string, number> = {
   É: 1,
   Ç: 1,
 }
+
+export const V1_STANDARD_DIMENSION_SET = {
+  id: PHYSICAL_GRID_DIMENSION_SET,
+  railLengthMm: RAIL_LENGTH_MM,
+  characterWidthMm: CHARACTER_WIDTH_MM,
+  fallbackCharacterWidthMm: FALLBACK_CHARACTER_WIDTH_MM,
+} as const

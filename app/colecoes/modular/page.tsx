@@ -1,209 +1,432 @@
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, Building2, Coffee, Palette, Ruler, Store } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion } from 'framer-motion'
+import { ArrowRight, BadgeEuro, Building2, Check, Loader2, Palette, Sparkles, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { Footer } from '@/components/footer'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+const GENERATED_WALLS_STORAGE_KEY = 'em3d-modular-planner-walls-v1'
+const BUILDER_DRAFT_STORAGE_KEY = 'em3d-modular-builder-v3'
+const BUILDER_TOAST_STORAGE_KEY = 'em3d-modular-builder-toast'
+const FALLBACK_TOAST = 'A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!'
 
 const useCases = [
   {
-    title: 'Menus e preços',
-    copy: 'Para cafés, bares e pastelarias que precisam de atualizar texto sem refazer a peça inteira.',
-    icon: Coffee,
+    title: 'Preços',
+    copy: 'Menus, serviços e campanhas que mudam sem refazer a peça toda.',
+    image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1400&q=82',
+    icon: BadgeEuro,
   },
   {
-    title: 'Sinalética interior',
-    copy: 'Linhas modulares para salas, zonas, horários, regras de acesso e mensagens operacionais.',
+    title: 'Sinalética',
+    copy: 'WC, horários, zonas de recolha, salas e instruções de circulação.',
+    image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1400&q=82',
     icon: Building2,
   },
   {
-    title: 'Marca no espaço',
-    copy: 'Letreiros interiores com letras físicas, cores controladas e pedidos especiais em texto.',
-    icon: Store,
+    title: 'Identidade de Marca',
+    copy: 'Paredes de marca, logótipos e mensagens físicas para espaços comerciais.',
+    image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=82',
+    icon: Upload,
   },
 ]
 
-const facts = [
-  { label: 'Módulos de 25cm', icon: Ruler },
-  { label: 'Até 12 módulos / 300cm', icon: Ruler },
-  { label: 'Cores globais ativas', icon: Palette },
+const wallColors = [
+  { label: 'Noite', value: '#0d0d10' },
+  { label: 'Cimento', value: '#c8c0b2' },
+  { label: 'Verde seco', value: '#28352d' },
 ]
 
-const productExamples = [
+const railColors = [
+  { label: 'Preto', value: '#111111' },
+  { label: 'Areia', value: '#d7c8ae' },
+  { label: 'Grafite', value: '#34343a' },
+]
+
+const letterColors = [
+  { label: 'Branco', value: '#f8f5ec' },
+  { label: 'Ouro', value: '#d4af37' },
+  { label: 'Azul', value: '#7dd3fc' },
+]
+
+const planningHints = [
   {
-    title: 'Café de bairro',
-    copy: 'Menu principal, especiais da semana e símbolos extra para rotação rápida.',
-    image: 'https://pub-f8e78bd948414156890e0632ecc170b9.r2.dev/collections/menu/fabrizio-coco-9bi4ilWgMmU-unsplash%20(1).jpg',
+    label: 'Menu',
+    hint: 'Criar uma parede principal com categorias centradas, pratos à esquerda e preços à direita.',
   },
   {
-    title: 'Loja e showroom',
-    copy: 'Lista de preços, campanha curta ou painel interior de produto.',
-    image: 'https://pub-f8e78bd948414156890e0632ecc170b9.r2.dev/collections/menu/sokha-michael-Pv1mDy4FWWc-unsplash%20(1).jpg',
+    label: 'WC',
+    hint: 'Adicionar sinalética WC numa parede separada, curta e centrada.',
   },
   {
-    title: 'Studio de serviços',
-    copy: 'Serviços, preços desde, marcações e mensagens sazonais.',
-    image: 'https://pub-f8e78bd948414156890e0632ecc170b9.r2.dev/collections/menu/matthew-jungling-IY44r8Wd5XI-unsplash%20(1).jpg',
+    label: 'Takeaway',
+    hint: 'Adicionar uma zona de takeaway com horários, recolhas e contactos curtos.',
+  },
+  {
+    label: 'Horários',
+    hint: 'Criar uma parede de horários com dias à esquerda e horas à direita.',
+  },
+  {
+    label: 'Logo',
+    hint: 'Incluir @logo para criar uma parede de Identidade de Marca com upload SVG.',
   },
 ]
 
-function ProductSignal() {
-  const rows = [
-    { label: 'CAFÉ ESPRESSO', detail: '1,20€' },
-    { label: 'SALA PRIVADA', detail: 'RESERVAS' },
-    { label: 'NOVA COLEÇÃO', detail: '2026' },
+function PlannerMockup({
+  wallColor,
+  railColor,
+  letterColor,
+}: {
+  wallColor: string
+  railColor: string
+  letterColor: string
+}) {
+  const rails = [
+    { left: 'CAFÉ', right: 'ESPECIAL', modules: 3 },
+    { left: 'ESPRESSO', right: '1,20€', modules: 4 },
+    { left: 'TAKEAWAY', right: '09-19H', modules: 4 },
   ]
 
   return (
-    <div className="relative mx-auto w-full max-w-3xl" aria-hidden="true">
-      <div className="space-y-5">
-        {rows.map((row, rowIndex) => (
-          <div key={row.label} className="overflow-hidden rounded-lg border border-white/12 bg-[#151515] shadow-[0_20px_44px_rgba(0,0,0,0.34)]">
-            <div className="relative flex h-16">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <span
-                  key={index}
-                  className={`relative flex-1 border-r border-white/10 last:border-r-0 ${index === 0 ? 'bg-[#0d0d0d]' : 'bg-[#24231f]'}`}
-                >
-                  {index === 0 && <span className="absolute inset-y-3 left-3 w-1 rounded-full bg-white/20" />}
-                  <span className="absolute inset-x-3 bottom-3 h-1 rounded-full bg-white/10" />
-                </span>
-              ))}
-              <div className="absolute inset-x-5 top-1/2 flex -translate-y-1/2 items-center justify-between gap-4 text-sm font-black tracking-[0.08em] text-[#f8f4e9] sm:text-lg">
-                <span className="truncate">{row.label}</span>
-                <span className={rowIndex === 1 ? 'shrink-0 text-[#d4af37]' : 'shrink-0 text-[#f8f4e9]'}>{row.detail}</span>
+    <div className="relative min-h-[440px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.03] p-5 shadow-[0_40px_120px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_24%_18%,rgba(212,175,55,0.18),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(125,211,252,0.12),transparent_30%)]" />
+      <div className="relative flex h-full min-h-[400px] items-center justify-center rounded-[1.5rem] border border-white/10 p-8 transition-colors duration-300" style={{ backgroundColor: wallColor }}>
+        <div className="w-full max-w-xl space-y-5">
+          {rails.map((rail, index) => (
+            <motion.div
+              key={rail.left}
+              layout
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.08 }}
+              className="relative mx-auto h-16 overflow-hidden rounded-md border border-white/12 shadow-[0_18px_42px_rgba(0,0,0,0.35)]"
+              style={{ width: `${rail.modules * 22}%`, backgroundColor: railColor }}
+            >
+              <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${rail.modules},minmax(0,1fr))` }}>
+                {Array.from({ length: rail.modules }).map((_, moduleIndex) => (
+                  <span key={moduleIndex} className="border-r border-white/10 last:border-r-0" />
+                ))}
               </div>
-            </div>
-          </div>
+              <div className="absolute inset-x-4 top-1/2 flex -translate-y-1/2 items-center justify-between gap-3 text-sm font-black tracking-[0.14em] sm:text-base" style={{ color: letterColor }}>
+                <span>{rail.left}</span>
+                <span>{rail.right}</span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ColorToggleGroup({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string
+  options: typeof wallColors
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{label}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map(option => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition ${value === option.value ? 'border-[#d4af37] bg-[#d4af37]/12 text-white' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/25'}`}
+          >
+            <span className="size-4 rounded-full border border-white/20" style={{ backgroundColor: option.value }} />
+            {option.label}
+          </button>
         ))}
       </div>
     </div>
   )
 }
 
-export default function ModularCollectionPage() {
+function OnboardingForm() {
+  const router = useRouter()
+  const [prompt, setPrompt] = useState('Tenho um café com uma parede principal para menu, uma zona de takeaway e queria incluir o meu @logo.')
+  const [mainWallMaxWidthCm, setMainWallMaxWidthCm] = useState('')
+  const [selectedHints, setSelectedHints] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const canSubmit = prompt.trim().length > 8 && !loading
+
+  function toggleHint(label: string, hint: string) {
+    setSelectedHints(current => current.includes(label) ? current.filter(item => item !== label) : [...current, label])
+    if (!selectedHints.includes(label) && !prompt.includes(hint)) {
+      setPrompt(current => `${current.trim()}\n\n${hint}`.trim())
+    }
+  }
+
+  async function submitPlanner() {
+    if (!canSubmit) return
+    setLoading(true)
+    try {
+      const response = await fetch('/api/ai-menu-formatter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          mainWallMaxWidthCm: mainWallMaxWidthCm ? Number(mainWallMaxWidthCm) : undefined,
+          hints: selectedHints,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      const walls = Array.isArray(data?.walls) ? data.walls : []
+
+      window.localStorage.setItem(GENERATED_WALLS_STORAGE_KEY, JSON.stringify({
+        version: 1,
+        source: data?.source ?? 'unknown',
+        fallback: Boolean(data?.fallback),
+        prompt,
+        mainWallMaxWidthCm: mainWallMaxWidthCm ? Number(mainWallMaxWidthCm) : undefined,
+        walls,
+        createdAt: new Date().toISOString(),
+      }))
+
+      if (!response.ok || data?.fallback) {
+        window.localStorage.removeItem(BUILDER_DRAFT_STORAGE_KEY)
+        window.localStorage.setItem(BUILDER_TOAST_STORAGE_KEY, data?.message ?? FALLBACK_TOAST)
+        router.push('/colecoes/modular/builder?fallback=true')
+        return
+      }
+
+      router.push('/colecoes/modular/builder')
+    } catch {
+      window.localStorage.removeItem(BUILDER_DRAFT_STORAGE_KEY)
+      window.localStorage.setItem(BUILDER_TOAST_STORAGE_KEY, FALLBACK_TOAST)
+      router.push('/colecoes/modular/builder?fallback=true')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-white text-[#171717]">
+    <section id="make-it-real" className="relative px-5 py-20 sm:px-8 lg:px-10 lg:py-28">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#d4af37]">Make it Real</p>
+          <h2 className="mt-4 max-w-xl font-serif text-4xl font-bold tracking-tight text-white sm:text-6xl">
+            Descreva o espaço. Nós desenhamos a primeira planta.
+          </h2>
+          <p className="mt-5 max-w-xl text-base leading-8 text-zinc-400">
+            Escreva como se estivesse a falar connosco: paredes, zonas, menus, horários, WC, preços e marca. A IA transforma isso numa proposta física com calhas de 250mm.
+          </p>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/10 bg-white/[0.045] p-5 shadow-[0_28px_90px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:p-7">
+          <Label htmlFor="planner-prompt" className="text-sm font-semibold text-white">
+            Descreva os seus espaços e o que vai em cada parede
+          </Label>
+          <textarea
+            id="planner-prompt"
+            value={prompt}
+            onChange={event => setPrompt(event.target.value)}
+            className="mt-3 min-h-52 w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm leading-7 text-white outline-none transition placeholder:text-zinc-600 focus:border-[#d4af37]/70 focus:ring-4 focus:ring-[#d4af37]/10"
+            placeholder="Ex.: Parede principal com menu de cafés, uma parede pequena para WC e uma zona de horários junto à entrada..."
+          />
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-[0.7fr_1.3fr]">
+            <div>
+              <Label htmlFor="main-wall-width" className="text-sm font-semibold text-white">
+                Largura máxima da parede principal (cm)
+              </Label>
+              <Input
+                id="main-wall-width"
+                type="number"
+                min={25}
+                max={300}
+                value={mainWallMaxWidthCm}
+                onChange={event => setMainWallMaxWidthCm(event.target.value)}
+                className="mt-3 border-white/10 bg-black/30 text-white"
+                placeholder="Ex.: 150"
+              />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Atalhos de planeamento</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {planningHints.map(hint => {
+                  const selected = selectedHints.includes(hint.label)
+                  return (
+                    <button
+                      key={hint.label}
+                      type="button"
+                      onClick={() => toggleHint(hint.label, hint.hint)}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${selected ? 'border-[#d4af37] bg-[#d4af37]/15 text-white' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:border-white/25'}`}
+                    >
+                      {selected && <Check className="mr-1 inline size-3.5" />}
+                      {hint.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 text-zinc-500">
+              Se mencionar logo, logótipo, marca ou @logo, criamos uma parede dedicada para identidade visual.
+            </p>
+            <Button
+              type="button"
+              onClick={submitPlanner}
+              disabled={!canSubmit}
+              className="h-13 min-w-44 rounded-full bg-white px-6 text-[#09090b] hover:bg-[#d4af37]"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              Make it Real
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export default function ModularCollectionPage() {
+  const [wallColor, setWallColor] = useState(wallColors[0].value)
+  const [railColor, setRailColor] = useState(railColors[0].value)
+  const [letterColor, setLetterColor] = useState(letterColors[0].value)
+  const mockupColors = useMemo(() => ({ wallColor, railColor, letterColor }), [letterColor, railColor, wallColor])
+
+  return (
+    <main className="min-h-screen bg-[#09090b] text-white">
       <Header />
 
-      <section className="relative overflow-hidden bg-[#111111] text-white">
-        <Image
-          src="/about/workshop.jpg"
-          alt="Oficina EM3D onde peças modulares são produzidas"
-          fill
-          priority
-          className="object-cover opacity-38"
-          sizes="100vw"
-        />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(17,17,17,0.92),rgba(17,17,17,0.68)_52%,rgba(17,17,17,0.38))]" />
-        <div className="relative mx-auto grid min-h-[calc(100vh-64px)] max-w-[1500px] items-center gap-12 px-5 py-16 sm:px-8 lg:grid-cols-[0.88fr_1.12fr] lg:px-10">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#d4af37]">Collection 01</p>
-            <h1 className="mt-5 text-5xl font-semibold leading-[0.98] tracking-tight sm:text-7xl lg:text-8xl">
-              Sinalética Modular
+      <section className="relative overflow-hidden px-5 pb-20 pt-16 sm:px-8 lg:px-10 lg:pb-28 lg:pt-24">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(212,175,55,0.18),transparent_32%),radial-gradient(circle_at_78%_6%,rgba(56,189,248,0.12),transparent_30%),linear-gradient(180deg,#09090b_0%,#101014_58%,#09090b_100%)]" />
+        <div className="relative mx-auto grid max-w-[1500px] gap-12 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
+          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[#d4af37]">EM3D Modular</p>
+            <h1 className="mt-6 max-w-5xl font-serif text-6xl font-bold leading-[0.9] tracking-tight sm:text-8xl lg:text-9xl">
+              Space Planner para sinalética física.
             </h1>
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-white/74 sm:text-xl">
-              Um sistema físico de calhas e letras para menus, preços, espaços e marca. Cada linha partilha a mesma largura, mantendo a leitura limpa e a produção previsível.
+            <p className="mt-8 max-w-2xl text-lg leading-8 text-zinc-300 sm:text-xl">
+              Planeie menus, preços, sinalética e identidade de marca em paredes reais. A nossa IA transforma intenção em calhas de 250mm, letras físicas e uma proposta pronta para produção.
             </p>
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="h-14 bg-white px-7 text-base text-[#171717] hover:bg-white/88">
-                <Link href="/colecoes/modular/builder">
-                  Configurar o meu sistema
+              <Button asChild size="lg" className="h-14 rounded-full bg-white px-7 text-[#09090b] hover:bg-[#d4af37]">
+                <a href="#make-it-real">
+                  Simular no meu espaço
                   <ArrowRight className="size-5" />
-                </Link>
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="h-14 rounded-full border-white/15 bg-white/[0.04] px-7 text-white hover:bg-white/10">
+                <Link href="/colecoes/modular/builder">Abrir builder</Link>
               </Button>
             </div>
-          </div>
-          <ProductSignal />
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.65, delay: 0.1 }}>
+            <PlannerMockup {...mockupColors} />
+          </motion.div>
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-8 lg:px-10 lg:py-24">
-        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#7b5a2b]">Produto</p>
-            <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-              Uma base permanente para mensagens que mudam.
-            </h2>
-          </div>
-          <div className="grid gap-8">
-            <p className="text-lg leading-8 text-stone-600">
-              A Collection 01 combina calhas de 25cm e letras físicas numa peça editável. Escolhe uma largura global, define as cores e envia pedidos especiais como texto para validação antes da produção.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {facts.map((fact) => {
-                const Icon = fact.icon
-                return (
-                  <div key={fact.label} className="border-t border-black/10 pt-4">
-                    <Icon className="size-5 text-[#7b5a2b]" />
-                    <p className="mt-4 text-sm font-semibold text-stone-900">{fact.label}</p>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-black/10 bg-[#f7f7f5] px-5 py-16 sm:px-8 lg:px-10">
+      <section className="px-5 py-16 sm:px-8 lg:px-10">
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#7b5a2b]">Casos de uso</p>
-            <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Pensado para espaços reais.</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#d4af37]">Aplicações</p>
+            <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight text-white sm:text-6xl">
+              Uma linguagem física para todo o espaço.
+            </h2>
           </div>
           <div className="mt-12 grid gap-5 md:grid-cols-3">
-            {useCases.map((useCase) => {
+            {useCases.map((useCase, index) => {
               const Icon = useCase.icon
               return (
-                <article key={useCase.title} className="rounded-lg border border-black/10 bg-white p-6 shadow-sm">
-                  <Icon className="size-5 text-[#7b5a2b]" />
-                  <h3 className="mt-5 text-xl font-semibold">{useCase.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-stone-600">{useCase.copy}</p>
-                </article>
+                <motion.article
+                  key={useCase.title}
+                  initial={{ opacity: 0, y: 18 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: '-80px' }}
+                  transition={{ delay: index * 0.08 }}
+                  className="group relative min-h-[430px] overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04]"
+                >
+                  <Image src={useCase.image} alt={useCase.title} fill className="object-cover opacity-58 transition duration-500 group-hover:scale-105 group-hover:opacity-72" sizes="(max-width: 768px) 100vw, 33vw" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/58 to-black/8" />
+                  <div className="relative flex h-full min-h-[430px] flex-col justify-end p-6">
+                    <div className="mb-5 flex size-11 items-center justify-center rounded-full border border-white/15 bg-black/35 backdrop-blur-xl">
+                      <Icon className="size-5 text-[#d4af37]" />
+                    </div>
+                    <h3 className="font-serif text-3xl font-bold">{useCase.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-zinc-300">{useCase.copy}</p>
+                  </div>
+                </motion.article>
               )
             })}
           </div>
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-8 lg:px-10 lg:py-24">
-        <div className="mx-auto max-w-7xl">
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#7b5a2b]">Exemplos</p>
-            <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-              A mesma base para vários interiores.
+      <section className="px-5 py-16 sm:px-8 lg:px-10">
+        <div className="mx-auto grid max-w-7xl gap-10 rounded-[2rem] border border-white/10 bg-white/[0.035] p-5 backdrop-blur-2xl sm:p-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#d4af37]">Simular no meu espaço</p>
+            <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight text-white sm:text-6xl">
+              Veja a peça mudar antes de pedir.
             </h2>
+            <p className="mt-5 max-w-xl text-base leading-8 text-zinc-400">
+              Teste combinações de parede, calha e letras. No builder, estas escolhas passam a materiais reais, stock e regras de produção.
+            </p>
+            <div className="mt-8 grid gap-5">
+              <ColorToggleGroup label="Parede" options={wallColors} value={wallColor} onChange={setWallColor} />
+              <ColorToggleGroup label="Calha" options={railColors} value={railColor} onChange={setRailColor} />
+              <ColorToggleGroup label="Letras" options={letterColors} value={letterColor} onChange={setLetterColor} />
+            </div>
           </div>
-          <div className="mt-12 grid gap-5 md:grid-cols-3">
-            {productExamples.map(example => (
-              <article key={example.title} className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
-                <div className="relative aspect-[4/3]">
-                  <Image src={example.image} alt={example.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 33vw" />
-                </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold">{example.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-stone-600">{example.copy}</p>
-                </div>
-              </article>
-            ))}
+
+          <div className="relative min-h-[360px] overflow-hidden rounded-[1.5rem] border border-white/10 p-8 transition-colors duration-300" style={{ backgroundColor: wallColor }}>
+            <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.10),transparent_36%,rgba(255,255,255,0.05))]" />
+            <div className="relative flex min-h-[300px] items-center justify-center">
+              <div className="w-full max-w-lg space-y-4">
+                {['PREÇOS', 'CAPPUCCINO 2,40€', 'BOLO DO DIA 3,20€'].map((line, index) => (
+                  <div
+                    key={line}
+                    className="mx-auto flex h-14 items-center justify-center rounded-md border border-white/12 px-6 text-sm font-black tracking-[0.16em] shadow-[0_16px_36px_rgba(0,0,0,0.32)]"
+                    style={{ width: `${index === 0 ? 44 : 78}%`, backgroundColor: railColor, color: letterColor }}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
+      <OnboardingForm />
+
       <section className="px-5 py-16 sm:px-8 lg:px-10">
-        <div className="mx-auto grid max-w-7xl gap-8 border-y border-black/10 py-12 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 border-y border-white/10 py-10 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#7b5a2b]">Configuração</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Ajusta largura, conteúdo e cores antes de encomendar.
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#d4af37]">Produção local</p>
+            <h2 className="mt-3 font-serif text-3xl font-bold text-white sm:text-5xl">
+              Do plano à parede, sem configuradores impossíveis.
             </h2>
           </div>
-          <Button asChild size="lg" className="h-13 bg-[#171717] px-7 text-white hover:bg-[#2f2f2f]">
-            <Link href="/colecoes/modular/builder">
-              Abrir configurador
-              <ArrowRight className="size-5" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-3 text-sm text-zinc-400">
+            <Palette className="size-5 text-[#d4af37]" />
+            Cores, texto e calhas validados antes da encomenda.
+          </div>
         </div>
       </section>
 
