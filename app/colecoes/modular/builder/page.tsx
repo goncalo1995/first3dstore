@@ -12,19 +12,19 @@ import { db } from '@/lib/db'
 import type { AppSchema } from '@/instant.schema'
 import { sanitizeSvg } from '@/lib/puzzle/svg'
 import {
+  EXTRA_LETTER_PACKS,
   RAIL_LENGTH_MM,
-  sanitizeMenuText,
-} from '@/lib/menu-calculator'
+  type ExtraLetterPackId,
+  type ExtraLetterPackSelection,
+} from '@/lib/modular-inventory-config'
+import { sanitizeMenuText } from '@/lib/menu-calculator'
 import {
   PHYSICAL_GRID_DIMENSION_SET,
   clampRailModules,
-  flattenTextRowsFromWalls,
   getCharacterWidthMm,
   getColumnMetrics,
   getWallsBom,
   inferRailModulesForText,
-  physicalGridToMenuRows,
-  type ExtraLetterGroup,
   type FontStyle,
   type CheckoutLane,
   type PhysicalColumn,
@@ -65,7 +65,7 @@ type ResolvedBuilderColor = {
 }
 
 type BuilderDraftActive = {
-  version: 4
+  version: 5
   walls: PhysicalWall[]
   activeWallId: string
   fontStyle: FontStyle
@@ -75,7 +75,7 @@ type BuilderDraftActive = {
   letterCardColor?: ProductColor
   customBrandColor?: string
   customBrandColorTarget?: CustomBrandColorTarget
-  extraLetterGroups: ExtraLetterGroup[]
+  extraLetterPackSelections: ExtraLetterPackSelection[]
   customerName: string
   customerEmail: string
   customerPhone: string
@@ -97,11 +97,7 @@ function normalizeProductInventoryRecord(value: unknown) {
   return value as CatalogProduct['inventory'] | undefined
 }
 
-const defaultExtraLetterGroups: ExtraLetterGroup[] = [
-  { id: 'numbers', label: 'Números', charactersPerUnit: '0123456789', quantity: 0 },
-  { id: 'vowels', label: 'Vogais', charactersPerUnit: 'aeiouAEIOUáàãéêíóõú', quantity: 0 },
-  { id: 'symbols', label: 'Símbolos', charactersPerUnit: '€.,:-+/%&?!', quantity: 0 },
-]
+const EXTRA_PACK_OPTIONS = Object.values(EXTRA_LETTER_PACKS)
 
 let idCounter = 0
 
@@ -331,18 +327,37 @@ function normalizeCustomBrandColorTarget(value: unknown): CustomBrandColorTarget
   return value === 'rails' ? 'rails' : 'letters'
 }
 
-function normalizeExtraLetterGroups(value: unknown): ExtraLetterGroup[] {
-  if (!Array.isArray(value)) return defaultExtraLetterGroups
-  return defaultExtraLetterGroups.map(defaultGroup => {
-    const found = value.find(candidate => isObject(candidate) && candidate.id === defaultGroup.id)
-    if (!isObject(found)) return defaultGroup
-    return {
-      ...defaultGroup,
-      quantity: Math.max(0, Math.trunc(Number(found.quantity) || 0)),
-      color: normalizeDraftColor(found.color),
-      charactersPerUnit: String(found.charactersPerUnit ?? defaultGroup.charactersPerUnit),
-    }
-  })
+function isExtraLetterPackId(value: unknown): value is ExtraLetterPackId {
+  return typeof value === 'string' && value in EXTRA_LETTER_PACKS
+}
+
+function toExtraLetterPackColor(color: ProductColor | undefined): ExtraLetterPackSelection['color'] | undefined {
+  if (!color?.globalColorId) return undefined
+  return {
+    globalColorId: color.globalColorId,
+    hex: color.hex ?? '#d1d5db',
+    name: color.name,
+    priceAdd: color.priceAdd,
+  }
+}
+
+function normalizeExtraLetterPackSelections(value: unknown): ExtraLetterPackSelection[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((selection, index) => {
+      if (!isObject(selection) || !isExtraLetterPackId(selection.packId)) return null
+      const color = normalizeDraftColor(selection.color)
+      const packColor = toExtraLetterPackColor(color)
+      const quantity = Math.trunc(Number(selection.quantity) || 0)
+      if (!packColor || quantity < 1) return null
+      return {
+        id: String(selection.id ?? `extra-pack-${index}`),
+        packId: selection.packId,
+        color: packColor,
+        quantity,
+      }
+    })
+    .filter((selection): selection is ExtraLetterPackSelection => Boolean(selection))
 }
 
 function readInitialDraft(): BuilderDraftActive {
@@ -351,12 +366,12 @@ function readInitialDraft(): BuilderDraftActive {
       const activeRaw = window.localStorage.getItem(BUILDER_STORAGE_KEY)
       if (activeRaw) {
         const parsed = JSON.parse(activeRaw) as unknown
-        if (isObject(parsed) && parsed.version === 4) {
+        if (isObject(parsed) && parsed.version === 5) {
           const walls = normalizeWalls(parsed.walls)
           const activeWallId = String(parsed.activeWallId ?? walls[0]?.id ?? '')
           if (walls.length && walls.some(wall => wall.id === activeWallId)) {
             return {
-              version: 4,
+              version: 5,
               walls,
               activeWallId,
               fontStyle: parsed.fontStyle === 'modern' ? 'modern' : 'classic',
@@ -366,7 +381,7 @@ function readInitialDraft(): BuilderDraftActive {
               letterCardColor: normalizeDraftColor(parsed.letterCardColor),
               customBrandColor: typeof parsed.customBrandColor === 'string' ? parsed.customBrandColor : undefined,
               customBrandColorTarget: normalizeCustomBrandColorTarget(parsed.customBrandColorTarget),
-              extraLetterGroups: normalizeExtraLetterGroups(parsed.extraLetterGroups),
+              extraLetterPackSelections: normalizeExtraLetterPackSelections(parsed.extraLetterPackSelections),
               customerName: String(parsed.customerName ?? ''),
               customerEmail: String(parsed.customerEmail ?? ''),
               customerPhone: String(parsed.customerPhone ?? ''),
@@ -401,11 +416,11 @@ function readInitialDraft(): BuilderDraftActive {
 
 function createDefaultDraft(walls: PhysicalWall[]): BuilderDraftActive {
   return {
-    version: 4,
+    version: 5,
     walls,
     activeWallId: walls[0]?.id ?? 'main-wall',
     fontStyle: 'classic',
-    extraLetterGroups: defaultExtraLetterGroups,
+    extraLetterPackSelections: [],
     customerName: '',
     customerEmail: '',
     customerPhone: '',
@@ -1292,67 +1307,113 @@ function WallEditor({
 }
 
 function ExtraLettersSection({
-  groups,
+  selections,
   colors,
-  onUpdateGroup,
+  onAddPack,
+  onRemovePack,
+  onUpdatePack,
 }: {
-  groups: ExtraLetterGroup[]
+  selections: ExtraLetterPackSelection[]
   colors: ProductColor[]
-  onUpdateGroup: (groupId: ExtraLetterGroup['id'], updater: (group: ExtraLetterGroup) => ExtraLetterGroup) => void
+  onAddPack: () => void
+  onRemovePack: (selectionId: string) => void
+  onUpdatePack: (selectionId: string, updater: (selection: ExtraLetterPackSelection) => ExtraLetterPackSelection) => void
 }) {
+  const availableColors = colors.filter(color => Boolean(color.globalColorId))
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
-      <h3 className="text-base font-black">Letras Extra</h3>
-      <p className="mt-1 text-sm leading-6 text-stone-500">
-        Compre conjuntos extra noutras cores para trocar letras no futuro sem alterar o layout das paredes.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-black">Adicionar Letras/Símbolos Extra</h3>
+          <p className="mt-1 text-sm leading-6 text-stone-500">
+            Packs anti-desperdício por cor, para stock físico separado por cliente.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onAddPack}
+          className="inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full bg-stone-950 px-4 text-sm font-black text-white transition hover:bg-[#d4af37] hover:text-stone-950"
+        >
+          <Plus className="size-4" />
+          Adicionar Pack
+        </button>
+      </div>
       <div className="mt-5 grid gap-4">
-        {groups.map(group => {
-          const hasUnavailableColor = group.quantity > 0 && group.color && !colors.some(color => colorMatches(color, group.color as ProductColor))
-          const needsColor = group.quantity > 0 && (!group.color || hasUnavailableColor)
+        {selections.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-4 text-sm leading-6 text-stone-500">
+            Sem packs extra. O BOM usa apenas as letras necessárias para o menu actual.
+          </div>
+        ) : null}
+        {selections.map(selection => {
+          const pack = EXTRA_LETTER_PACKS[selection.packId]
+          const selectedColor = availableColors.find(color => color.globalColorId === selection.color.globalColorId)
+          const needsColor = !selectedColor
           return (
-            <div key={group.id} className={`rounded-2xl border p-3 ${needsColor ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black">{group.label}</p>
-                  <p className="mt-1 max-w-48 truncate text-xs text-stone-500">{group.charactersPerUnit}</p>
+            <div key={selection.id} className={`rounded-2xl border p-3 ${needsColor ? 'border-red-300 bg-red-50' : 'border-stone-200 bg-stone-50'}`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <label className="text-xs font-black uppercase tracking-[0.16em] text-stone-400">Pack</label>
+                  <select
+                    value={selection.packId}
+                    onChange={event => {
+                      const nextPackId = event.target.value
+                      if (!isExtraLetterPackId(nextPackId)) return
+                      onUpdatePack(selection.id, current => ({ ...current, packId: nextPackId }))
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm font-black outline-none transition focus:border-stone-500"
+                  >
+                    {EXTRA_PACK_OPTIONS.map(option => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 max-w-full truncate text-xs text-stone-500">{pack.characters}</p>
                 </div>
                 <div className="flex items-center rounded-full border border-stone-200 bg-white p-1">
                   <button
                     type="button"
-                    onClick={() => onUpdateGroup(group.id, current => ({ ...current, quantity: current.quantity - 1 }))}
-                    disabled={group.quantity <= 0}
+                    onClick={() => onUpdatePack(selection.id, current => ({ ...current, quantity: Math.max(1, current.quantity - 1) }))}
+                    disabled={selection.quantity <= 1}
                     className="flex size-8 cursor-pointer items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-35"
-                    aria-label={`Reduzir ${group.label}`}
+                    aria-label={`Reduzir ${pack.label}`}
                   >
                     <Minus className="size-4" />
                   </button>
-                  <span className="min-w-8 text-center text-sm font-black">{group.quantity}</span>
+                  <span className="min-w-8 text-center text-sm font-black">{selection.quantity}x</span>
                   <button
                     type="button"
-                    onClick={() => onUpdateGroup(group.id, current => ({ ...current, quantity: current.quantity + 1 }))}
+                    onClick={() => onUpdatePack(selection.id, current => ({ ...current, quantity: current.quantity + 1 }))}
                     className="flex size-8 cursor-pointer items-center justify-center rounded-full text-stone-600 transition hover:bg-stone-100"
-                    aria-label={`Aumentar ${group.label}`}
+                    aria-label={`Aumentar ${pack.label}`}
                   >
                     <Plus className="size-4" />
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onRemovePack(selection.id)}
+                  className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-stone-200 bg-white text-stone-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                  aria-label={`Remover ${pack.label}`}
+                >
+                  <Trash2 className="size-4" />
+                </button>
               </div>
-              {group.quantity > 0 && (
-                <div className="mt-4">
-                  <SwatchPicker
-                    label="Cor deste extra"
-                    colors={colors}
-                    selected={group.color as ProductColor | undefined}
-                    onSelect={color => onUpdateGroup(group.id, current => ({ ...current, color }))}
-                  />
-                  {needsColor && (
-                    <p className="mt-2 text-xs font-bold text-red-700">
-                      {hasUnavailableColor ? 'Esta cor já não está disponível para Letras Extra.' : 'Escolha uma cor para adicionar este extra ao BOM.'}
-                    </p>
-                  )}
-                </div>
-              )}
+              <div className="mt-4">
+                <SwatchPicker
+                  label="Cor deste pack"
+                  colors={availableColors}
+                  selected={selectedColor ?? selection.color}
+                  onSelect={color => {
+                    const nextColor = toExtraLetterPackColor(color)
+                    if (!nextColor) return
+                    onUpdatePack(selection.id, current => ({ ...current, color: nextColor }))
+                  }}
+                />
+                {needsColor && (
+                  <p className="mt-2 text-xs font-bold text-red-700">
+                    Esta cor já não está disponível para Letras Extra.
+                  </p>
+                )}
+              </div>
             </div>
           )
         })}
@@ -1555,7 +1616,7 @@ export default function ModularBuilderPage() {
   const [walls, setWalls] = useState<PhysicalWall[]>(() => createDefaultWalls())
   const [activeWallId, setActiveWallId] = useState('main-wall')
   const [fontStyle, setFontStyle] = useState<FontStyle>('classic')
-  const [extraLetterGroups, setExtraLetterGroups] = useState<ExtraLetterGroup[]>(defaultExtraLetterGroups)
+  const [extraLetterPackSelections, setExtraLetterPackSelections] = useState<ExtraLetterPackSelection[]>([])
   const [railColor, setRailColor] = useState<ProductColor | undefined>()
   const [baseLetterColor, setBaseLetterColor] = useState<ProductColor | undefined>()
   const [accentLetterColor, setAccentLetterColor] = useState<ProductColor | undefined>()
@@ -1651,20 +1712,26 @@ export default function ModularBuilderPage() {
   }, [activeWall])
 
   const railModuleUnitPrice = getProductPrice(railProduct) + (selectedRailColor?.priceAdd ?? 0)
+  const extraPackColorPriceAdd = Math.max(
+    0,
+    ...extraLetterPackSelections.map(selection => (
+      letterColors.find(color => color.globalColorId === selection.color.globalColorId)?.priceAdd ??
+      selection.color.priceAdd ??
+      0
+    )),
+  )
   const letterColorPriceAdd = Math.max(
     selectedBaseLetterColor?.priceAdd ?? 0,
     selectedAccentLetterColor?.priceAdd ?? 0,
     selectedLetterCardColor?.priceAdd ?? 0,
+    extraPackColorPriceAdd,
   )
   const standardPackUnitPrice = getProductPrice(packProduct) + letterColorPriceAdd
   const avulsoUnitPrice = getProductPrice(avulsoProduct) + letterColorPriceAdd
   const bom = useMemo(
     () => getWallsBom({
       walls,
-      extraLetterGroups: extraLetterGroups.map(group => ({
-        ...group,
-        color: group.color ? stripMenuColor(group.color as ProductColor) : undefined,
-      })),
+      extraLetterPackSelections,
       baseLetterColor: selectedBaseLetterColor ? stripMenuColor(selectedBaseLetterColor) : undefined,
       accentLetterColor: selectedAccentLetterColor ? stripMenuColor(selectedAccentLetterColor) : undefined,
       hasCustomBrandColor: Boolean(activeCustomBrandColor),
@@ -1672,14 +1739,16 @@ export default function ModularBuilderPage() {
       standardPackUnitPrice,
       avulsoUnitPrice,
     }),
-    [activeCustomBrandColor, avulsoUnitPrice, extraLetterGroups, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
+    [activeCustomBrandColor, avulsoUnitPrice, extraLetterPackSelections, railModuleUnitPrice, selectedAccentLetterColor, selectedBaseLetterColor, standardPackUnitPrice, walls],
   )
   const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
-  const extraLetterColorErrors = extraLetterGroups.flatMap(group => {
-    if (group.quantity <= 0) return []
-    if (!group.color) return [`${group.label}: escolha uma cor para adicionar este extra.`]
-    if (!letterColors.some(color => colorMatches(color, group.color as ProductColor))) {
-      return [`${group.label}: "${(group.color as ProductColor).name}" já não está disponível para letras extra.`]
+  const extraLetterColorErrors = extraLetterPackSelections.flatMap(selection => {
+    const pack = EXTRA_LETTER_PACKS[selection.packId]
+    if (!pack) return ['Pack extra inválido.']
+    if (!Number.isInteger(selection.quantity) || selection.quantity < 1) return [`${pack.label}: quantidade inválida.`]
+    if (!selection.color?.globalColorId) return [`${pack.label}: escolha uma cor para adicionar este extra.`]
+    if (!letterColors.some(color => colorMatches(color, selection.color))) {
+      return [`${pack.label}: "${selection.color.name}" já não está disponível para letras extra.`]
     }
     return []
   })
@@ -1704,7 +1773,7 @@ export default function ModularBuilderPage() {
     setLetterCardColor(draft.letterCardColor)
     setCustomBrandColor(draft.customBrandColor ?? '')
     setCustomBrandColorTarget(draft.customBrandColorTarget ?? 'letters')
-    setExtraLetterGroups(draft.extraLetterGroups)
+    setExtraLetterPackSelections(draft.extraLetterPackSelections)
     setCustomerName(draft.customerName)
     setCustomerEmail(draft.customerEmail)
     setCustomerPhone(draft.customerPhone)
@@ -1718,7 +1787,7 @@ export default function ModularBuilderPage() {
   useEffect(() => {
     if (!draftHydrated) return
     const draft: BuilderDraftActive = {
-      version: 4,
+      version: 5,
       walls,
       activeWallId,
       fontStyle,
@@ -1728,7 +1797,7 @@ export default function ModularBuilderPage() {
       letterCardColor: selectedLetterCardColor,
       customBrandColor: activeCustomBrandColor || undefined,
       customBrandColorTarget,
-      extraLetterGroups,
+      extraLetterPackSelections,
       customerName,
       customerEmail,
       customerPhone,
@@ -1747,7 +1816,7 @@ export default function ModularBuilderPage() {
     customerName,
     customerPhone,
     draftHydrated,
-    extraLetterGroups,
+    extraLetterPackSelections,
     fontStyle,
     notes,
     selectedAccentLetterColor,
@@ -1915,17 +1984,41 @@ export default function ModularBuilderPage() {
     })
   }, [updateActiveWall])
 
-  const updateExtraLetterGroup = useCallback((
-    groupId: ExtraLetterGroup['id'],
-    updater: (group: ExtraLetterGroup) => ExtraLetterGroup,
+  const addExtraLetterPack = useCallback(() => {
+    const defaultColor = selectedBaseLetterColor?.globalColorId
+      ? selectedBaseLetterColor
+      : letterColors.find(color => Boolean(color.globalColorId))
+    const packColor = toExtraLetterPackColor(defaultColor)
+    if (!packColor) {
+      toast.error('Não há cores disponíveis para Letras Extra no inventário activo.')
+      return
+    }
+    setExtraLetterPackSelections(current => [
+      ...current,
+      {
+        id: makeId('extra-pack'),
+        packId: 'numbers',
+        color: packColor,
+        quantity: 1,
+      },
+    ])
+  }, [letterColors, selectedBaseLetterColor])
+
+  const removeExtraLetterPack = useCallback((selectionId: string) => {
+    setExtraLetterPackSelections(current => current.filter(selection => selection.id !== selectionId))
+  }, [])
+
+  const updateExtraLetterPack = useCallback((
+    selectionId: string,
+    updater: (selection: ExtraLetterPackSelection) => ExtraLetterPackSelection,
   ) => {
-    setExtraLetterGroups(current => current.map(group => {
-      if (group.id !== groupId) return group
-      const next = updater(group)
+    setExtraLetterPackSelections(current => current.map(selection => {
+      if (selection.id !== selectionId) return selection
+      const next = updater(selection)
       return {
-        ...group,
+        ...selection,
         ...next,
-        quantity: Math.max(0, Math.trunc(Number(next.quantity) || 0)),
+        quantity: Math.max(1, Math.trunc(Number(next.quantity) || 1)),
       }
     }))
   }, [])
@@ -2017,7 +2110,6 @@ export default function ModularBuilderPage() {
       const baseLetterColorPayload = stripMenuColor(selectedBaseLetterColor)
       const accentLetterColorPayload = stripMenuColor(selectedAccentLetterColor)
       const letterCardColorPayload = stripMenuColor(selectedLetterCardColor)
-      const physicalGrid = flattenTextRowsFromWalls(walls)
 
       const response = await fetch('/api/checkout/cart', {
         method: 'POST',
@@ -2054,8 +2146,7 @@ export default function ModularBuilderPage() {
             dimensionSet: PHYSICAL_GRID_DIMENSION_SET,
             fontStyle,
             walls,
-            physicalGrid,
-            lines: physicalGridToMenuRows(physicalGrid),
+            extraLetterPackSelections,
             totalRailModules: bom.totalRailModules,
             standardPackQuantity: bom.standardPackQuantity,
             avulsoCharacterQuantity: bom.avulsoCharacterQuantity,
@@ -2064,10 +2155,6 @@ export default function ModularBuilderPage() {
             checkoutLane,
             customBrandColor: activeCustomBrandColor || undefined,
             customBrandColorTarget: activeCustomBrandColor ? customBrandColorTarget : undefined,
-            extraLetterGroups: extraLetterGroups.map(group => ({
-              ...group,
-              color: group.color ? stripMenuColor(group.color as ProductColor) : undefined,
-            })),
             railColor: railColorPayload,
             letterColor: baseLetterColorPayload,
             baseLetterColor: baseLetterColorPayload,
@@ -2145,7 +2232,13 @@ export default function ModularBuilderPage() {
               onChange={setCustomBrandColor}
               onTargetChange={setCustomBrandColorTarget}
             />
-            <ExtraLettersSection groups={extraLetterGroups} colors={letterColors} onUpdateGroup={updateExtraLetterGroup} />
+            <ExtraLettersSection
+              selections={extraLetterPackSelections}
+              colors={letterColors}
+              onAddPack={addExtraLetterPack}
+              onRemovePack={removeExtraLetterPack}
+              onUpdatePack={updateExtraLetterPack}
+            />
             <div className="rounded-2xl border border-stone-200 bg-white p-5 text-stone-950 shadow-sm">
               <h3 className="text-base font-black">Checkout</h3>
               <div className="mt-4 grid gap-3">

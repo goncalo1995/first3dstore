@@ -1,5 +1,7 @@
 import {
   CHARACTER_WIDTH_MM,
+  EXTRA_LETTER_PACKS,
+  type ExtraLetterPackSelection,
   FALLBACK_CHARACTER_WIDTH_MM,
   MAX_GLOBAL_MODULES,
   MIN_GLOBAL_MODULES,
@@ -325,6 +327,7 @@ function isLogoWall(wall: PhysicalWall) {
 
 type BomPricingInput = {
   extraLetterGroups?: ExtraLetterGroup[]
+  extraLetterPackSelections?: ExtraLetterPackSelection[]
   baseLetterColor?: MenuColorPayload
   accentLetterColor?: MenuColorPayload
   colorOverrides?: Record<string, MenuColorPayload>
@@ -338,6 +341,7 @@ type BomPricingInput = {
 function calculateBomFromRows(grid: PhysicalRow[], options: BomPricingInput = {}): PhysicalGridBom {
   const {
     extraLetterGroups = [],
+    extraLetterPackSelections = [],
     baseLetterColor = { name: 'Base' },
     accentLetterColor,
     colorOverrides,
@@ -375,6 +379,21 @@ function calculateBomFromRows(grid: PhysicalRow[], options: BomPricingInput = {}
   }
 
   let extraCharacters = 0
+  for (const selection of extraLetterPackSelections) {
+    const pack = EXTRA_LETTER_PACKS[selection.packId]
+    const quantity = Math.max(0, Math.trunc(Number(selection.quantity) || 0))
+    if (!pack || quantity <= 0 || !selection.color?.globalColorId) continue
+    const repeated = pack.characters.repeat(quantity)
+    extraCharacters += countVisibleCharacters(repeated)
+    addTextToMaps({
+      text: repeated,
+      color: selection.color,
+      fallbackKey: `extra-pack-${selection.id}`,
+      characterFrequencyMap,
+      characterFrequencyByColor,
+    })
+  }
+
   for (const group of extraLetterGroups) {
     if (group.quantity <= 0) continue
     const repeated = group.charactersPerUnit.repeat(group.quantity)

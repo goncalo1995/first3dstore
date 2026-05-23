@@ -1,5 +1,9 @@
 import { sanitizeMenuText } from './menu-calculator'
 import {
+  EXTRA_LETTER_PACKS,
+  type ExtraLetterPackSelection,
+} from './modular-inventory-config'
+import {
   clampRailModules,
   type ExtraLetterGroup,
   type PhysicalColumn,
@@ -29,6 +33,7 @@ export type ModularProductionSource = {
     characterCount?: number
   }[]
   extraLetterGroups?: ExtraLetterGroup[]
+  extraLetterPackSelections?: ExtraLetterPackSelection[]
   railColor?: BomColor
   letterColor?: BomColor
   baseLetterColor?: BomColor
@@ -301,6 +306,22 @@ export function buildModularProductionBom(recordOrSource: any): ModularProductio
         colorName: colorName(group.color, 'Letras extra'),
         colorHex: group.color?.hex,
       })),
+    ...(source.extraLetterPackSelections
+      ? {
+          extraLetterGroups: source.extraLetterPackSelections
+            .filter(selection => Number(selection.quantity) > 0 && EXTRA_LETTER_PACKS[selection.packId])
+            .map(selection => {
+              const pack = EXTRA_LETTER_PACKS[selection.packId]
+              return {
+                label: pack.label,
+                quantity: Number(selection.quantity),
+                charactersPerUnit: pack.characters,
+                colorName: colorName(selection.color, 'Letras extra'),
+                colorHex: selection.color?.hex,
+              }
+            }),
+        }
+      : {}),
     hasLogo: wallBoms.some(wall => wall.requiresManualCad),
   }
 }

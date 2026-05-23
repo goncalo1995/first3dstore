@@ -132,6 +132,49 @@ export const STANDARD_PACK_DISTRIBUTION: Record<string, number> = {
   Ç: 1,
 }
 
+export const EXTRA_LETTER_PACKS = {
+  vowels: {
+    id: 'vowels',
+    label: 'Vogais',
+    characters: 'aeiouAEIOUáàãéêíóõú',
+  },
+  consonants: {
+    id: 'consonants',
+    label: 'Consoantes',
+    characters: 'bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZçÇ',
+  },
+  numbers: {
+    id: 'numbers',
+    label: 'Números',
+    characters: '0123456789',
+  },
+  symbols: {
+    id: 'symbols',
+    label: 'Símbolos',
+    characters: '€.,:-+/%&?!',
+  },
+} as const
+
+export type ExtraLetterPackId = keyof typeof EXTRA_LETTER_PACKS
+
+export type ExtraLetterPackDefinition = {
+  id: ExtraLetterPackId
+  label: string
+  characters: string
+}
+
+export type ExtraLetterPackSelection = {
+  id: string
+  packId: ExtraLetterPackId
+  color: {
+    globalColorId: string
+    hex: string
+    name: string
+    priceAdd?: number
+  }
+  quantity: number
+}
+
 export const V1_STANDARD_DIMENSION_SET = {
   id: PHYSICAL_GRID_DIMENSION_SET,
   railLengthMm: RAIL_LENGTH_MM,
