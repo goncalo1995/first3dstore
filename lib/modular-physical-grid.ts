@@ -23,6 +23,7 @@ export type RailAlign = 'left' | 'center' | 'right'
 export type TextAlign = 'left' | 'center' | 'right'
 export type PhysicalColumnKind = 'title' | 'item'
 export type CheckoutLane = 'stripe_auto_pay' | 'manual_quote'
+export type PhysicalRowLayoutRole = 'title' | 'list' | 'grid'
 
 export type PhysicalColumn = {
   id: string
@@ -38,6 +39,9 @@ export type PhysicalColumn = {
 export type PhysicalRow = {
   id: string
   columns: PhysicalColumn[]
+  gapAfterCm?: number
+  sectionName?: string
+  layoutRole?: PhysicalRowLayoutRole
 }
 
 export type PhysicalWall = {

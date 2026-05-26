@@ -41,6 +41,9 @@ const wallSchema = z.object({
   rows: z.array(z.object({
     id: z.string(),
     columns: z.array(columnSchema).min(1),
+    gapAfterCm: z.number().min(0).max(200).nullable().optional(),
+    sectionName: z.string().nullable().optional(),
+    layoutRole: z.enum(['title', 'list', 'grid']).nullable().optional(),
   }).strict()),
 }).strict()
 
@@ -223,6 +226,9 @@ function normalizeWalls(walls: FormatterObject['walls'], originalText: string, m
         ? []
         : wall.rows.map((row, rowIndex) => ({
           id: row.id || `row-${wallIndex + 1}-${rowIndex + 1}`,
+          ...(Number.isFinite(row.gapAfterCm ?? NaN) && Number(row.gapAfterCm) > 0 ? { gapAfterCm: Math.max(0, Math.min(200, Number(row.gapAfterCm))) } : {}),
+          ...(row.sectionName ? { sectionName: sanitizeMenuText(row.sectionName).replace(/\s+/g, ' ').trim().slice(0, 80) } : {}),
+          ...(row.layoutRole ? { layoutRole: row.layoutRole } : {}),
           columns: row.columns
             .map((column, columnIndex) => {
               const leftText = sanitizeMenuText(column.leftText).replace(/\s+/g, ' ').trim().slice(0, 160)

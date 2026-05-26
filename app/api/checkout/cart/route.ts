@@ -915,6 +915,19 @@ Desconto campanha: -${quote?.launchDiscountPercent ?? physicalBom?.launchDiscoun
 Total modular: ${formatMoney(quote?.totalAfterDiscount ?? physicalBom?.totalAfterDiscount ?? 0)}`
 }
 
+function formatExtraLetterPackSummary(selections: ExtraLetterPackSelection[] = [], maxLength = 450) {
+  const summary = selections
+    .filter(selection => Number(selection.quantity) > 0 && EXTRA_LETTER_PACKS[selection.packId])
+    .map(selection => {
+      const pack = EXTRA_LETTER_PACKS[selection.packId]
+      return `${selection.quantity}x ${pack.label} ${selection.color.name}`
+    })
+    .join(', ')
+
+  if (summary.length <= maxLength) return summary
+  return `${summary.slice(0, Math.max(0, maxLength - 1)).trim()}…`
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat('pt-PT', {
     style: 'currency',
@@ -1205,6 +1218,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+    const extraLetterPackSummary = formatExtraLetterPackSummary(trustedExtraLetterPackSelections)
 
     for (const item of body.items) {
       const slug = String(item.productSlug ?? '').trim()
@@ -1250,6 +1264,9 @@ export async function POST(request: NextRequest) {
       const customText = formatCustomText(item.customizations)
       const menuDetails = getMenuItemDetails(menuRole, menuQuote, body.menuSystem, serverWallsBom, trustedExtraLetterPackSelections)
       const itemCustomText = getMenuCustomText(menuRole, menuQuote, customText, serverWallsBom)
+      const itemExtraPackSummary = menuRole === 'avulso' && extraLetterPackSummary
+        ? `Extras: ${extraLetterPackSummary}`
+        : null
       const productDisplayName = menuRole === 'rails' ? 'Módulo Menu 25cm' : product.name
 
       orderItems.push({
@@ -1296,6 +1313,7 @@ export async function POST(request: NextRequest) {
               variant?.name,
               colors.length ? colors.join(', ') : null,
               itemCustomText || null,
+              itemExtraPackSummary,
               menuRole ? `Campanha de lançamento -${LAUNCH_DISCOUNT_PERCENT}% aplicada` : null,
             ].filter(Boolean).join(' · ').slice(0, 1000),
           },
@@ -1501,6 +1519,7 @@ export async function POST(request: NextRequest) {
               standardPackQuantity: String(serverWallsBom?.standardPackQuantity ?? menuQuote?.standardPackQuantity ?? 0),
               avulsoCharacterQuantity: String(serverWallsBom?.avulsoCharacterQuantity ?? menuQuote?.avulsoCharacterQuantity ?? 0),
               launchDiscountPercent: String(LAUNCH_DISCOUNT_PERCENT),
+              ...(extraLetterPackSummary ? { extraLetterPackSummary } : {}),
             }
           : {}),
       },
