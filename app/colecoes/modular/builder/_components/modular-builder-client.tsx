@@ -5,6 +5,7 @@ import type { InstaQLEntity } from '@instantdb/react'
 import { Check, ChevronDown, Copy, Loader2, Minus, MousePointer2, Palette, Pencil, Plus, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Header } from '@/components/header'
+import { ParametricWall3DPreview } from '@/components/preview/ParametricWall3DPreview'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Slider } from '@/components/ui/slider'
@@ -43,6 +44,7 @@ import {
   type TextAlign,
 } from '@/lib/modular-physical-grid'
 import type { ProductColor } from '@/lib/products'
+import type { PhysicalRail } from '@/lib/preview/parametric-preview-types'
 
 const MENU_RAIL_SLUG = 'menu-rail-25cm'
 const MENU_PACK_SLUG = 'menu-letter-pack-standard'
@@ -518,6 +520,62 @@ function stripMenuColor(color: ProductColor): MenuColorPayload {
     globalColorId: color.globalColorId,
     priceAdd: color.priceAdd ?? 0,
   }
+}
+
+function getWallPreviewWidthCm(wall: PhysicalWall) {
+  if (Number.isFinite(Number(wall.maxWidthCm)) && Number(wall.maxWidthCm) > 0) return Number(wall.maxWidthCm)
+
+  const maxRowWidthMm = Math.max(
+    RAIL_LENGTH_MM,
+    ...wall.rows.map(row => row.columns.reduce((sum, column) => sum + (Number(column.railModules) || 0) * RAIL_LENGTH_MM, 0)),
+  )
+  return maxRowWidthMm / 10
+}
+
+function wallToPhysicalRailsSnapshot(wall: PhysicalWall): PhysicalRail[] {
+  if (wall.type === 'logo') return []
+
+  const previewColumnGapMm = 18
+  const getColumnLengthMm = (column: PhysicalColumn) => (Number(column.railModules) || 0) * RAIL_LENGTH_MM
+  const getRowLengthMm = (row: PhysicalRow) => {
+    const columnsLengthMm = row.columns.reduce((sum, column) => sum + getColumnLengthMm(column), 0)
+    return columnsLengthMm + Math.max(0, row.columns.length - 1) * previewColumnGapMm
+  }
+  const maxRowWidthMm = Math.max(RAIL_LENGTH_MM, ...wall.rows.map(getRowLengthMm))
+
+  return wall.rows.flatMap((row, rowIndex) => {
+    const rowLengthMm = getRowLengthMm(row)
+    const rowOffsetMm = row.columns.length === 1
+      ? (() => {
+        const column = row.columns[0]
+        if (column.railAlign === 'right') return Math.max(0, maxRowWidthMm - getColumnLengthMm(column))
+        if (column.railAlign === 'center') return Math.max(0, (maxRowWidthMm - getColumnLengthMm(column)) / 2)
+        return 0
+      })()
+      : Math.max(0, (maxRowWidthMm - rowLengthMm) / 2)
+    let cursorMm = rowOffsetMm
+
+    return row.columns.map((column, columnIndex) => {
+      const lengthMm = getColumnLengthMm(column)
+      const xMm = cursorMm
+      cursorMm += lengthMm + previewColumnGapMm
+
+      const text = [column.leftText, column.rightText]
+        .map(value => sanitizeMenuText(String(value ?? '')).replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .join('   ')
+
+      return {
+        id: `${wall.id}-${row.id}-${column.id}`,
+        lengthMm,
+        text,
+        row: rowIndex + 1,
+        col: columnIndex + 1,
+        xMm,
+      }
+    })
+  })
+    .filter(rail => rail.lengthMm > 0 && rail.text.length > 0)
 }
 
 function normalizeHexColor(value: string) {
@@ -1950,8 +2008,16 @@ export function ModularBuilderClient() {
   const selectedAccentLetterColor = colorResolution.accentLetterColor.color
   const selectedLetterCardColor = colorResolution.letterCardColor.color
   const activeCustomBrandColor = colorResolution.customColor?.hex ?? ''
+  const previewRailColor = activeCustomBrandColor && customBrandColorTarget === 'rails'
+    ? { name: 'Cor personalizada', hex: activeCustomBrandColor, globalColorId: 'custom-rails' }
+    : selectedRailColor
+  const previewLetterColor = activeCustomBrandColor && customBrandColorTarget === 'letters'
+    ? { name: 'Cor personalizada', hex: activeCustomBrandColor, globalColorId: 'custom-letters' }
+    : selectedBaseLetterColor
 
   const activeWall = useMemo(() => walls.find(wall => wall.id === activeWallId) ?? walls[0] ?? createDefaultWalls()[0], [activeWallId, walls])
+  const activeWallPreviewRails = useMemo(() => wallToPhysicalRailsSnapshot(activeWall), [activeWall])
+  const activeWallPreviewWidthCm = useMemo(() => getWallPreviewWidthCm(activeWall), [activeWall])
   const activeRowId = selectedRowId && activeWall.rows.some(row => row.id === selectedRowId)
     ? selectedRowId
     : activeWall.rows[0]?.id ?? ''
@@ -2279,6 +2345,14 @@ export function ModularBuilderClient() {
               onRemove={removeWall}
               onEditWall={openStructurePanel}
             />
+            <div className="flex justify-end">
+              <ParametricWall3DPreview
+                rails={activeWallPreviewRails}
+                wallWidthCm={activeWallPreviewWidthCm}
+                railColor={previewRailColor}
+                letterColor={previewLetterColor}
+              />
+            </div>
             <PhysicalGridPreview
               wall={activeWall}
               metricsByColumn={metricsByColumn}
