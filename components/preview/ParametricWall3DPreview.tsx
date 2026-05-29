@@ -148,7 +148,7 @@ function GeometryGroup({
   }, [letterGeometry, letterMaterial, railGeometry, railMaterial])
 
   return (
-    <group position={groupPosition} rotation={[-0.32, 0.08, 0]}>
+    <group position={groupPosition} rotation={[-Math.PI / 2, 0, 0]}>
       {railGeometry && <mesh geometry={railGeometry} material={railMaterial} castShadow receiveShadow />}
       {letterGeometry && <mesh geometry={letterGeometry} material={letterMaterial} castShadow receiveShadow />}
     </group>

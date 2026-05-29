@@ -97,16 +97,16 @@ export function buildPreviewScad({
   })
 
   const railBodies = placedRails.map((rail) => {
-    const y = -(rail.row - 1) * rowGap
+    const z = -(rail.row - 1) * rowGap
     return `
-      translate([${rail.xMm.toFixed(3)}, ${y.toFixed(3)}, 0]) rail_profile(${rail.lengthMm.toFixed(3)});
+      translate([${rail.xMm.toFixed(3)}, 0, ${z.toFixed(3)}]) rail_profile(${rail.lengthMm.toFixed(3)});
     `
   }).join('\n')
 
   const letterBodies = placedRails.map((rail) => {
-    const y = -(rail.row - 1) * rowGap
+    const z = -(rail.row - 1) * rowGap
     return `
-      translate([${rail.xMm.toFixed(3)}, ${y.toFixed(3)}, 0]) union() {
+      translate([${rail.xMm.toFixed(3)}, 0, ${z.toFixed(3)}]) union() {
         ${buildCharacterBlocks(rail.text, rail.lengthMm)}
       }
     `
@@ -123,12 +123,24 @@ export function buildPreviewScad({
       shelf_height = 4;
       lip_width = 2;
       lip_height = 5.5;
+      front_depth = shelf_width + lip_width;
 
       union() {
+        // Backplate. Matches the production rail's 45mm wall height.
         cube([length, rail_thickness, rail_height]);
-        cube([length, rail_thickness + shelf_width + lip_width, shelf_height]);
-        translate([0, rail_thickness + shelf_width, shelf_height])
+
+        // Bottom shelf. In browser preview the usable shelf faces -Y so the
+        // Three.js camera sees the front after the SCAD Z-up -> Three Y-up transform.
+        translate([0, -front_depth, 0])
+          cube([length, rail_thickness + front_depth, shelf_height]);
+
+        // Front retaining lip.
+        translate([0, -front_depth, shelf_height])
           cube([length, lip_width, lip_height]);
+
+        // Subtle front edge highlight/bevel impression without expensive booleans.
+        translate([0, -front_depth, shelf_height + lip_height])
+          cube([length, lip_width, 0.8]);
       }
     }
 
