@@ -502,10 +502,43 @@ const _schema = i.schema({
       }>().optional(),
       engravingText: i.string().optional(),
       leadType: i.string<'custom_idea' | 'photo_request' | 'b2b'>().optional(),
+      b2bMetadata: i.json<{
+        version: 1
+        source: 'empresas'
+        businessType: string
+        businessTypeOther?: string
+        goal: string
+        approximateQuantity?: number
+        deadline?: string
+        message: string
+        aiIdeas?: {
+          title: string
+          object: string
+          placement: string
+          utility: string
+          finish: string
+          prototypeStep: string
+        }[]
+        ipHash?: string
+        userAgent?: string
+        emailStatus?: {
+          customer?: 'sent' | 'failed' | 'skipped'
+          admin?: 'sent' | 'failed' | 'skipped'
+          lastError?: string
+        }
+        retentionReviewAt: string
+      }>().optional(),
       isPaid: i.boolean().optional(),
       notes: i.string().optional(),
       status: i.string<'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'>().indexed(),
       createdAt: i.date().indexed(),
+      updatedAt: i.date(),
+    }),
+    b2bRateLimitBuckets: i.entity({
+      key: i.string().unique().indexed(),
+      action: i.string<'lead' | 'ideas'>().indexed(),
+      windowStart: i.date().indexed(),
+      count: i.number(),
       updatedAt: i.date(),
     }),
     stripeWebhookEvents: i.entity({

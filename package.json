@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "seed:products": "npx tsx scripts/seed-products.ts"
+    "seed:products": "npx tsx scripts/seed-products.ts",
+    "db:schema:push": "npx instant-cli@latest push schema",
+    "db:perms:push": "npx instant-cli@latest push perms"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1041.0",

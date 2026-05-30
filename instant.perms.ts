@@ -135,6 +135,17 @@ const rules = {
       isPublicRequest: "isPublicPhotoRequest || isPublicB2BLead",
     },
   },
+  b2bRateLimitBuckets: {
+    allow: {
+      view: "isAdmin",
+      create: "isAdmin",
+      update: "isAdmin",
+      delete: "isAdmin",
+    },
+    bind: {
+      isAdmin: `auth.email in ${JSON.stringify(adminEmails)}`,
+    },
+  },
   aiUsageLogs: {
     allow: {
       view: "isAdmin",
