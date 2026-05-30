@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Layers, Play } from 'lucide-react'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
@@ -250,6 +250,7 @@ export function BatchStartPrintDialog({
             <Play className="h-5 w-5 text-emerald-500" />
             Start Batch Print
           </DialogTitle>
+          <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">

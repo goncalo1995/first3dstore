@@ -589,6 +589,8 @@ const _schema = i.schema({
       productSlug: i.string().indexed().optional(),
       selectedVariantId: i.string().optional(),
       selectedVariantName: i.string().optional(),
+      productionKey: i.string().indexed().optional(),
+      partType: i.string<'catalog_part' | 'rail' | 'letter' | 'extra_letter' | 'assembly'>().indexed().optional(),
       productName: i.string(),
       imageUrl: i.string().optional(),
       source: i.string<'order' | 'order_request'>().optional(),

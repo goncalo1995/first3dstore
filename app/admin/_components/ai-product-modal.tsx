@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -120,6 +120,7 @@ export function AIProductModal({ open, onOpenChange, product, onApplyResult }: A
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>AI Product Studio – {product.name}</DialogTitle>
+          <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeAction} onValueChange={(v) => setActiveAction(v as AIActionType)}>

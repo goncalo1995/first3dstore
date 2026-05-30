@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -522,6 +523,7 @@ export function ProductionSchedule({ jobs, printers }: ProductionScheduleProps) 
               <Play className="h-5 w-5 text-emerald-500" />
               Start Manufacturing
             </DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           
           {startDialogJob && (
@@ -787,6 +789,7 @@ export function ProductionSchedule({ jobs, printers }: ProductionScheduleProps) 
               )}
               Complete Manufacturing
             </DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           
           {finishDialogJob && (

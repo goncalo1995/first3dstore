@@ -31,7 +31,7 @@ import { AIActionType, useAIActions } from '@/hooks/useAIActions'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AIProductModal } from '../../_components/ai-product-modal'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type ColorRecord = GlobalColor & { id: string }
 type CatalogRecord = CatalogProductRecord & { id: string; updatedAt?: Date }
@@ -2221,6 +2221,7 @@ export function ProductEditor({ slug }: { slug: string }) {
         <DialogContent className="max-h-[82vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Choose Variant Image</DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           {mediaUrls.length === 0 ? (
             <div className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-secondary/20">
@@ -2269,6 +2270,7 @@ export function ProductEditor({ slug }: { slug: string }) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Gerar STL de Imagem</DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
