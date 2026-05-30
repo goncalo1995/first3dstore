@@ -31,6 +31,7 @@ import {
   EXTRA_LETTER_PACKS,
   type ExtraLetterPackSelection,
 } from '@/lib/modular-inventory-config'
+import { MENU_V1_AUTOPAY_CHARACTER_LIMIT } from '@/lib/modular-menu-v1'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
 export const runtime = 'nodejs'
@@ -63,6 +64,10 @@ type CheckoutPayload = {
     dimensionSet?: 'v1-standard-250'
     fontStyle?: FontStyle
     walls?: PhysicalWall[]
+    v1Lines?: {
+      label?: string
+      detail?: string
+    }[]
     physicalGrid?: PhysicalRow[]
     categories?: unknown[]
     extraLetterGroups?: ExtraLetterGroup[]
@@ -673,6 +678,7 @@ function getMenuItemDetails(
       dimensionSet: menuSystem?.dimensionSet,
       fontStyle: menuSystem?.fontStyle,
       walls: menuSystem?.walls,
+      v1Lines: menuSystem?.v1Lines,
       physicalGrid: menuSystem?.physicalGrid,
       categories: menuSystem?.categories,
       extraLetterPackSelections: trustedExtraLetterPackSelections,
@@ -731,6 +737,7 @@ function getMenuItemDetails(
     dimensionSet: menuSystem?.dimensionSet,
     fontStyle: menuSystem?.fontStyle,
     walls: menuSystem?.walls,
+    v1Lines: menuSystem?.v1Lines,
     physicalGrid: menuSystem?.physicalGrid,
     categories: menuSystem?.categories,
     extraLetterGroups: menuSystem?.extraLetterGroups,
@@ -1404,9 +1411,11 @@ export async function POST(request: NextRequest) {
     const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) * 100) / 100
     const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
     const total = Math.round((subtotal + shippingCost) * 100) / 100
+    const menuTotalCharacters = serverWallsBom?.totalCharacters ?? menuQuote?.totalCharacters ?? 0
     const serverCheckoutLane: CheckoutLane = (
       clientRequestedManualQuote ||
       (serverWallsBom?.totalRailModules ?? menuQuote?.totalRailModules ?? 0) > 30 ||
+      menuTotalCharacters > MENU_V1_AUTOPAY_CHARACTER_LIMIT ||
       hasCustomBrandColor ||
       hasLogo
     )
@@ -1451,6 +1460,7 @@ export async function POST(request: NextRequest) {
         spaceType: String(body.manualQuote?.spaceType ?? '').trim(),
         fontStyle: body.menuSystem?.fontStyle ?? 'classic',
         walls: body.menuSystem?.walls ?? [],
+        v1Lines: body.menuSystem?.v1Lines ?? [],
         physicalGrid: body.menuSystem?.physicalGrid ?? [],
         extraLetterPackSelections: trustedExtraLetterPackSelections,
         customBrandColor: String(body.menuSystem?.customBrandColor ?? '').trim() || undefined,
@@ -1509,6 +1519,12 @@ export async function POST(request: NextRequest) {
       client_reference_id: orderId,
       success_url: `${siteUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl()}${isMenuFlow ? '/colecoes/modular/builder' : '/checkout'}`,
+      payment_intent_data: {
+        metadata: {
+          orderId,
+          flow,
+        },
+      },
       metadata: {
         orderId,
         flow,
