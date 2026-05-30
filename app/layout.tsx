@@ -6,11 +6,11 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EM3D · Estúdio de impressão 3D em Portugal',
+  title: 'em3D · Estúdio de impressão 3D em Portugal',
   description: 'Estúdio premium de impressão 3D em Portugal para sinalética modular, objetos personalizados e pequenas séries.',
-  keywords: ['impressão 3D', 'sinalética modular', 'objetos personalizados', 'produção local', 'Portugal', 'EM3D'],
+  keywords: ['impressão 3D', 'sinalética modular', 'objetos personalizados', 'produção local', 'Portugal', 'em3D'],
   openGraph: {
-    title: 'EM3D · Estúdio de impressão 3D em Portugal',
+    title: 'em3D · Estúdio de impressão 3D em Portugal',
     description: 'Sinalética modular, objetos personalizados e pequenas séries impressas em 3D em Portugal.',
     type: 'website',
     locale: 'pt_PT',

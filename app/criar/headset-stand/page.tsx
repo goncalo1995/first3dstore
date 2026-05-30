@@ -112,7 +112,7 @@ function HeadsetStandPreview({
 }) {
   const isStealth = variant === 'stealth'
   const isClamp = variant === 'clamp'
-  const label = gamertagText.trim() || 'EM3D'
+  const label = gamertagText.trim() || 'em3D'
 
   return (
     <svg
@@ -263,7 +263,7 @@ export default function HeadsetStandConfiguratorPage() {
           <div>
             <p className="inline-flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-primary">
               <Sparkles className="size-4" />
-              Configurador EM3D
+              Configurador em3D
             </p>
             <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Suporte de auscultadores</h1>
           </div>

@@ -712,7 +712,7 @@ export default function AdminOrderRequestsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Encomendas</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pedidos, leads B2B e pipeline de produção EM3D.
+          Pedidos, leads B2B e pipeline de produção em3D.
         </p>
       </div>
 

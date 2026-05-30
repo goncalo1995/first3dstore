@@ -331,7 +331,7 @@ export default function ModularCollectionPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(212,175,55,0.18),transparent_32%),radial-gradient(circle_at_78%_6%,rgba(56,189,248,0.12),transparent_30%),linear-gradient(180deg,#09090b_0%,#101014_58%,#09090b_100%)]" />
         <div className="relative mx-auto grid max-w-[1500px] gap-12 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
           <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
-            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[#d4af37]">EM3D Modular</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[#d4af37]">em3D Modular</p>
             <h1 className="mt-6 max-w-5xl font-serif text-6xl font-bold leading-[0.9] tracking-tight sm:text-8xl lg:text-9xl">
               Space Planner para sinalética física.
             </h1>

@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       feature: 'b2b-ideas',
       timeoutMs: 10_000,
       temperature: 0.35,
-      system: `És consultor de produto físico para a EM3D, um estúdio premium de impressão 3D em Portugal.
+      system: `És consultor de produto físico para a em3D, um estúdio premium de impressão 3D em Portugal.
 Responde sempre em português europeu.
 Gera apenas objetos físicos pequenos ou médios que façam sentido imprimir em 3D para espaços comerciais.
 Não proponhas códigos digitais, tracking, instalações enormes, obras estruturais, peças médicas, fantasia, brinquedos infantis, armas, peças com carga estrutural ou promessas técnicas não verificadas.

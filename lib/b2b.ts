@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { id } from '@instantdb/admin'
-import { Resend } from 'resend'
 import type { NextRequest } from 'next/server'
 import { dbAdmin } from './db-admin'
+import { getAdminEmails, sendSmtpEmail } from './smtp-email'
 
 export type B2BIdea = {
   title: string
@@ -49,18 +49,6 @@ export const FALLBACK_B2B_IDEAS: B2BIdea[] = [
     prototypeStep: 'Fotografar o local e definir o objeto que precisa de suporte.',
   },
 ]
-
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'EM3D <onboarding@resend.dev>'
-}
-
-function getAdminEmail() {
-  const configured = process.env.ADMIN_EMAILS || ''
-  const emails = configured.split(',').map(email => email.trim()).filter(Boolean)
-  return emails[0] || null
-}
 
 export function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
@@ -146,13 +134,16 @@ export async function verifyTurnstile({
   }
 
   try {
-    const form = new FormData()
-    form.append('secret', secret)
-    form.append('response', token)
-    form.append('remoteip', ip)
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
-      body: form,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        secret: secret,
+        response: token,
+        remoteip: ip,
+      }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!payload.success) {
@@ -269,13 +260,12 @@ Ideias AI:
 ${formatIdeaSummary(aiIdeas)}`
 
   try {
-    const { error } = await resend.emails.send({
-      from: getSender(),
+    const result = await sendSmtpEmail({
       to: customerEmail,
-      subject: 'Recebemos o seu pedido B2B na EM3D',
+      subject: 'Recebemos o seu pedido B2B na em3D',
       text: `Olá ${displayName},
 
-Recebemos o seu pedido B2B na EM3D.
+Recebemos o seu pedido B2B na em3D.
 
 Referência: ${requestId}
 
@@ -284,13 +274,18 @@ Vamos rever o contexto e responder por email no prazo de 1 dia útil com próxim
 Resumo recebido:
 ${summary}
 
-A equipa EM3D
+A equipa em3D
 ${siteUrl()}`,
+      meta: {
+        requestId,
+        kind: 'customer',
+        flow: 'b2b_lead',
+      },
     })
-    emailStatus.customer = error ? 'failed' : 'sent'
-    if (error) {
-      emailStatus.lastError = JSON.stringify(error)
-      console.error('B2B customer email failed.', { requestId, error })
+    emailStatus.customer = result.ok ? 'sent' : result.skipped ? 'skipped' : 'failed'
+    if (!result.ok) {
+      emailStatus.lastError = result.error
+      console.error('B2B customer email failed.', { requestId, error: result.error })
     } else {
       console.info('B2B customer email sent.', { requestId, customerEmail })
     }
@@ -300,28 +295,32 @@ ${siteUrl()}`,
     console.error('B2B customer email exception.', { requestId, error })
   }
 
-  const adminEmail = getAdminEmail()
-  if (!adminEmail) {
+  const adminEmails = getAdminEmails()
+  if (!adminEmails.length) {
     emailStatus.admin = 'skipped'
     console.warn('B2B admin email skipped because ADMIN_EMAILS is empty.', { requestId })
     return emailStatus
   }
 
   try {
-    const { error } = await resend.emails.send({
-      from: getSender(),
-      to: adminEmail,
-      subject: `Novo lead B2B EM3D - ${companyName || displayName}`,
+    const result = await sendSmtpEmail({
+      to: adminEmails,
+      subject: `Novo lead B2B em3D - ${companyName || displayName}`,
       text: `Novo lead B2B recebido em /empresas.
 
 ${summary}`,
+      meta: {
+        requestId,
+        kind: 'admin',
+        flow: 'b2b_lead',
+      },
     })
-    emailStatus.admin = error ? 'failed' : 'sent'
-    if (error) {
-      emailStatus.lastError = JSON.stringify(error)
-      console.error('B2B admin email failed.', { requestId, error })
+    emailStatus.admin = result.ok ? 'sent' : result.skipped ? 'skipped' : 'failed'
+    if (!result.ok) {
+      emailStatus.lastError = result.error
+      console.error('B2B admin email failed.', { requestId, error: result.error })
     } else {
-      console.info('B2B admin email sent.', { requestId, adminEmail })
+      console.info('B2B admin email sent.', { requestId, adminEmails })
     }
   } catch (error) {
     emailStatus.admin = 'failed'

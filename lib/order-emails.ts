@@ -1,20 +1,10 @@
-import { Resend } from 'resend'
 import { formatModularProductionBomText } from './modular-production-bom'
+import { getAdminEmails, sendSmtpEmail } from './smtp-email'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+type EmailDeliveryState = 'sent' | 'failed' | 'skipped'
 
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
-}
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'EM3D <onboarding@resend.dev>'
-}
-
-function getAdminEmail() {
-  const configured = process.env.ADMIN_EMAILS || ''
-  const emails = configured.split(',').map(email => email.trim()).filter(Boolean)
-  return emails[0] || null
 }
 
 function formatPrice(value: number) {
@@ -119,37 +109,35 @@ Total Sinalética Modular após desconto: ${formatPrice(Number(menuSystem.totalA
 async function sendLoggedEmail(params: {
   orderId: string
   kind: 'customer' | 'admin'
-  to: string
+  to: string | string[]
   subject: string
   text: string
 }) {
-  const { data, error } = await resend.emails.send({
-    from: getSender(),
+  const result = await sendSmtpEmail({
     to: params.to,
     subject: params.subject,
     text: params.text,
-  })
-
-  if (error) {
-    console.error('Order email failed:', {
+    meta: {
       orderId: params.orderId,
       kind: params.kind,
-      to: params.to,
-      error,
-    })
-    return { ok: false as const, error }
-  }
-
-  console.info('Order email sent:', {
-    orderId: params.orderId,
-    kind: params.kind,
-    to: params.to,
-    resendId: data?.id,
+      flow: 'standard_order',
+    },
   })
-  return { ok: true as const, data }
+
+  return result
+}
+
+function deliveryState(result: Awaited<ReturnType<typeof sendLoggedEmail>>): EmailDeliveryState {
+  if (result.ok) return 'sent'
+  return result.skipped ? 'skipped' : 'failed'
 }
 
 export async function sendStandardOrderEmails(order: any, orderId: string) {
+  const status: { customer: EmailDeliveryState; admin: EmailDeliveryState; lastError?: string } = {
+    customer: 'skipped',
+    admin: 'skipped',
+  }
+
   try {
     const menuSummary = getMenuOrderSummary(order)
     const itemLines = (order.items ?? [])
@@ -165,14 +153,15 @@ ${details ? `  ${details}` : ''}`
       })
       .join('\n')
 
-    await sendLoggedEmail({
-      orderId,
-      kind: 'customer',
-      to: order.customerEmail,
-      subject: 'Encomenda confirmada - EM3D',
-      text: `Olá ${order.customerName},
+    if (order.customerEmail) {
+      const customerResult = await sendLoggedEmail({
+        orderId,
+        kind: 'customer',
+        to: order.customerEmail,
+        subject: 'Encomenda confirmada - em3D',
+        text: `Olá ${order.customerName},
 
-Recebemos o pagamento da sua encomenda EM3D.
+Recebemos o pagamento da sua encomenda em3D.
 
 ID da encomenda: ${orderId}
 
@@ -186,16 +175,19 @@ ${menuSummary}
 
 Vamos preparar a encomenda e enviaremos novidades por email.
 
-A equipa EM3D`,
-    })
+A equipa em3D`,
+      })
+      status.customer = deliveryState(customerResult)
+      if (!customerResult.ok) status.lastError = customerResult.error
+    }
 
-    const adminEmail = getAdminEmail()
-    if (adminEmail) {
-      await sendLoggedEmail({
+    const adminEmails = getAdminEmails()
+    if (adminEmails.length) {
+      const adminResult = await sendLoggedEmail({
         orderId,
         kind: 'admin',
-        to: adminEmail,
-        subject: `Nova encomenda EM3D - ${order.customerName}`,
+        to: adminEmails,
+        subject: `Nova encomenda em3D - ${order.customerName}`,
         text: `Nova encomenda paga.
 
 ID: ${orderId}
@@ -208,12 +200,18 @@ Total: ${formatPrice(order.total)}
 Artigos:
 ${itemLines}${menuSummary}`,
       })
+      status.admin = deliveryState(adminResult)
+      if (!adminResult.ok) status.lastError = adminResult.error
     }
   } catch (error) {
+    status.lastError = error instanceof Error ? error.message : 'Failed to send standard order emails'
+    if (status.customer === 'skipped') status.customer = 'failed'
     console.error('Failed to send standard order emails:', {
       orderId,
       siteUrl: siteUrl(),
       error,
     })
   }
+
+  return status
 }

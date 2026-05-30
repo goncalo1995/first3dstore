@@ -1,20 +1,20 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
-@import '@fontsource/plus-jakarta-sans/400.css';
-@import '@fontsource/plus-jakarta-sans/500.css';
-@import '@fontsource/plus-jakarta-sans/600.css';
-@import '@fontsource/plus-jakarta-sans/700.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
-@import '@fontsource/playfair-display/600.css';
-@import '@fontsource/playfair-display/700.css';
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/playfair-display/600.css";
+@import "@fontsource/playfair-display/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* EM3D Portugal Premium system */
+  /* em3D Portugal Premium system */
   --background: #09090b;
   --foreground: #f4f4f5;
 
@@ -44,16 +44,16 @@
   --ring: #eab308;
 
   --radius: 0.5rem;
-  
+
   /* WhatsApp Green */
   --whatsapp: #25d366;
   --whatsapp-foreground: #ffffff;
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-mono: 'Geist Mono', monospace;
+  --font-sans: "Inter", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "Geist Mono", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -151,7 +151,7 @@ html {
 }
 
 .reactEasyCrop_CropAreaGrid::before {
-  content: ' ';
+  content: " ";
   box-sizing: border-box;
   position: absolute;
   border: 1px solid rgba(255, 255, 255, 0.45);
@@ -164,7 +164,7 @@ html {
 }
 
 .reactEasyCrop_CropAreaGrid::after {
-  content: ' ';
+  content: " ";
   box-sizing: border-box;
   position: absolute;
   border: 1px solid rgba(255, 255, 255, 0.45);

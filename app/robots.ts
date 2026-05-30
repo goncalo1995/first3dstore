@@ -1,8 +1,8 @@
 // app/robots.ts
 import { MetadataRoute } from 'next'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// export const dynamic = 'force-dynamic'
+// export const revalidate = 0
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -21,6 +21,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/admin/', '/api/'],
       }
     ],
-    sitemap: 'https://em3d.pt/sitemap.xml',
+    sitemap: `${process.env.NEXT_PUBLIC_SITE_URL}/sitemap.xml`,
   }
 }

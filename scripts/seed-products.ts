@@ -637,7 +637,7 @@ function createExampleProducts(colorMap: SeedColorMap) {
       name: 'Pack Letras Standard 300',
       priceFrom: 35,
       priceTo: 35,
-      description: 'Pack standard com 300 letras, numeros e simbolos para menu modular EM3D.',
+      description: 'Pack standard com 300 letras, numeros e simbolos para menu modular em3D.',
       benefit: 'Caracteres suficientes para menus compactos e sinaletica de balcão',
       image: '/placeholder.svg',
       featured: false,

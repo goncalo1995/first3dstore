@@ -21,6 +21,14 @@ function getStripeObjectId(value: string | { id?: string } | null | undefined) {
   return typeof value === 'string' ? value : value.id
 }
 
+function appendEmailFailureNote(currentNotes: string | undefined, status: { customer?: string; admin?: string; lastError?: string }) {
+  const failed = [status.customer === 'failed' ? 'cliente' : '', status.admin === 'failed' ? 'admin' : ''].filter(Boolean).join(' e ')
+  if (!failed) return currentNotes
+  const details = status.lastError ? `: ${status.lastError}` : ''
+  const note = `Email ${failed} falhou (recheck Stripe) em ${new Date().toISOString()}${details}.`
+  return [currentNotes, note].filter(Boolean).join('\n\n')
+}
+
 export async function recheckStripeOrderPayment(orderId: string) {
   // Require admin authorization before proceeding
   await requireAdminForAction()
@@ -76,7 +84,20 @@ export async function recheckStripeOrderPayment(orderId: string) {
   )
 
   if (paidOrder.customerEmail) {
-    await sendStandardOrderEmails(paidOrder, orderId)
+    const emailStatus = await sendStandardOrderEmails(paidOrder, orderId)
+    const updatedNotes = appendEmailFailureNote(order.notes, emailStatus)
+    if (updatedNotes !== order.notes) {
+      try {
+        await dbAdmin.transact(
+          dbAdmin.tx.orders[orderId].update({
+            notes: updatedNotes,
+            updatedAt: new Date(),
+          }),
+        )
+      } catch (noteError) {
+        console.error('Failed to append Stripe recheck email failure note:', { orderId, noteError })
+      }
+    }
   }
 
   revalidatePath('/admin/orders')

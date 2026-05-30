@@ -6,7 +6,7 @@ import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
 
 export const metadata: Metadata = {
-  title: 'Pedido Personalizado | EM3D',
+  title: 'Pedido Personalizado | em3D',
   description: 'Descreva a sua ideia para uma peça personalizada impressa em 3D em Portugal.',
 }
 
@@ -33,7 +33,7 @@ export default function PedidoPersonalizadoPage() {
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className="h-14 bg-primary px-7 text-base text-primary-foreground hover:bg-primary/90">
-                <a href="mailto:geral@em3d.pt?subject=Pedido%20personalizado%20EM3D">
+                <a href="mailto:geral@em3d.pt?subject=Pedido%20personalizado%20em3D">
                   Enviar por email
                   <ArrowRight className="size-5" />
                 </a>

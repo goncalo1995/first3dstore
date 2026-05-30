@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { id } from '@instantdb/admin'
-import { Resend } from 'resend'
 import { dbAdmin } from '@/lib/db-admin'
 import { getPuzzleApprovedEmail } from '@/lib/email-templates'
+import { sendSmtpEmail } from '@/lib/smtp-email'
 import {
   baseColorToGlobalColorName,
   colorSourceToGlobalColorName,
@@ -23,10 +23,6 @@ const validStatuses = new Set<OrderRequestStatus>([
   'SHIPPED',
   'CANCELLED',
 ])
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'foto3d.pt <onboarding@resend.dev>'
-}
 
 function isValidUrl(value: string) {
   try {
@@ -110,36 +106,34 @@ export async function sendPuzzlePaymentApproval(params: {
     }),
   )
 
-  if (process.env.RESEND_API_KEY) {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    const { error } = await resend.emails.send({
-      from: getSender(),
-      to: request.customerEmail,
-      subject: 'O seu puzzle Foto3D.pt está pronto para confirmação',
-      text: getPuzzleApprovedEmail({
-        name: request.customerName,
-        paymentLink: params.paymentUrl,
-        price: params.quotedPrice,
-        previewUrl: request.previewUrl || request.svgUrl || request.imageUrl,
-      }),
-    })
-
-    if (error) {
-      console.error('Puzzle approval email failed:', error)
-      throw new Error('Pedido atualizado, mas o email não foi enviado.')
-    }
-  } else {
-    const urlHost = (() => {
-      try {
-        return new URL(params.paymentUrl).host
-      } catch {
-        return 'invalid-url'
-      }
-    })()
-    console.info('Puzzle approval email skipped because RESEND_API_KEY is missing.', {
+  const emailResult = await sendSmtpEmail({
+    to: request.customerEmail,
+    subject: 'O seu puzzle Foto3D.pt está pronto para confirmação',
+    text: getPuzzleApprovedEmail({
+      name: request.customerName,
+      paymentLink: params.paymentUrl,
+      price: params.quotedPrice,
+      previewUrl: request.previewUrl || request.svgUrl || request.imageUrl,
+    }),
+    meta: {
       requestId: params.requestId,
-      paymentUrlHost: urlHost,
-    })
+      flow: 'puzzle_approval',
+      kind: 'customer',
+    },
+  })
+
+  if (!emailResult.ok) {
+    console.error('Puzzle approval email failed:', { requestId: params.requestId, error: emailResult.error })
+    try {
+      await dbAdmin.transact(
+        dbAdmin.tx.orderRequests[params.requestId].update({
+          notes: [request.notes, `Email de aprovação falhou em ${new Date().toISOString()}: ${emailResult.error}`].filter(Boolean).join('\n\n'),
+          updatedAt: new Date(),
+        }),
+      )
+    } catch (noteError) {
+      console.error('Failed to append puzzle approval email failure note:', { requestId: params.requestId, noteError })
+    }
   }
 
   revalidatePath('/admin/order-requests')

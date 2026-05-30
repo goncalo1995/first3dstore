@@ -1,18 +1,13 @@
 import { NextRequest } from 'next/server'
-import { Resend } from 'resend'
+import { render } from '@react-email/render'
 import { MarketingReminderEmail } from '@/components/email-template'
 import { dbAdmin } from '@/lib/db-admin'
+import { parseEmailList, sendSmtpEmail } from '@/lib/smtp-email'
 import type { MarketingPost } from '@/types/marketing'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 function getRecipients() {
   const configured = process.env.MARKETING_REMINDER_TO || process.env.ADMIN_EMAILS || ''
-  return configured.split(',').map(email => email.trim()).filter(Boolean)
-}
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'Foto3D <onboarding@resend.dev>'
+  return parseEmailList(configured)
 }
 
 async function getMarketingPosts() {
@@ -36,20 +31,35 @@ async function sendReminderEmail(posts: MarketingPost[], isTest: boolean) {
     return Response.json({ error: 'No reminder recipient configured.' }, { status: 500 })
   }
 
-  const { data, error } = await resend.emails.send({
-    from: getSender(),
+  const subject = isTest
+    ? `Test Instagram reminder: ${posts[0]?.title ?? 'Marketing post'}`
+    : `Instagram reminder: ${posts.length} post${posts.length === 1 ? '' : 's'} due`
+  const html = await render(MarketingReminderEmail({ posts, isTest }))
+  const text = posts.map((post) => [
+    post.title,
+    post.scheduledAt ? new Date(post.scheduledAt).toLocaleString('pt-PT', { timeZone: post.timezone || 'Europe/Lisbon' }) : 'Unscheduled',
+    post.caption,
+    post.callToAction,
+    post.hashtags.join(' '),
+  ].filter(Boolean).join('\n\n')).join('\n\n---\n\n')
+
+  const result = await sendSmtpEmail({
     to: recipients,
-    subject: isTest
-      ? `Test Instagram reminder: ${posts[0]?.title ?? 'Marketing post'}`
-      : `Instagram reminder: ${posts.length} post${posts.length === 1 ? '' : 's'} due`,
-    react: MarketingReminderEmail({ posts, isTest }),
+    subject,
+    html,
+    text,
+    meta: {
+      flow: 'marketing_reminder',
+      isTest,
+      count: posts.length,
+    },
   })
 
-  if (error) {
-    return Response.json({ error }, { status: 500 })
+  if (!result.ok) {
+    return Response.json({ error: result.error, skipped: result.skipped ?? false }, { status: 500 })
   }
 
-  return Response.json({ data, count: posts.length })
+  return Response.json({ data: { messageId: result.messageId }, count: posts.length })
 }
 
 export async function POST(request: NextRequest) {

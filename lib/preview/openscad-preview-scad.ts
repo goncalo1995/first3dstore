@@ -113,7 +113,7 @@ export function buildPreviewScad({
   }).join('\n')
 
   return `
-    // EM3D browser preview SCAD. Units are millimeters.
+    // em3D browser preview SCAD. Units are millimeters.
     $fn = 12;
 
     module rail_profile(length) {

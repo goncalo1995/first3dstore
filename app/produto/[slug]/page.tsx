@@ -50,7 +50,7 @@ export async function generateMetadata({
 
   if (!product || product.visible === false) {
     return {
-      title: 'Produto não encontrado | EM3D',
+      title: 'Produto não encontrado | em3D',
     }
   }
 
@@ -61,13 +61,13 @@ export async function generateMetadata({
     .map((image) => image.startsWith('http') ? image : `${baseUrl}${image.startsWith('/') ? '' : '/'}${image}`)
 
   return {
-    title: `${product.name} | EM3D`,
+    title: `${product.name} | em3D`,
     description: product.description,
     alternates: {
       canonical: `${baseUrl}/produto/${product.slug}`,
     },
     openGraph: {
-      title: `${product.name} | EM3D`,
+      title: `${product.name} | em3D`,
       description: product.description,
       images: absoluteImages.map((url) => ({
         url,
@@ -80,7 +80,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: `${product.name} | EM3D`,
+      title: `${product.name} | em3D`,
       description: product.description,
       images: absoluteImages,
     },

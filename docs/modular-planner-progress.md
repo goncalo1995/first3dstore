@@ -1,4 +1,4 @@
-# EM3D Modular Planner Progress
+# em3D Modular Planner Progress
 
 ## Step 1 - Manufacturing Source of Truth
 
@@ -55,7 +55,8 @@
 - [x] Stripe webhook understands `menuSystem.walls`.
 - [x] Order status enum cleaned.
 - [x] OpenSCAD rail/letter tooling updated for face-down production.
-- [x] `menu_rail_v1.scad` adds a support-free 45-degree rear wedge for 3M tape mounting.
+- [x] `menu_rail_v1.scad` adds a support-free 45-degree rear wedge for 3M tape
+      mounting.
 - [x] Production queue can be viewed by client, colour and bagging checklist.
 - [x] Print-farm routing schema fields are ready for Step 6.
 

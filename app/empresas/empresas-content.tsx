@@ -376,7 +376,7 @@ export default function EmpresasContent() {
             <p className="text-sm font-semibold uppercase tracking-[0.22em] text-primary">Ideias por AI</p>
             <h2 className="mt-3 font-serif text-4xl font-semibold tracking-tight sm:text-5xl">Três conceitos práticos antes da proposta.</h2>
             <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
-              A AI só fica ativa depois de uma verificação rápida. As sugestões são ponto de partida; a proposta final é sempre revista pela EM3D.
+              A AI só fica ativa depois de uma verificação rápida. As sugestões são ponto de partida; a proposta final é sempre revista pela em3D.
             </p>
           </div>
 
@@ -441,7 +441,7 @@ export default function EmpresasContent() {
 
             {ideas.length > 0 && (
               <div className="mt-6 space-y-3">
-                {aiFallback && <p className="text-xs text-muted-foreground">A AI não respondeu com segurança; mostrámos sugestões base da EM3D.</p>}
+                {aiFallback && <p className="text-xs text-muted-foreground">A AI não respondeu com segurança; mostrámos sugestões base da em3D.</p>}
                 {ideas.map((idea, index) => (
                   <article key={`${idea.title}-${index}`} className="rounded-lg border border-border bg-background p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Ideia {index + 1}</p>

@@ -404,7 +404,7 @@ Por favor, confirme a disponibilidade!`
   const handleShare = async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : `/produto/${product.slug}`
     const shareTitle = displayProduct.name
-    const shareText = `${displayProduct.name} da EM3D - ${displayProduct.benefit}`
+    const shareText = `${displayProduct.name} da em3D - ${displayProduct.benefit}`
     
     const shareData: ShareData = {
       title: shareTitle,

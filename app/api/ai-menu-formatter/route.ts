@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
     .map(([character, width]) => `${JSON.stringify(character)}=${width}mm`)
     .join(', ')
 
-  const systemPrompt = `És um arquitecto de espaços comerciais para a EM3D.pt.
+  const systemPrompt = `És um arquitecto de espaços comerciais para a em3D.pt.
 
 Converte o pedido do cliente numa matriz física de paredes modulares.
 

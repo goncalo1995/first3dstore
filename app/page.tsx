@@ -77,7 +77,7 @@ export default function HomePage() {
       <section className="relative min-h-[82svh] overflow-hidden px-5 py-16 sm:px-8 lg:px-10">
         <Image
           src="/about/workshop.jpg"
-          alt="Produto EM3D em ambiente de oficina e preparacao para espacos comerciais"
+          alt="Produto em3D em ambiente de oficina e preparacao para espacos comerciais"
           fill
           priority
           className="object-cover"
@@ -88,7 +88,7 @@ export default function HomePage() {
           <div className="max-w-4xl pb-4 text-white">
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#d4af37]">
               <Sparkles className="size-4" />
-              Menus modulares em3d
+              Menus modulares
             </p>
             <h1 className="mt-6 max-w-5xl text-5xl font-semibold leading-[0.96] tracking-tight sm:text-7xl lg:text-8xl">
               Menus de Parede Modernos

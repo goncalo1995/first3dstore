@@ -1,27 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { Resend } from 'resend'
+import { render } from '@react-email/render'
 import { dbAdmin, id } from '@/lib/db-admin'
 import { HexaOrderConfirmationEmail } from '@/components/email-template'
-import { getHexaOrderAdminNotificationEmail } from '@/lib/email-templates'
+import { getHexaOrderAdminNotificationEmail, getHexaOrderConfirmationEmail } from '@/lib/email-templates'
 import { sendStandardOrderEmails as sendLoggedStandardOrderEmails } from '@/lib/order-emails'
+import { getAdminEmails, sendSmtpEmail } from '@/lib/smtp-email'
 
 export const runtime = 'nodejs'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 function siteUrl() {
   return (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/$/, '')
-}
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'EM3D <onboarding@resend.dev>'
-}
-
-function getAdminEmail() {
-  const configured = process.env.ADMIN_EMAILS || ''
-  const emails = configured.split(',').map(email => email.trim()).filter(Boolean)
-  return emails[0] || null
 }
 
 function getStripe() {
@@ -101,6 +90,14 @@ function appendPaymentFailureNote(currentNotes: string | undefined, eventType: s
   return [currentNotes, note].filter(Boolean).join('\n\n')
 }
 
+function appendEmailFailureNote(currentNotes: string | undefined, context: string, status: { customer?: string; admin?: string; lastError?: string }) {
+  const failed = [status.customer === 'failed' ? 'cliente' : '', status.admin === 'failed' ? 'admin' : ''].filter(Boolean).join(' e ')
+  if (!failed) return currentNotes
+  const details = status.lastError ? `: ${status.lastError}` : ''
+  const note = `Email ${failed} falhou (${context}) em ${new Date().toISOString()}${details}.`
+  return [currentNotes, note].filter(Boolean).join('\n\n')
+}
+
 async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
   try {
     const request = orderRequest.canvasConfig?.request
@@ -110,22 +107,37 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
     const tiles = request.tiles || []
     const colors = [...new Set(tiles.map((t: any) => t.color))] as string[]
 
+    const customerHtml = await render(HexaOrderConfirmationEmail({
+      name: customer.name,
+      tileCount: tiles.length,
+      mosaicSize: request.mosaicSize,
+      colors,
+      total: orderRequest.selectedPrice || request.totalPrice,
+      discountApplied: request.discountApplied || null,
+      siteUrl: siteUrl(),
+    }))
+
     // Send confirmation email to customer
-    const customerEmailResult = await resend.emails.send({
-      from: getSender(),
+    const customerEmailResult = await sendSmtpEmail({
       to: customer.email,
       subject: 'Encomenda confirmada - HexaMemória Foto3D.pt',
-      react: HexaOrderConfirmationEmail({
+      html: customerHtml,
+      text: getHexaOrderConfirmationEmail({
         name: customer.name,
+        email: customer.email,
         tileCount: tiles.length,
         mosaicSize: request.mosaicSize,
         colors,
         total: orderRequest.selectedPrice || request.totalPrice,
         discountApplied: request.discountApplied || null,
-        siteUrl: siteUrl(),
       }),
+      meta: {
+        orderRequestId,
+        kind: 'customer',
+        flow: 'hexa_order',
+      },
     })
-    if (customerEmailResult.error) {
+    if (!customerEmailResult.ok) {
       console.error('Hexa order customer email failed:', {
         orderRequestId,
         to: customer.email,
@@ -135,16 +147,15 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
       console.info('Hexa order customer email sent:', {
         orderRequestId,
         to: customer.email,
-        resendId: customerEmailResult.data?.id,
+        messageId: customerEmailResult.messageId,
       })
     }
 
     // Send notification to admin
-    const adminEmail = getAdminEmail()
-    if (adminEmail) {
-      const adminEmailResult = await resend.emails.send({
-        from: getSender(),
-        to: adminEmail,
+    const adminEmails = getAdminEmails()
+    if (adminEmails.length) {
+      const adminEmailResult = await sendSmtpEmail({
+        to: adminEmails,
         subject: `Nova venda HexaMemória - ${customer.name}`,
         text: getHexaOrderAdminNotificationEmail({
           customerName: customer.name,
@@ -158,18 +169,23 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
           discountApplied: request.discountApplied || null,
           orderRequestId,
         }),
+        meta: {
+          orderRequestId,
+          kind: 'admin',
+          flow: 'hexa_order',
+        },
       })
-      if (adminEmailResult.error) {
+      if (!adminEmailResult.ok) {
         console.error('Hexa order admin email failed:', {
           orderRequestId,
-          to: adminEmail,
+          to: adminEmails,
           error: adminEmailResult.error,
         })
       } else {
         console.info('Hexa order admin email sent:', {
           orderRequestId,
-          to: adminEmail,
-          resendId: adminEmailResult.data?.id,
+          to: adminEmails,
+          messageId: adminEmailResult.messageId,
         })
       }
     }
@@ -395,7 +411,20 @@ export async function POST(req: NextRequest) {
       })
       const order = (orderData.orders?.[0] as any) || null
       if (order?.customerEmail) {
-        await sendLoggedStandardOrderEmails(order, orderId)
+        const emailStatus = await sendLoggedStandardOrderEmails(order, orderId)
+        const updatedNotes = appendEmailFailureNote(order.notes, 'Stripe webhook', emailStatus)
+        if (updatedNotes !== order.notes) {
+          try {
+            await dbAdmin.transact(
+              dbAdmin.tx.orders[orderId].update({
+                notes: updatedNotes,
+                updatedAt: new Date(),
+              }),
+            )
+          } catch (noteError) {
+            console.error('Failed to append Stripe email failure note:', { orderId, noteError })
+          }
+        }
       }
     }
 

@@ -6,8 +6,8 @@ import { WhatsAppButton } from '@/components/whatsapp-button'
 import { WHATSAPP_NUMBER } from '@/data/constants'
 
 export const metadata: Metadata = {
-  title: 'Contactos | EM3D',
-  description: 'Contacte a EM3D para dúvidas sobre objetos personalizados, prazos de produção, encomendas e pedidos empresariais.',
+  title: 'Contactos | em3D',
+  description: 'Contacte a em3D para dúvidas sobre objetos personalizados, prazos de produção, encomendas e pedidos empresariais.',
 }
 
 export default function ContactPage() {
@@ -17,7 +17,7 @@ export default function ContactPage() {
       <main className="min-h-screen">
         <section className="border-b border-border bg-secondary">
           <div className="container mx-auto px-4 py-12 md:py-16">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">EM3D</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">em3D</p>
             <h1 className="mt-3 text-3xl font-bold text-foreground md:text-4xl">Contactos</h1>
             <p className="mt-3 max-w-2xl text-muted-foreground">
               Fale connosco sobre prazos de produção, personalizações, presentes ou projetos para empresas.
@@ -48,7 +48,7 @@ export default function ContactPage() {
 
             <div className="space-y-4">
               <a
-                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho uma questão sobre a EM3D.')}`}
+                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho uma questão sobre a em3D.')}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-4 rounded-lg bg-secondary p-4 text-foreground transition-colors hover:bg-secondary/80"

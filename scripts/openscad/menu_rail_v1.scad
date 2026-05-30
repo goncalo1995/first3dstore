@@ -1,4 +1,4 @@
-// EM3D Modular menu rail v1.
+// em3D Modular menu rail v1.
 // Print orientation: the visible front face is the flat plane at Z=0.
 // The part extends upward in +Z, leaving the PEI build-plate texture on front.
 // Back lower edge uses a 45-degree reinforced wedge for 3M tape mounting.

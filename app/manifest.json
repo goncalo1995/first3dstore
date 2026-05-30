@@ -1,6 +1,6 @@
 {
-  "name": "EM3D",
-  "short_name": "EM3D",
+  "name": "em3D",
+  "short_name": "em3D",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

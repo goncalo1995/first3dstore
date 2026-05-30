@@ -1487,7 +1487,7 @@ export async function POST(request: NextRequest) {
           customerEmail,
           customerPhone: customerPhone || undefined,
           productSlug: 'modular-space-planner',
-          productName: 'EM3D Modular Space Planner',
+          productName: 'em3D Modular Space Planner',
           selectedPrice: total,
           estimatedPrice: total,
           canvasConfig,

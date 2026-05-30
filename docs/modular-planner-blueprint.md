@@ -1,13 +1,17 @@
-# EM3D Modular Space Planner Master Implementation Plan
+# em3D Modular Space Planner Master Implementation Plan
 
 ## Summary
 
-Upgrade `em3d.pt` from a single-menu builder into a premium multi-wall commercial space planner for modular 3D-printed signage. The new flow is:
+Upgrade `em3d.pt` from a single-menu builder into a premium multi-wall
+commercial space planner for modular 3D-printed signage. The new flow is:
 
 1. Customer lands on `/colecoes/modular`, a dark full-bleed showcase.
-2. They use a “Make It Real” onboarding planner to describe walls, menus, WC signs, hours, branding, and constraints.
+2. They use a “Make It Real” onboarding planner to describe walls, menus, WC
+   signs, hours, branding, and constraints.
 3. `/api/ai-menu-formatter` converts intent into `PhysicalWall[]`.
-4. `/colecoes/modular/builder` lets them refine each wall with accurate 250mm rail modules, proportional physical letters, spacing, colors, and optional logo SVG upload.
+4. `/colecoes/modular/builder` lets them refine each wall with accurate 250mm
+   rail modules, proportional physical letters, spacing, colors, and optional
+   logo SVG upload.
 5. Checkout chooses either Stripe auto-pay or manual quote based on complexity.
 
 All visible customer text should be PT-PT.
@@ -17,33 +21,33 @@ All visible customer text should be PT-PT.
 Create the production model around walls, not a single grid.
 
 ```ts
-export type FontStyle = 'classic' | 'modern'
-export type PhysicalGridDimensionSet = 'v1-standard-250'
+export type FontStyle = "classic" | "modern";
+export type PhysicalGridDimensionSet = "v1-standard-250";
 
 export type PhysicalColumn = {
-  id: string
-  railModules: number
-  leftText: string
-  rightText: string
-  align?: 'left' | 'center' | 'right' | 'split'
-  colorOverride?: string
-}
+  id: string;
+  railModules: number;
+  leftText: string;
+  rightText: string;
+  align?: "left" | "center" | "right" | "split";
+  colorOverride?: string;
+};
 
 export type PhysicalRow = {
-  id: string
-  columns: PhysicalColumn[]
-}
+  id: string;
+  columns: PhysicalColumn[];
+};
 
 export type PhysicalWall = {
-  id: string
-  name: string
-  type?: 'text' | 'logo'
-  maxWidthCm?: number
-  rows: PhysicalRow[]
-  logoSvgUrl?: string
-  logoSvgText?: string
-  brandColor?: string
-}
+  id: string;
+  name: string;
+  type?: "text" | "logo";
+  maxWidthCm?: number;
+  rows: PhysicalRow[];
+  logoSvgUrl?: string;
+  logoSvgText?: string;
+  brandColor?: string;
+};
 ```
 
 `menuSystem` should store:
@@ -66,50 +70,52 @@ export type PhysicalWall = {
 }
 ```
 
-Keep legacy `physicalGrid`, `categories`, and `lines` support only inside compatibility readers until existing carts/orders are safe.
+Keep legacy `physicalGrid`, `categories`, and `lines` support only inside
+compatibility readers until existing carts/orders are safe.
 
 ## Physical Math
 
 `lib/modular-inventory-config.ts` remains the source of truth:
 
 ```ts
-RAIL_LENGTH_MM = 250
-MODULE_LENGTH_MM = 250
+RAIL_LENGTH_MM = 250;
+MODULE_LENGTH_MM = 250;
 CHARACTER_WIDTH_MM = {
   normal: 38,
   narrow: 22,
   wide: 52,
-  space: 24
-}
+  space: 24,
+};
 ```
 
 `lib/modular-physical-grid.ts` should calculate across all walls:
 
 ```ts
-measureTextMm(text)
-getColumnAvailableMm(column) // railModules * 250
-getColumnMetrics(column)
-getWallMetrics(wall)
-getWallsBom(walls, extraLetterGroups, colors)
+measureTextMm(text);
+getColumnAvailableMm(column); // railModules * 250
+getColumnMetrics(column);
+getWallMetrics(wall);
+getWallsBom(walls, extraLetterGroups, colors);
 ```
 
 Overflow rule:
 
 ```ts
-measureTextMm(leftText + rightText) > railModules * 250
+measureTextMm(leftText + rightText) > railModules * 250;
 ```
 
 Preview tile width:
 
 ```ts
-(characterWidthMm / (railModules * 250)) * 100
+(characterWidthMm / (railModules * 250)) * 100;
 ```
 
 Logo walls are excluded from letter-pack counts and force manual quote.
 
 ## AI Formatter
 
-Update `/api/ai-menu-formatter` to use OpenAI `gpt-4o-mini` with structured JSON output and `OPENAI_API_KEY`.
+Update `/api/ai-menu-formatter` to use OpenAI `gpt-4o-mini` with structured JSON
+output and `OPENAI_API_KEY`.
 
 Enforce this schema:
 
@@ -143,13 +149,26 @@ Enforce this schema:
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["id", "railModules", "leftText", "rightText", "align"],
+                    "required": [
+                      "id",
+                      "railModules",
+                      "leftText",
+                      "rightText",
+                      "align"
+                    ],
                     "properties": {
                       "id": { "type": "string" },
-                      "railModules": { "type": "integer", "minimum": 1, "maximum": 12 },
+                      "railModules": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 12
+                      },
                       "leftText": { "type": "string" },
                       "rightText": { "type": "string" },
-                      "align": { "type": "string", "enum": ["left", "center", "right", "split"] },
+                      "align": {
+                        "type": "string",
+                        "enum": ["left", "center", "right", "split"]
+                      },
                       "colorOverride": { "type": ["string", "null"] }
                     }
                   }
@@ -175,21 +194,25 @@ Prompt rules:
 - Split long text into more rows instead of overflowing.
 - Return JSON only.
 
-If AI fails or validates poorly, enter the builder with a restaurant template and show:
+If AI fails or validates poorly, enter the builder with a restaurant template
+and show:
 `A IA teve uma falha de criatividade. Mas não se preocupe, pode usar os nossos templates!`
 
 ## Storefront And Onboarding
 
 Replace `/colecoes/modular` with the premium “Space Planner” entry experience:
 
-- Deep dark `#09090b`, glass panels, refined metal/acrylic highlights, Framer Motion transitions.
-- No marketing-heavy card clutter; first viewport should show the product concept immediately.
+- Deep dark `#09090b`, glass panels, refined metal/acrylic highlights, Framer
+  Motion transitions.
+- No marketing-heavy card clutter; first viewport should show the product
+  concept immediately.
 - Include onboarding inputs:
   - space description textarea
   - optional main wall max width in cm
   - checkboxes for `Menu`, `WC`, `Horários`, `Preços`, `Logo`, `Promoções`
   - CTA: `Make it Real`
-- Checkboxes append structured planning hints into the formatter request, not hidden magic.
+- Checkboxes append structured planning hints into the formatter request, not
+  hidden magic.
 
 Delete `/app/colecoes/menus` instead of redirecting it.
 
@@ -217,7 +240,8 @@ State:
 
 Navigation:
 
-- Wall pills at the top: `Parede Principal`, `Zona Café`, `Identidade de Marca`, `+ Adicionar Parede`.
+- Wall pills at the top: `Parede Principal`, `Zona Café`, `Identidade de Marca`,
+  `+ Adicionar Parede`.
 - Switching `activeWallId` only changes the visible canvas/control panel.
 - BOM and quote always derive from all walls.
 
@@ -253,8 +277,10 @@ Preview rules:
 - Each row is a physical lane.
 - Each column uses `flex-grow: railModules`.
 - `columnGapPx` slider applies to row gap, range `0-50`.
-- Letter tiles render as individual motion elements with physical percentage widths.
-- Use stagger `0.02` on template load/add, disabled when a line has more than 50 characters.
+- Letter tiles render as individual motion elements with physical percentage
+  widths.
+- Use stagger `0.02` on template load/add, disabled when a line has more than 50
+  characters.
 - Active edit column gets a subtle focus glow.
 - Overflow column gets a red boundary and:
   `Texto excede o tamanho da calha física.`
@@ -277,8 +303,7 @@ Stripe auto-pay only when:
 - no overflow
 - required catalog colors are selected
 
-CTA:
-`Pagar e Finalizar Encomenda`
+CTA: `Pagar e Finalizar Encomenda`
 
 Use existing `/api/checkout/cart` Stripe flow, updated to validate `walls`.
 
@@ -288,10 +313,10 @@ Manual quote when:
 - custom brand color selected
 - logo SVG uploaded
 
-CTA:
-`Pedir Orçamento Gratuito`
+CTA: `Pedir Orçamento Gratuito`
 
-Create a dedicated manual quote route, for example `/api/modular/quote-request`, that:
+Create a dedicated manual quote route, for example `/api/modular/quote-request`,
+that:
 
 - validates the same wall BOM server-side
 - saves to `orderRequests`
@@ -303,11 +328,12 @@ Create a dedicated manual quote route, for example `/api/modular/quote-request`,
 Update `instant.schema.ts` so order request status is strictly:
 
 ```ts
-'DRAFT' | 'PENDING_REVIEW' | 'MODELING' | 'AWAITING_PAYMENT' | 'IN_PRODUCTION' | 'SHIPPED'
+"DRAFT" | "PENDING_REVIEW" | "MODELING" | "AWAITING_PAYMENT" | "IN_PRODUCTION" |
+  "SHIPPED";
 ```
 
-Remove new usage of `READY_FOR_PRODUCTION` and `B2B_LEAD`.
-Map old UI paths forward:
+Remove new usage of `READY_FOR_PRODUCTION` and `B2B_LEAD`. Map old UI paths
+forward:
 
 - quoted but unpaid: `AWAITING_PAYMENT`
 - approved/paid production work: `IN_PRODUCTION`
@@ -320,8 +346,7 @@ Admin `/admin/encomendas` should show wall-grouped production BOM:
 - rail color
 - letter color groups
 - logo SVG link/preview for logo walls
-- examples:
-  `PAREDE 1 (Bebidas) - IMPRIMIR EM BRANCO: E(5), S(2)`
+- examples: `PAREDE 1 (Bebidas) - IMPRIMIR EM BRANCO: E(5), S(2)`
   `PAREDE 2 (WC) - IMPRIMIR EM OURO: W(1), C(1)`
 
 Update Stripe webhook/admin detail generation to understand `menuSystem.walls`.
@@ -346,7 +371,8 @@ Functional checks:
 
 - `/colecoes/modular` onboarding creates walls from text.
 - `@logo`, `logo`, `logótipo`, and `marca` create `logo-wall`.
-- AI failure lands in builder with the PT-PT toast and default restaurant template.
+- AI failure lands in builder with the PT-PT toast and default restaurant
+  template.
 - Switching wall pills preserves all wall state and global BOM.
 - Add/remove row and add/remove column update preview and BOM.
 - Titles count as purchasable letters because they are normal text columns.
@@ -360,8 +386,10 @@ Functional checks:
 
 ## Assumptions
 
-- Existing uncommitted single-grid physical builder work becomes the migration base, not a final target.
+- Existing uncommitted single-grid physical builder work becomes the migration
+  base, not a final target.
 - Custom logo production is manual quote only in this version.
 - Custom RGB/brand colors are not matched to inventory SKUs automatically.
 - Existing Stripe cart path remains for simple modular jobs.
-- Existing order/request data is not deleted; only new schema/status usage is cleaned up.
+- Existing order/request data is not deleted; only new schema/status usage is
+  cleaned up.

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { id } from '@instantdb/admin'
-import { Resend } from 'resend'
 import { dbAdmin } from '@/lib/db-admin'
 import { s3, BUCKET_NAME, PUBLIC_URL } from '@/lib/s3'
+import { parseEmailList, sendSmtpEmail } from '@/lib/smtp-email'
 
 export const runtime = 'nodejs'
 
@@ -26,11 +26,7 @@ function cleanPathSegment(value: string) {
 
 function getRecipients() {
   const configured = process.env.LITHOPHANE_REQUEST_TO || process.env.ADMIN_EMAILS || ''
-  return configured.split(',').map((email) => email.trim()).filter(Boolean)
-}
-
-function getSender() {
-  return process.env.RESEND_FROM_EMAIL || 'foto3d.pt <onboarding@resend.dev>'
+  return parseEmailList(configured)
 }
 
 async function notifyAdmin(params: {
@@ -51,7 +47,7 @@ async function notifyAdmin(params: {
 }) {
   const recipients = getRecipients()
 
-  if (!process.env.RESEND_API_KEY || !recipients.length) {
+  if (!recipients.length) {
     console.info('New lithophane request:', {
       requestId: params.requestId,
       productSlug: params.productSlug,
@@ -61,9 +57,7 @@ async function notifyAdmin(params: {
     return { mode: 'console' as const }
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const { error } = await resend.emails.send({
-    from: getSender(),
+  const result = await sendSmtpEmail({
     to: recipients,
     subject: `Novo pedido foto3d.pt - ${params.customerName}`,
     text: [
@@ -80,11 +74,16 @@ async function notifyAdmin(params: {
       `Notas: ${params.notes || '-'}`,
       `Imagem: ${params.imageUrl}`,
     ].join('\n'),
+    meta: {
+      requestId: params.requestId,
+      flow: 'lithophane_request',
+      kind: 'admin',
+    },
   })
 
-  if (error) {
-    console.error('Lithophane notification email failed:', error)
-    return { mode: 'email_failed' as const }
+  if (!result.ok) {
+    console.error('Lithophane notification email failed:', { requestId: params.requestId, error: result.error })
+    return { mode: result.skipped ? 'console' as const : 'email_failed' as const }
   }
 
   return { mode: 'email' as const }

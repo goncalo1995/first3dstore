@@ -105,7 +105,7 @@ export function buildProductionScad({
   }
 
   return `
-    // EM3D production build-plate preview. Units are millimeters.
+    // em3D production build-plate preview. Units are millimeters.
     PRINTER_MAX_DIMENSION = ${PRINTER_MAX_DIMENSION};
     $fn = 18;
 

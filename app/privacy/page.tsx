@@ -4,8 +4,8 @@ import { Header } from '@/components/header'
 import { Footer } from '@/components/footer'
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidade | EM3D',
-  description: 'Política de privacidade da EM3D sobre recolha, utilização, conservação e direitos relativos a dados pessoais.',
+  title: 'Política de Privacidade | em3D',
+  description: 'Política de privacidade da em3D sobre recolha, utilização, conservação e direitos relativos a dados pessoais.',
 }
 
 const updatedAt = '30 de maio de 2026'
@@ -16,7 +16,7 @@ const sections = [
     content: (
       <>
         <p>
-          A entidade responsável pelo tratamento dos dados pessoais é Cereja Investment, Lda, que utiliza EM3D como nome comercial, com o NIF 518493385 e sede em Travessa do Girassol 61, 3.º Dt.º, Bairro da Torre, 2775-811 Carcavelos.
+          A entidade responsável pelo tratamento dos dados pessoais é Cereja Investment, Lda, que utiliza em3D como nome comercial, com o NIF 518493385 e sede em Travessa do Girassol 61, 3.º Dt.º, Bairro da Torre, 2775-811 Carcavelos.
         </p>
         <p>
           Para qualquer questão sobre privacidade ou exercício de direitos, contacte-nos através de <a href="mailto:geral@em3d.pt">geral@em3d.pt</a>.
@@ -57,7 +57,7 @@ const sections = [
     title: '5. Subcontratantes e serviços técnicos',
     content: (
       <p>
-        Para operar o site e prestar o serviço, podemos recorrer a fornecedores como Vercel para alojamento, InstantDB para base de dados, Cloudflare R2 para armazenamento de ficheiros, Stripe para pagamentos, Resend para envio de emails transacionais e Vercel Analytics para métricas técnicas agregadas quando ativo. Estes fornecedores tratam dados apenas na medida necessária para prestar os respetivos serviços.
+        Para operar o site e prestar o serviço, podemos recorrer a fornecedores como Vercel para alojamento, InstantDB para base de dados, Cloudflare R2 para armazenamento de ficheiros, Stripe para pagamentos, serviços SMTP/email transacional para envio de comunicações e Vercel Analytics para métricas técnicas agregadas quando ativo. Estes fornecedores tratam dados apenas na medida necessária para prestar os respetivos serviços.
       </p>
     ),
   },
@@ -65,7 +65,7 @@ const sections = [
     title: '6. Pagamentos',
     content: (
       <p>
-        Os pagamentos online são processados por fornecedores especializados, como a Stripe. A EM3D não armazena dados completos de cartões bancários. Podemos conservar referências de pagamento, estado da transação, valor, data e identificadores necessários para confirmar encomendas, apoio ao cliente, contabilidade e prevenção de fraude.
+        Os pagamentos online são processados por fornecedores especializados, como a Stripe. A em3D não armazena dados completos de cartões bancários. Podemos conservar referências de pagamento, estado da transação, valor, data e identificadores necessários para confirmar encomendas, apoio ao cliente, contabilidade e prevenção de fraude.
       </p>
     ),
   },
@@ -113,7 +113,7 @@ const sections = [
     title: '12. Alterações a esta política',
     content: (
       <p>
-        A EM3D pode atualizar esta Política de Privacidade para refletir alterações legais, técnicas ou operacionais. A versão em vigor será publicada nesta página com a respetiva data de atualização.
+        A em3D pode atualizar esta Política de Privacidade para refletir alterações legais, técnicas ou operacionais. A versão em vigor será publicada nesta página com a respetiva data de atualização.
       </p>
     ),
   },
@@ -131,7 +131,7 @@ export default function PrivacyPage() {
               Política de Privacidade
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-muted-foreground">
-              Informação sobre como recolhemos, utilizamos, conservamos e protegemos dados pessoais no contexto do site, encomendas e produção personalizada EM3D.
+              Informação sobre como recolhemos, utilizamos, conservamos e protegemos dados pessoais no contexto do site, encomendas e produção personalizada em3D.
             </p>
             <p className="mt-6 text-sm text-muted-foreground">Última atualização: {updatedAt}</p>
           </div>

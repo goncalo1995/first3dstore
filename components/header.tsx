@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 
 const navLinks = [
   { href: '/colecoes/menus', label: 'Menus Modulares' },
-  { href: '/loja', label: 'Loja' },
+  // { href: '/loja', label: 'Loja' },
   { href: '/empresas', label: 'Empresas' },
   { href: '/contact', label: 'Contactos' },
 ]
@@ -46,7 +46,7 @@ export function Header() {
           <span className="grid size-8 place-items-center rounded-md border border-border bg-card text-sm font-black tracking-tight text-primary transition-colors group-hover:border-primary/50">
             E
           </span>
-          <span className="text-lg font-semibold tracking-tight">EM3D</span>
+          <span className="text-lg font-semibold tracking-tight">em3D</span>
         </Link>
 
         <div className="hidden items-center gap-7 md:flex">
@@ -121,7 +121,7 @@ export function Header() {
           )}
         >
           <div className="border-b border-border bg-secondary/55 px-5 py-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">EM3D Studio</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">em3D Studio</p>
             <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
               Sinalética, objetos e pequenas séries impressas em 3D em Portugal.
             </p>

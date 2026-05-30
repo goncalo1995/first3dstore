@@ -46,7 +46,7 @@ export function Footer() {
               <span className="grid size-9 place-items-center rounded-md border border-border bg-card text-sm font-black tracking-tight text-primary">
                 E
               </span>
-              <span className="text-2xl font-semibold tracking-tight">EM3D</span>
+              <span className="text-2xl font-semibold tracking-tight">em3D</span>
             </Link>
             <p className="mt-5 max-w-sm text-sm leading-7 text-muted-foreground">
               Estúdio premium de impressão 3D em Portugal para sinalética modular, objetos personalizados e pequenas séries com acabamento físico cuidado.
@@ -57,14 +57,14 @@ export function Footer() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="grid size-10 place-items-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                aria-label="Instagram — EM3D"
+                aria-label="Instagram — em3D"
               >
                 <Instagram className="size-5" />
               </a>
               <a
                 href="mailto:geral@em3d.pt"
                 className="grid size-10 place-items-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                aria-label="Email — EM3D"
+                aria-label="Email — em3D"
               >
                 <Mail className="size-5" />
               </a>
@@ -95,8 +95,8 @@ export function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-          <p>{new Date().getFullYear()} EM3D. Todos os direitos reservados.</p>
-          <p>EM3D é o nome comercial de Cereja Investment, Lda · NIF 518493385</p>
+          <p>{new Date().getFullYear()} em3D. Todos os direitos reservados.</p>
+          <p>em3D é o nome comercial de Cereja Investment, Lda · NIF 518493385</p>
         </div>
       </div>
     </footer>

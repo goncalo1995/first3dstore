@@ -8,7 +8,7 @@ import { categoryLabels } from '@/lib/products'
 import { LojaContent } from './loja-content'
 
 export const metadata: Metadata = {
-  title: 'Loja | EM3D',
+  title: 'Loja | em3D',
   description: 'Loja de objetos úteis e personalizados, impressos em 3D em Portugal.',
 }
 
@@ -23,7 +23,7 @@ export default async function LojaPage() {
           <div className="container mx-auto px-4 py-10 md:py-14">
             <p className="font-sans text-xs font-semibold uppercase tracking-[0.24em] text-primary">Impressão 3D em Portugal</p>
             <h1 className="mt-3 font-serif text-4xl font-bold tracking-tight md:text-5xl">
-              Loja EM3D
+              Loja em3D
             </h1>
             <p className="mt-4 max-w-2xl font-sans text-base leading-7 text-white/68">
               Objetos úteis, presentes personalizados e pequenas séries produzidas em Portugal, com revisão humana antes da produção.
