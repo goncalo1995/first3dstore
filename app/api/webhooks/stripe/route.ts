@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { dbAdmin, id } from '@/lib/db-admin'
 import { HexaOrderConfirmationEmail } from '@/components/email-template'
 import { getHexaOrderAdminNotificationEmail } from '@/lib/email-templates'
-import { formatModularProductionBomText } from '@/lib/modular-production-bom'
+import { sendStandardOrderEmails as sendLoggedStandardOrderEmails } from '@/lib/order-emails'
 
 export const runtime = 'nodejs'
 
@@ -73,6 +73,34 @@ async function resolveStandardOrderFromSession(session: Stripe.Checkout.Session)
   return { orderId: undefined, order: null, source: undefined }
 }
 
+async function resolveStandardOrderFromPaymentIntent(paymentIntent: Stripe.PaymentIntent) {
+  const metadataOrderId = paymentIntent.metadata?.orderId
+  if (metadataOrderId) {
+    const order = await getOrderById(metadataOrderId)
+    if (order) {
+      return { orderId: metadataOrderId, order, source: 'payment_intent_metadata' }
+    }
+  }
+
+  const orderData = await dbAdmin.query({
+    orders: {
+      $: { where: { stripePaymentIntentId: paymentIntent.id } },
+    },
+  })
+  const order = (orderData.orders?.[0] as any) || null
+  if (order) {
+    return { orderId: order.id as string, order, source: 'stripePaymentIntentId' }
+  }
+
+  return { orderId: undefined, order: null, source: undefined }
+}
+
+function appendPaymentFailureNote(currentNotes: string | undefined, eventType: string, timestamp: Date, reason?: string) {
+  const details = reason ? `: ${reason}` : ''
+  const note = `Pagamento Stripe não concluído (${eventType}) em ${timestamp.toISOString()}${details}.`
+  return [currentNotes, note].filter(Boolean).join('\n\n')
+}
+
 async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
   try {
     const request = orderRequest.canvasConfig?.request
@@ -83,7 +111,7 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
     const colors = [...new Set(tiles.map((t: any) => t.color))] as string[]
 
     // Send confirmation email to customer
-    await resend.emails.send({
+    const customerEmailResult = await resend.emails.send({
       from: getSender(),
       to: customer.email,
       subject: 'Encomenda confirmada - HexaMemória Foto3D.pt',
@@ -97,11 +125,24 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
         siteUrl: siteUrl(),
       }),
     })
+    if (customerEmailResult.error) {
+      console.error('Hexa order customer email failed:', {
+        orderRequestId,
+        to: customer.email,
+        error: customerEmailResult.error,
+      })
+    } else {
+      console.info('Hexa order customer email sent:', {
+        orderRequestId,
+        to: customer.email,
+        resendId: customerEmailResult.data?.id,
+      })
+    }
 
     // Send notification to admin
     const adminEmail = getAdminEmail()
     if (adminEmail) {
-      await resend.emails.send({
+      const adminEmailResult = await resend.emails.send({
         from: getSender(),
         to: adminEmail,
         subject: `Nova venda HexaMemória - ${customer.name}`,
@@ -118,172 +159,23 @@ async function sendHexaOrderEmails(orderRequest: any, orderRequestId: string) {
           orderRequestId,
         }),
       })
+      if (adminEmailResult.error) {
+        console.error('Hexa order admin email failed:', {
+          orderRequestId,
+          to: adminEmail,
+          error: adminEmailResult.error,
+        })
+      } else {
+        console.info('Hexa order admin email sent:', {
+          orderRequestId,
+          to: adminEmail,
+          resendId: adminEmailResult.data?.id,
+        })
+      }
     }
   } catch (error) {
     // Log error but don't fail the webhook
     console.error('Failed to send hexa order emails:', error)
-  }
-}
-
-function formatPrice(value: number) {
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value)
-}
-
-function getShippingLabel(method: string) {
-  return method === 'mainland_portugal' ? 'Envio nacional' : 'Levantamento em Carcavelos'
-}
-
-function getMenuOrderSummary(order: any) {
-  const menuItems = (order.items ?? []).filter((item: any) => item.menuSystem)
-  const menuItem = menuItems.find((item: any) => (item.menuSystem?.lines ?? []).length > 0) ?? menuItems[0]
-  const menuSystem = menuItem?.menuSystem
-  if (!menuSystem) return ''
-  const wallSummary = Array.isArray(menuSystem.walls) && menuSystem.walls.length > 0
-    ? formatModularProductionBomText(menuSystem)
-    : ''
-
-  if (wallSummary) {
-    return `\n\nSistema Modular — Collection 01
-
-${wallSummary}
-
-PREÇO
-Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
-Caracteres extra: ${menuSystem.extraCharacters ?? 0}
-Total de caracteres: ${menuSystem.totalCharacters ?? 0}
-Subtotal antes desconto: ${formatPrice(Number(menuSystem.subtotalBeforeDiscount ?? 0))}
-Desconto campanha: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
-Total Sinalética Modular após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}`
-  }
-
-  const lineBreakdown = (menuSystem.lines ?? [])
-    .map((line: any) => `- Linha ${line.index}: ${line.characterCount} caracteres${line.widthWarning ? ' | aviso: pode ficar apertada' : ''} | ${line.text}`)
-    .join('\n')
-  const frequencySummary = Object.entries(menuSystem.characterFrequencyMap ?? {})
-    .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
-    .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}: ${count}`)
-    .join(', ')
-  const deficitSummary = Object.entries(menuSystem.avulsoDeficitMap ?? {})
-    .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
-    .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}: ${count}`)
-    .join(', ')
-  const colorFrequencySummary = Object.values(menuSystem.characterFrequencyByColor ?? {})
-    .map((group: any) => {
-      const characters = Object.entries(group.characters ?? {})
-        .sort(([a], [b]) => a.localeCompare(b, 'pt-PT'))
-        .map(([character, count]) => `${character === ' ' ? 'Espaço' : character}(${count})`)
-        .join(', ')
-      return `LETRAS — ${group.color?.name || 'Cor'}: ${characters || '-'}`
-    })
-    .join('\n')
-
-  return `\n\nSistema Modular — Collection 01
-
-RESUMO DO SISTEMA
-Menu original:
-${menuSystem.menuText || '-'}
-
-Linhas: ${menuSystem.lineCount ?? '-'}
-Largura do sistema: ${menuSystem.globalModuleCount ?? '-'} módulos / ${menuSystem.globalWidthCm ?? '-'}cm (${menuSystem.globalWidthMm ?? '-'}mm)
-Fonte produção: ${menuSystem.productionFont || 'em3d-standard'}
-Tamanho produção: ${menuSystem.productionSize || 'standard'}
-Avisos e linhas:
-${lineBreakdown || '-'}
-
-MÓDULOS
-Módulos totais de 25cm: ${menuSystem.totalRailModules ?? '-'}
-Starter/base: ${menuSystem.starterQuantity ?? '-'}
-Extensões por linha: ${menuSystem.extensionQuantityPerLine ?? '-'}
-Extensões totais: ${menuSystem.totalExtensionQuantity ?? '-'}
-
-LETRAS POR COR
-Cor das calhas: ${menuSystem.railColor?.name || '-'}
-Cor das letras: ${menuSystem.baseLetterColor?.name || menuSystem.letterColor?.name || '-'}
-Cor de destaque: ${menuSystem.accentLetterColor?.name || menuSystem.baseLetterColor?.name || menuSystem.letterColor?.name || '-'}
-Fundo das Letras: ${menuSystem.letterCardColor?.name || '-'}
-Pack Standard: ${menuSystem.standardPackQuantity ?? 0}
-Letras avulso: ${menuSystem.avulsoCharacterQuantity ?? 0}
-Défice avulso: ${deficitSummary || '-'}
-Mapa geral: ${frequencySummary || '-'}
-${colorFrequencySummary || '-'}
-
-PEDIDOS ESPECIAIS
-Letras/símbolos extra: ${menuSystem.extraLettersText || '-'}
-Pedido de cor especial: ${menuSystem.letterColorRequest?.enabled ? menuSystem.letterColorRequest.description || '-' : '-'}
-Pedido de símbolo/logótipo: ${menuSystem.customIconRequest || '-'}
-
-PREÇO
-Caracteres do menu: ${menuSystem.menuCharacters ?? 0}
-Caracteres extra: ${menuSystem.extraCharacters ?? 0}
-Total de caracteres: ${menuSystem.totalCharacters ?? 0}
-Subtotal antes desconto: ${formatPrice(Number(menuSystem.subtotalBeforeDiscount ?? 0))}
-Desconto campanha: -${menuSystem.launchDiscountPercent ?? 20}% (${formatPrice(Number(menuSystem.launchDiscountAmount ?? 0))})
-Total Sinalética Modular após desconto: ${formatPrice(Number(menuSystem.totalAfterDiscount ?? 0))}`
-}
-
-async function sendStandardOrderEmails(order: any, orderId: string) {
-  try {
-    const menuSummary = getMenuOrderSummary(order)
-    const itemLines = (order.items ?? [])
-      .map((item: any) => {
-        const details = [
-          item.selectedVariant?.name ? `Opção: ${item.selectedVariant.name}` : null,
-          item.colors?.length ? `Cores: ${item.colors.join(', ')}` : null,
-          item.customText ? `Personalização: ${item.customText}` : null,
-        ].filter(Boolean).join(' | ')
-
-        return `- ${item.productName} x${item.quantity} — ${formatPrice(Number(item.unitPrice) * Number(item.quantity))}
-${details ? `  ${details}` : ''}`
-      })
-      .join('\n')
-
-    await resend.emails.send({
-      from: getSender(),
-      to: order.customerEmail,
-      subject: 'Encomenda confirmada - EM3D',
-      text: `Olá ${order.customerName},
-
-Recebemos o pagamento da sua encomenda EM3D.
-
-ID da encomenda: ${orderId}
-
-Artigos:
-${itemLines}
-
-Subtotal: ${formatPrice(order.subtotal)}
-Entrega: ${formatPrice(order.shippingCost)} (${getShippingLabel(order.shippingMethod)})
-Total: ${formatPrice(order.total)}
-${menuSummary}
-
-Vamos preparar a encomenda e enviaremos novidades por email.
-
-A equipa EM3D`,
-    })
-
-    const adminEmail = getAdminEmail()
-    if (adminEmail) {
-      await resend.emails.send({
-        from: getSender(),
-        to: adminEmail,
-        subject: `Nova encomenda EM3D - ${order.customerName}`,
-        text: `Nova encomenda paga.
-
-ID: ${orderId}
-Cliente: ${order.customerName}
-Email: ${order.customerEmail}
-Telefone: ${order.customerPhone || '-'}
-Entrega: ${getShippingLabel(order.shippingMethod)}
-Total: ${formatPrice(order.total)}
-
-Artigos:
-${itemLines}${menuSummary}`,
-      })
-    }
-  } catch (error) {
-    console.error('Failed to send standard order emails:', error)
   }
 }
 
@@ -372,6 +264,86 @@ export async function POST(req: NextRequest) {
           resolutionSource: resolvedOrder.source,
         })
       }
+    } else if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
+      const session = event.data.object as Stripe.Checkout.Session
+      stripeSessionId = session.id
+      stripePaymentIntentId = getStripeObjectId(session.payment_intent)
+
+      const resolvedOrder = await resolveStandardOrderFromSession(session)
+      orderId = resolvedOrder.orderId
+
+      if (orderId && resolvedOrder.order?.paymentStatus !== 'paid') {
+        transactions.push(
+          dbAdmin.tx.orders[orderId].update({
+            status: 'CANCELLED',
+            paymentStatus: 'pending',
+            fulfillmentStatus: 'cancelled',
+            notes: appendPaymentFailureNote(resolvedOrder.order?.notes, event.type, new Date(event.created * 1000)),
+            stripeSessionId,
+            ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+            updatedAt: now,
+          }),
+        )
+      }
+
+      if (!orderId) {
+        console.warn('Stripe failed/expired checkout session did not resolve to an order.', {
+          eventId: event.id,
+          eventType: event.type,
+          sessionId: session.id,
+          clientReferenceId: session.client_reference_id,
+          metadata: session.metadata,
+        })
+      } else {
+        console.info('Stripe failed/expired checkout session resolved.', {
+          eventId: event.id,
+          eventType: event.type,
+          sessionId: session.id,
+          orderId,
+          resolutionSource: resolvedOrder.source,
+        })
+      }
+    } else if (event.type === 'payment_intent.payment_failed') {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent
+      stripePaymentIntentId = paymentIntent.id
+
+      const resolvedOrder = await resolveStandardOrderFromPaymentIntent(paymentIntent)
+      orderId = resolvedOrder.orderId
+
+      if (orderId && resolvedOrder.order?.paymentStatus !== 'paid') {
+        transactions.push(
+          dbAdmin.tx.orders[orderId].update({
+            status: 'CANCELLED',
+            paymentStatus: 'pending',
+            fulfillmentStatus: 'cancelled',
+            notes: appendPaymentFailureNote(
+              resolvedOrder.order?.notes,
+              event.type,
+              new Date(event.created * 1000),
+              paymentIntent.last_payment_error?.message,
+            ),
+            stripePaymentIntentId,
+            updatedAt: now,
+          }),
+        )
+      }
+
+      if (!orderId) {
+        console.warn('Stripe failed payment intent did not resolve to an order.', {
+          eventId: event.id,
+          eventType: event.type,
+          paymentIntentId: paymentIntent.id,
+          metadata: paymentIntent.metadata,
+        })
+      } else {
+        console.info('Stripe failed payment intent resolved.', {
+          eventId: event.id,
+          eventType: event.type,
+          paymentIntentId: paymentIntent.id,
+          orderId,
+          resolutionSource: resolvedOrder.source,
+        })
+      }
     }
 
     // Atomic dedupe: attempt to insert the event record with a unique eventId
@@ -423,7 +395,7 @@ export async function POST(req: NextRequest) {
       })
       const order = (orderData.orders?.[0] as any) || null
       if (order?.customerEmail) {
-        await sendStandardOrderEmails(order, orderId)
+        await sendLoggedStandardOrderEmails(order, orderId)
       }
     }
 

@@ -18,6 +18,36 @@ import { approveOrderRequestForProduction, approveOrderRequestPhoto, sendPuzzleP
 
 type OrderRequestStatus = 'DRAFT' | 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'PAID' | 'READY_FOR_PRODUCTION' | 'IN_PRODUCTION' | 'SHIPPED' | 'CANCELLED'
 type LegacyOrderRequestStatus = OrderRequestStatus | 'MODELING' | 'B2B_LEAD'
+type RequestFilter = OrderRequestStatus | 'ALL' | 'B2B'
+
+type B2BIdea = {
+  title: string
+  object: string
+  placement: string
+  utility: string
+  finish: string
+  prototypeStep: string
+}
+
+type B2BMetadata = {
+  version: number
+  source: string
+  businessType: string
+  businessTypeOther?: string
+  goal: string
+  approximateQuantity?: number
+  deadline?: string
+  message: string
+  aiIdeas?: B2BIdea[]
+  ipHash?: string
+  userAgent?: string
+  emailStatus?: {
+    customer?: 'sent' | 'failed' | 'skipped'
+    admin?: 'sent' | 'failed' | 'skipped'
+    lastError?: string
+  }
+  retentionReviewAt?: string
+}
 
 type OrderRequest = {
   id: string
@@ -43,6 +73,7 @@ type OrderRequest = {
   isPaid?: boolean
   notes?: string
   leadType?: 'custom_idea' | 'photo_request' | 'b2b'
+  b2bMetadata?: B2BMetadata
   status: LegacyOrderRequestStatus
   createdAt: Date | string
   updatedAt: Date | string
@@ -90,6 +121,10 @@ const statusTone: Record<OrderRequestStatus, string> = {
 function normalizeRequestStatus(status: LegacyOrderRequestStatus): OrderRequestStatus {
   if (status === 'MODELING' || status === 'B2B_LEAD') return 'PENDING_REVIEW'
   return status
+}
+
+function isB2BRequest(request: OrderRequest) {
+  return request.leadType === 'b2b' || request.status === 'B2B_LEAD'
 }
 
 function formatDate(value: Date | string) {
@@ -206,7 +241,8 @@ function RequestDrawer({
   const [quotedPrice, setQuotedPrice] = useState(String(request.quotedPrice ?? request.selectedPrice ?? request.estimatedPrice ?? puzzleConfig?.estimatedPrice ?? ''))
   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
   const normalizedStatus = normalizeRequestStatus(request.status)
-  const isB2BLead = request.leadType === 'b2b' || request.status === 'B2B_LEAD'
+  const isB2BLead = isB2BRequest(request)
+  const b2bMetadata = request.b2bMetadata
   const isHexaRequest = request.canvasConfig?.type === 'hexa-memoria'
   const hexaProductionSummary = getHexaProductionSummary(request)
   const canApproveProduction = isHexaRequest
@@ -329,6 +365,53 @@ function RequestDrawer({
                 {!isHexaRequest && <p><span className="font-semibold">Gravação:</span> {request.engravingText || '-'}</p>}
               </CardContent>
             </Card>
+
+            {isB2BLead && b2bMetadata && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lead B2B</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <p><span className="font-semibold">Tipo:</span> {b2bMetadata.businessTypeOther || b2bMetadata.businessType || '-'}</p>
+                    <p><span className="font-semibold">Quantidade:</span> {b2bMetadata.approximateQuantity ?? '-'}</p>
+                    <p><span className="font-semibold">Prazo:</span> {b2bMetadata.deadline || '-'}</p>
+                    <p><span className="font-semibold">Origem:</span> {b2bMetadata.source || 'empresas'} v{b2bMetadata.version || 1}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Objetivo</p>
+                    <p className="mt-1 text-muted-foreground">{b2bMetadata.goal || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Mensagem</p>
+                    <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{b2bMetadata.message || request.notes || '-'}</p>
+                  </div>
+                  {b2bMetadata.aiIdeas?.length ? (
+                    <div>
+                      <p className="font-semibold">Ideias AI anexadas</p>
+                      <div className="mt-2 space-y-2">
+                        {b2bMetadata.aiIdeas.map((idea, index) => (
+                          <div key={`${idea.title}-${index}`} className="rounded-lg border border-border bg-secondary/40 p-3">
+                            <p className="font-medium">{index + 1}. {idea.title}</p>
+                            <p className="mt-1 text-muted-foreground">Objeto: {idea.object}</p>
+                            <p className="text-muted-foreground">Local: {idea.placement}</p>
+                            <p className="text-muted-foreground">Utilidade: {idea.utility}</p>
+                            <p className="text-muted-foreground">Acabamento: {idea.finish}</p>
+                            <p className="text-muted-foreground">Primeiro passo: {idea.prototypeStep}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+                    <p>Email cliente: {b2bMetadata.emailStatus?.customer || '-'}</p>
+                    <p>Email admin: {b2bMetadata.emailStatus?.admin || '-'}</p>
+                    {b2bMetadata.emailStatus?.lastError && <p className="mt-1 text-destructive">Erro: {b2bMetadata.emailStatus.lastError}</p>}
+                    {b2bMetadata.retentionReviewAt && <p className="mt-1">Revisão de retenção: {formatDate(b2bMetadata.retentionReviewAt)}</p>}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>
@@ -587,7 +670,7 @@ function RequestDrawer({
 
 export default function AdminOrderRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<OrderRequestStatus | 'ALL'>('ALL')
+  const [statusFilter, setStatusFilter] = useState<RequestFilter>('ALL')
   const query = db.useQuery({
     orderRequests: {
       $: {
@@ -601,6 +684,8 @@ export default function AdminOrderRequestsPage() {
   const jobs = (query.data?.productionJobs ?? []) as ProductionJob[]
   const visibleRequests = statusFilter === 'ALL'
     ? requests
+    : statusFilter === 'B2B'
+    ? requests.filter(isB2BRequest)
     : requests.filter((request) => normalizeRequestStatus(request.status) === statusFilter)
   const selectedRequest = requests.find((request) => request.id === selectedId)
 
@@ -611,6 +696,8 @@ export default function AdminOrderRequestsPage() {
       return acc
     }, { DRAFT: 0, PENDING_REVIEW: 0, AWAITING_PAYMENT: 0, PAID: 0, READY_FOR_PRODUCTION: 0, IN_PRODUCTION: 0, SHIPPED: 0, CANCELLED: 0 })
   }, [requests])
+
+  const b2bCount = useMemo(() => requests.filter(isB2BRequest).length, [requests])
 
   if (query.isLoading) {
     return (
@@ -625,11 +712,21 @@ export default function AdminOrderRequestsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Encomendas</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Pedidos de revisão gratuita e pipeline de produção Foto3D.pt.
+          Pedidos, leads B2B e pipeline de produção EM3D.
         </p>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-8">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-9">
+        <Card
+          className={statusFilter === 'B2B' ? 'ring-2 ring-primary' : ''}
+          onClick={() => setStatusFilter('B2B')}
+        >
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-muted-foreground">B2B</p>
+            <p className="mt-2 text-3xl font-bold">{b2bCount}</p>
+            <p className="mt-1 text-xs text-muted-foreground">leads empresariais</p>
+          </CardContent>
+        </Card>
         {Object.entries(statusLabels).map(([status, label]) => (
           <Card
             key={status}
@@ -654,10 +751,11 @@ export default function AdminOrderRequestsPage() {
               <select
                 id="status-filter"
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as OrderRequestStatus | 'ALL')}
+                onChange={(event) => setStatusFilter(event.target.value as RequestFilter)}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="ALL">Todos</option>
+                <option value="B2B">B2B</option>
                 {Object.entries(statusLabels).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -682,7 +780,7 @@ export default function AdminOrderRequestsPage() {
                 {visibleRequests.map((request) => {
                   const relatedJobs = jobs.filter((job) => job.orderRequestId === request.id)
                   const normalizedStatus = normalizeRequestStatus(request.status)
-                  const isB2BLead = request.leadType === 'b2b' || request.status === 'B2B_LEAD'
+                  const isB2BLead = isB2BRequest(request)
                   return (
                     <tr
                       key={request.id}

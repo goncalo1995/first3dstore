@@ -31,6 +31,7 @@ import {
   EXTRA_LETTER_PACKS,
   type ExtraLetterPackSelection,
 } from '@/lib/modular-inventory-config'
+import { MENU_V1_AUTOPAY_CHARACTER_LIMIT } from '@/lib/modular-menu-v1'
 import type { GlobalColor, Product, ProductColor } from '@/lib/products'
 
 export const runtime = 'nodejs'
@@ -63,6 +64,10 @@ type CheckoutPayload = {
     dimensionSet?: 'v1-standard-250'
     fontStyle?: FontStyle
     walls?: PhysicalWall[]
+    v1Lines?: {
+      label?: string
+      detail?: string
+    }[]
     physicalGrid?: PhysicalRow[]
     categories?: unknown[]
     extraLetterGroups?: ExtraLetterGroup[]
@@ -673,6 +678,7 @@ function getMenuItemDetails(
       dimensionSet: menuSystem?.dimensionSet,
       fontStyle: menuSystem?.fontStyle,
       walls: menuSystem?.walls,
+      v1Lines: menuSystem?.v1Lines,
       physicalGrid: menuSystem?.physicalGrid,
       categories: menuSystem?.categories,
       extraLetterPackSelections: trustedExtraLetterPackSelections,
@@ -731,6 +737,7 @@ function getMenuItemDetails(
     dimensionSet: menuSystem?.dimensionSet,
     fontStyle: menuSystem?.fontStyle,
     walls: menuSystem?.walls,
+    v1Lines: menuSystem?.v1Lines,
     physicalGrid: menuSystem?.physicalGrid,
     categories: menuSystem?.categories,
     extraLetterGroups: menuSystem?.extraLetterGroups,
@@ -913,6 +920,19 @@ PREÇO
 Subtotal: ${formatMoney(quote?.subtotalBeforeDiscount ?? physicalBom?.subtotalBeforeDiscount ?? 0)}
 Desconto campanha: -${quote?.launchDiscountPercent ?? physicalBom?.launchDiscountPercent ?? LAUNCH_DISCOUNT_PERCENT}% (${formatMoney(quote?.launchDiscountAmount ?? physicalBom?.launchDiscountAmount ?? 0)})
 Total modular: ${formatMoney(quote?.totalAfterDiscount ?? physicalBom?.totalAfterDiscount ?? 0)}`
+}
+
+function formatExtraLetterPackSummary(selections: ExtraLetterPackSelection[] = [], maxLength = 450) {
+  const summary = selections
+    .filter(selection => Number(selection.quantity) > 0 && EXTRA_LETTER_PACKS[selection.packId])
+    .map(selection => {
+      const pack = EXTRA_LETTER_PACKS[selection.packId]
+      return `${selection.quantity}x ${pack.label} ${selection.color.name}`
+    })
+    .join(', ')
+
+  if (summary.length <= maxLength) return summary
+  return `${summary.slice(0, Math.max(0, maxLength - 1)).trim()}…`
 }
 
 function formatMoney(value: number) {
@@ -1205,6 +1225,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       )
     }
+    const extraLetterPackSummary = formatExtraLetterPackSummary(trustedExtraLetterPackSelections)
 
     for (const item of body.items) {
       const slug = String(item.productSlug ?? '').trim()
@@ -1250,6 +1271,9 @@ export async function POST(request: NextRequest) {
       const customText = formatCustomText(item.customizations)
       const menuDetails = getMenuItemDetails(menuRole, menuQuote, body.menuSystem, serverWallsBom, trustedExtraLetterPackSelections)
       const itemCustomText = getMenuCustomText(menuRole, menuQuote, customText, serverWallsBom)
+      const itemExtraPackSummary = menuRole === 'avulso' && extraLetterPackSummary
+        ? `Extras: ${extraLetterPackSummary}`
+        : null
       const productDisplayName = menuRole === 'rails' ? 'Módulo Menu 25cm' : product.name
 
       orderItems.push({
@@ -1296,6 +1320,7 @@ export async function POST(request: NextRequest) {
               variant?.name,
               colors.length ? colors.join(', ') : null,
               itemCustomText || null,
+              itemExtraPackSummary,
               menuRole ? `Campanha de lançamento -${LAUNCH_DISCOUNT_PERCENT}% aplicada` : null,
             ].filter(Boolean).join(' · ').slice(0, 1000),
           },
@@ -1386,9 +1411,11 @@ export async function POST(request: NextRequest) {
     const subtotal = Math.round(orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) * 100) / 100
     const shippingCost = shippingMethod === 'mainland_portugal' ? SHIPPING_COST : 0
     const total = Math.round((subtotal + shippingCost) * 100) / 100
+    const menuTotalCharacters = serverWallsBom?.totalCharacters ?? menuQuote?.totalCharacters ?? 0
     const serverCheckoutLane: CheckoutLane = (
       clientRequestedManualQuote ||
       (serverWallsBom?.totalRailModules ?? menuQuote?.totalRailModules ?? 0) > 30 ||
+      menuTotalCharacters > MENU_V1_AUTOPAY_CHARACTER_LIMIT ||
       hasCustomBrandColor ||
       hasLogo
     )
@@ -1433,6 +1460,7 @@ export async function POST(request: NextRequest) {
         spaceType: String(body.manualQuote?.spaceType ?? '').trim(),
         fontStyle: body.menuSystem?.fontStyle ?? 'classic',
         walls: body.menuSystem?.walls ?? [],
+        v1Lines: body.menuSystem?.v1Lines ?? [],
         physicalGrid: body.menuSystem?.physicalGrid ?? [],
         extraLetterPackSelections: trustedExtraLetterPackSelections,
         customBrandColor: String(body.menuSystem?.customBrandColor ?? '').trim() || undefined,
@@ -1491,6 +1519,12 @@ export async function POST(request: NextRequest) {
       client_reference_id: orderId,
       success_url: `${siteUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl()}${isMenuFlow ? '/colecoes/modular/builder' : '/checkout'}`,
+      payment_intent_data: {
+        metadata: {
+          orderId,
+          flow,
+        },
+      },
       metadata: {
         orderId,
         flow,
@@ -1501,6 +1535,7 @@ export async function POST(request: NextRequest) {
               standardPackQuantity: String(serverWallsBom?.standardPackQuantity ?? menuQuote?.standardPackQuantity ?? 0),
               avulsoCharacterQuantity: String(serverWallsBom?.avulsoCharacterQuantity ?? menuQuote?.avulsoCharacterQuantity ?? 0),
               launchDiscountPercent: String(LAUNCH_DISCOUNT_PERCENT),
+              ...(extraLetterPackSummary ? { extraLetterPackSummary } : {}),
             }
           : {}),
       },

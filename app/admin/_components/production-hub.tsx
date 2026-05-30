@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { 
   LayoutDashboard, Printer as PrinterIcon, Calendar, Layers, HardDrive, 
   ExternalLink, History, RefreshCw, ArrowRight, PackageCheck, Play, Download,
-  CheckCircle2, AlertTriangle, XCircle,
-  Palette
+  CheckCircle2, AlertTriangle, XCircle, ArrowLeft,
+  Palette, Wrench
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -30,12 +31,15 @@ import {
   generateAllPendingJobs,
   updateJobOutsourced,
   fulfillJobFromStock,
+  detachProductionJob,
+  overrideProductionJobState,
 } from '@/app/admin/production/actions'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { format } from 'date-fns'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { ModularProductionBomInline } from './modular-production-bom'
 
 import type {
   ProductionJob,
@@ -48,6 +52,9 @@ import type {
 } from '@/types'
 
 export function ProductionHub() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { isLoading, data, error } = db.useQuery({
     productionJobs: {
       order: {},
@@ -74,13 +81,13 @@ export function ProductionHub() {
     }
   })
 
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState('production')
   const [assigningJob, setAssigningJob] = useState<any>(null)
-  const [schedulingDate, setSchedulingDate] = useState<Date>(new Date())
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([])
   const [batchDialogOpen, setBatchDialogOpen] = useState(false)
   const [selectedJobDetails, setSelectedJobDetails] = useState<ProductionJob | null>(null)
-  const [queueGroupingMode, setQueueGroupingMode] = useState<'queue' | 'client' | 'color' | 'bagging'>('queue')
+  const [queueGroupingMode, setQueueGroupingMode] = useState<'order' | 'client' | 'color' | 'bagging' | 'raw'>('order')
+  const selectedOrderKey = searchParams.get('order')
 
   const { 
     productionJobs = [] as ProductionJob[], 
@@ -101,6 +108,8 @@ export function ProductionHub() {
   const jobsByClient = useMemo(() => groupJobsByClient(queuedJobs), [queuedJobs])
   const jobsByColor = useMemo(() => groupJobsByColor(queuedJobs), [queuedJobs])
   const baggingGroups = useMemo(() => getBaggingGroups(queuedJobs), [queuedJobs])
+  const orderGroups = useMemo(() => groupJobsByOrder(productionJobs as any[]), [productionJobs])
+  const selectedOrderGroup = selectedOrderKey ? orderGroups.find(group => group.key === selectedOrderKey) : null
 
   if (isLoading) return <div className="flex h-[400px] items-center justify-center font-black uppercase tracking-[0.2em] animate-pulse text-muted-foreground/30">Syncing MRP Hub...</div>
   if (error) return <div className="p-8 text-destructive font-bold">Error loading hub: {error.message}</div>
@@ -207,7 +216,7 @@ export function ProductionHub() {
         </div>
       </div>
 
-      <Tabs defaultValue="dashboard" className="space-y-8" onValueChange={setActiveTab}> 
+      <Tabs value={activeTab} className="space-y-8" onValueChange={setActiveTab}> 
         <TabsList className="flex overflow-x-auto w-full justify-start h-auto bg-muted/50 scrollbar-hide gap-1 sm:gap-6">
            <TabsTrigger value="dashboard" className="rounded-lg font-black text-[10px] uppercase tracking-widest h-9 px-3 sm:px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <LayoutDashboard className="h-4 w-4 sm:mr-2 text-primary" /> <span className="ml-1 hidden xl:inline">Dashboard</span>
@@ -242,13 +251,14 @@ export function ProductionHub() {
         </TabsContent>
 
         <TabsContent value="production" className="space-y-6">
-          {/* QUEUE SECTION - Unscheduled jobs */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 className="font-black text-lg tracking-tight uppercase">Print Queue</h3>
+                <h3 className="font-black text-lg tracking-tight uppercase">{selectedOrderGroup ? 'Order Drilldown' : 'Order Workbench'}</h3>
                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">
-                  {queuedJobs.length} unscheduled • Select multiple and assign to printer
+                  {selectedOrderGroup
+                    ? `${selectedOrderGroup.label} • ${selectedOrderGroup.jobs.length} production jobs`
+                    : `${orderGroups.length} active orders • ${queuedJobs.length} unscheduled jobs`}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -256,7 +266,23 @@ export function ProductionHub() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/20 p-3">
+            {selectedOrderGroup && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 text-[10px] font-black uppercase tracking-widest"
+                onClick={() => {
+                  router.replace(pathname)
+                  setSelectedJobIds([])
+                }}
+              >
+                <ArrowLeft className="mr-2 h-3.5 w-3.5" />
+                Back to orders
+              </Button>
+            )}
+
+            <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-3 shadow-sm backdrop-blur">
               <div className="flex items-center gap-3">
                 <Checkbox
                   checked={allQueuedSelected}
@@ -292,12 +318,14 @@ export function ProductionHub() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 rounded-xl border bg-background p-2">
+            {!selectedOrderGroup && (
+              <div className="flex flex-wrap gap-2 rounded-xl border bg-background p-2">
               {[
-                ['queue', 'Queue'],
+                ['order', 'By Order'],
                 ['client', 'By Client'],
                 ['color', 'By Color'],
                 ['bagging', 'Bagging Checklist'],
+                ['raw', 'Raw Jobs'],
               ].map(([value, label]) => (
                 <Button
                   key={value}
@@ -310,9 +338,30 @@ export function ProductionHub() {
                   {label}
                 </Button>
               ))}
-            </div>
+              </div>
+            )}
 
-            {queuedJobs.length === 0 ? (
+            {selectedOrderGroup ? (
+              <OrderDrilldown
+                group={selectedOrderGroup}
+                selectedJobIds={selectedJobIds}
+                onToggleJob={toggleJobSelection}
+                onOpenDetails={(job) => setSelectedJobDetails(job)}
+                onDetach={async (job) => {
+                  try {
+                    await detachProductionJob(job.id)
+                    toast.success('Job detached to queue')
+                  } catch (err: any) {
+                    toast.error(err.message)
+                  }
+                }}
+              />
+            ) : queueGroupingMode === 'order' ? (
+              <OrderWorkbench
+                groups={orderGroups}
+                onOpenOrder={(key) => router.replace(`${pathname}?order=${encodeURIComponent(key)}`)}
+              />
+            ) : queuedJobs.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl bg-muted/20">
                 <PrinterIcon className="h-10 w-10 mx-auto mb-4 opacity-20" />
                 <p className="font-bold uppercase tracking-widest text-xs">Queue is empty</p>
@@ -441,6 +490,20 @@ type BaggingGroup = {
   }[]
 }
 
+type ProductionOrderGroup = {
+  key: string
+  label: string
+  detail: string
+  order?: any
+  jobs: any[]
+  counts: Record<string, number>
+  totalQuantity: number
+  rails: number
+  letters: number
+  colors: { key: string; name: string; hex?: string; materialType?: string }[]
+  activePrinters: string[]
+}
+
 function getJobOrderKey(job: any) {
   return String(job.orderId || job.orderRequestId || job.id || 'unassigned')
 }
@@ -461,6 +524,59 @@ function getJobColorKey(job: any) {
 
 function getJobQuantity(job: any) {
   return Math.max(1, Number(job.quantity || 1))
+}
+
+function groupJobsByOrder(jobs: any[]): ProductionOrderGroup[] {
+  const groups = new Map<string, ProductionOrderGroup>()
+  for (const job of jobs) {
+    const key = getJobOrderKey(job)
+    const existing = groups.get(key) ?? {
+      key,
+      label: getJobClientName(job),
+      detail: getJobOrderLabel(job),
+      order: job.order,
+      jobs: [] as any[],
+      counts: {},
+      totalQuantity: 0,
+      rails: 0,
+      letters: 0,
+      colors: [] as ProductionOrderGroup['colors'],
+      activePrinters: [] as string[],
+    }
+    const quantity = getJobQuantity(job)
+    existing.jobs.push(job)
+    existing.counts[job.status] = (existing.counts[job.status] ?? 0) + quantity
+    existing.totalQuantity += quantity
+    if (job.partType === 'rail') existing.rails += quantity
+    if (job.partType === 'letter' || job.partType === 'extra_letter') existing.letters += quantity
+    const colorKey = `${job.colorName || 'Unassigned'}::${job.colorHex || ''}::${job.materialType || 'PLA'}`
+    if (!existing.colors.some(color => color.key === colorKey)) {
+      existing.colors.push({
+        key: colorKey,
+        name: String(job.colorName || 'Unassigned'),
+        hex: job.colorHex,
+        materialType: job.materialType || 'PLA',
+      })
+    }
+    if (job.status === 'printing' && job.printerId && !existing.activePrinters.includes(job.printerId)) {
+      existing.activePrinters.push(job.printerId)
+    }
+    groups.set(key, existing)
+  }
+  return Array.from(groups.values()).sort((left, right) => {
+    const leftBlocked = (left.counts.failed ?? 0) + (left.counts.cancelled ?? 0)
+    const rightBlocked = (right.counts.failed ?? 0) + (right.counts.cancelled ?? 0)
+    return rightBlocked - leftBlocked || left.label.localeCompare(right.label)
+  })
+}
+
+function getProgressLabel(group: ProductionOrderGroup) {
+  const queued = group.counts.queued ?? 0
+  const printing = group.counts.printing ?? 0
+  const printed = group.counts.printed ?? 0
+  const assembled = group.counts.assembled ?? 0
+  const blocked = (group.counts.failed ?? 0) + (group.counts.cancelled ?? 0)
+  return { queued, printing, printed, assembled, blocked }
 }
 
 function groupJobsByClient(jobs: any[]): JobGroup[] {
@@ -565,6 +681,217 @@ function GroupedJobSection({
       </div>
     </div>
   )
+}
+
+function OrderWorkbench({
+  groups,
+  onOpenOrder,
+}: {
+  groups: ProductionOrderGroup[]
+  onOpenOrder: (key: string) => void
+}) {
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed bg-muted/20 p-12 text-center text-muted-foreground">
+        <PackageCheck className="mx-auto mb-3 h-10 w-10 opacity-25" />
+        <p className="text-xs font-black uppercase tracking-widest">No production orders yet</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map(group => {
+        const progress = getProgressLabel(group)
+        return (
+          <button
+            key={group.key}
+            type="button"
+            onClick={() => onOpenOrder(group.key)}
+            className="w-full cursor-pointer rounded-xl border bg-background p-4 text-left shadow-sm transition-colors hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-black uppercase tracking-tight text-foreground">{group.label}</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group.detail}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{group.totalQuantity} parts</Badge>
+                {group.rails > 0 && <Badge variant="secondary">{group.rails} rails</Badge>}
+                {group.letters > 0 && <Badge variant="secondary">{group.letters} letters</Badge>}
+                {progress.blocked > 0 && <Badge variant="destructive">{progress.blocked} blocked</Badge>}
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_260px]">
+              <div className="grid grid-cols-5 overflow-hidden rounded-lg border bg-muted/20 text-center text-[10px] font-black uppercase tracking-widest">
+                {[
+                  ['Queued', progress.queued],
+                  ['Printing', progress.printing],
+                  ['Printed', progress.printed],
+                  ['Assembled', progress.assembled],
+                  ['Blocked', progress.blocked],
+                ].map(([label, value]) => (
+                  <div key={label} className="border-r px-2 py-2 last:border-r-0">
+                    <p className="text-muted-foreground">{label}</p>
+                    <p className="mt-1 text-sm text-foreground">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {group.colors.slice(0, 6).map(color => (
+                  <span key={color.key} className="inline-flex max-w-full items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    <span className="h-3 w-3 rounded-sm border" style={{ backgroundColor: color.hex || '#d1d5db' }} />
+                    <span className="truncate">{color.name}</span>
+                  </span>
+                ))}
+                {group.colors.length > 6 && <span className="text-[10px] font-bold text-muted-foreground">+{group.colors.length - 6}</span>}
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function OrderDrilldown({
+  group,
+  selectedJobIds,
+  onToggleJob,
+  onOpenDetails,
+  onDetach,
+}: {
+  group: ProductionOrderGroup
+  selectedJobIds: string[]
+  onToggleJob: (jobId: string, selected: boolean) => void
+  onOpenDetails: (job: any) => void
+  onDetach: (job: any) => void
+}) {
+  const grouped = groupOrderParts(group.jobs)
+  const queuedSelectable = group.jobs.filter(job => job.status === 'queued' && !job.outsourced)
+
+  return (
+    <div className="space-y-5">
+      {group.order && <ModularProductionBomInline record={group.order} />}
+
+      <div className="rounded-xl border bg-background">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 p-4">
+          <div>
+            <p className="text-sm font-black uppercase tracking-tight">{group.label}</p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              {queuedSelectable.length} queued selectable jobs
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-[10px] font-black uppercase tracking-widest"
+            onClick={() => queuedSelectable.forEach(job => onToggleJob(job.id, true))}
+          >
+            Select queued
+          </Button>
+        </div>
+
+        <div className="divide-y">
+          {grouped.map(section => (
+            <div key={section.key} className="p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{section.label}</p>
+                <Badge variant="outline">{section.totalQuantity}x</Badge>
+              </div>
+              <div className="space-y-2">
+                {section.rows.map(row => (
+                  <div key={row.key} className="rounded-lg border bg-muted/10 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <label className="flex min-w-0 items-center gap-3">
+                        <Checkbox
+                          checked={row.jobs.every((job: any) => selectedJobIds.includes(job.id))}
+                          disabled={row.jobs.some((job: any) => job.status !== 'queued' || job.outsourced)}
+                          onCheckedChange={(checked) => row.jobs.forEach((job: any) => onToggleJob(job.id, checked === true))}
+                          aria-label={`Select ${row.label}`}
+                        />
+                        <span className="h-4 w-4 rounded-sm border" style={{ backgroundColor: row.colorHex || '#d1d5db' }} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black">{row.label}</span>
+                          <span className="block truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            {row.colorName} · {row.materialType} · {row.statusSummary}
+                          </span>
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{row.quantity}x</Badge>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest" onClick={() => onOpenDetails(row.jobs[0])}>
+                          Details
+                        </Button>
+                        {row.jobs.some((job: any) => job.status === 'printing' || job.printerId) && (
+                          <Button type="button" variant="outline" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest" onClick={() => row.jobs.forEach(onDetach)}>
+                            Detach
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function groupOrderParts(jobs: any[]) {
+  const sectionLabels: Record<string, string> = {
+    rail: 'Rails',
+    letter: 'Letters',
+    extra_letter: 'Extra letters',
+    assembly: 'Assembly',
+    catalog_part: 'Catalog parts',
+    unknown: 'Other parts',
+  }
+  const sections = new Map<string, { key: string; label: string; totalQuantity: number; rows: any[] }>()
+  const rowMaps = new Map<string, Map<string, any>>()
+
+  for (const job of jobs) {
+    const sectionKey = job.partType || 'unknown'
+    const section = sections.get(sectionKey) ?? {
+      key: sectionKey,
+      label: sectionLabels[sectionKey] || sectionKey,
+      totalQuantity: 0,
+      rows: [],
+    }
+    const rowKey = `${job.partLabel}::${job.colorName}::${job.colorHex}::${job.materialType}::${job.status}`
+    const rows = rowMaps.get(sectionKey) ?? new Map<string, any>()
+    const existing = rows.get(rowKey) ?? {
+      key: rowKey,
+      label: job.partLabel || 'Part',
+      colorName: job.colorName || 'Unassigned',
+      colorHex: job.colorHex,
+      materialType: job.materialType || 'PLA',
+      quantity: 0,
+      jobs: [],
+      statusSummary: job.status,
+    }
+    existing.quantity += getJobQuantity(job)
+    existing.jobs.push(job)
+    rows.set(rowKey, existing)
+    rowMaps.set(sectionKey, rows)
+    section.totalQuantity += getJobQuantity(job)
+    sections.set(sectionKey, section)
+  }
+
+  for (const section of sections.values()) {
+    section.rows = Array.from(rowMaps.get(section.key)?.values() ?? [])
+      .sort((left, right) => left.colorName.localeCompare(right.colorName) || left.label.localeCompare(right.label))
+  }
+
+  return Array.from(sections.values()).sort((left, right) => {
+    const order = ['rail', 'letter', 'extra_letter', 'catalog_part', 'assembly', 'unknown']
+    return order.indexOf(left.key) - order.indexOf(right.key)
+  })
 }
 
 function ClientGroupedQueue({
@@ -748,6 +1075,7 @@ function AssignJobDialog({ job, printers, spools, onClose, onConfirm }: any) {
 	          <CardContent className="p-6 space-y-6">
 	            <div className="space-y-1">
 	              <DialogTitle className="font-black text-lg tracking-tight uppercase">Schedule Production</DialogTitle>
+	              <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Schedule Job: "{job.productName}"</p>
           </div>
           
@@ -823,6 +1151,8 @@ function PrintJobDetailsDialog({ job, printInfo, onClose }: { job: any; printInf
   const requirements = getScheduleRequirements(job)
   const orderItem = printInfo?.orderItem
   const estimatedPrintMinutes = printInfo?.estimatedPrintMinutes
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [overrideLoading, setOverrideLoading] = useState(false)
   const detailRows = [
     ['Order', job.orderId ? `#${String(job.orderId).slice(0, 8)}` : 'No order'],
     ['Customer', job.order?.customerName ?? 'Unknown'],
@@ -835,12 +1165,24 @@ function PrintJobDetailsDialog({ job, printInfo, onClose }: { job: any; printInf
     ['Grams', `${Math.round(Number(job.materialGrams ?? job.totalGrams ?? 0))}g`],
     ['Estimated print', estimatedPrintMinutes ? `${estimatedPrintMinutes} min` : 'Not set'],
   ]
+  const runOverride = async (action: () => Promise<any>, message: string) => {
+    setOverrideLoading(true)
+    try {
+      await action()
+      toast.success(message)
+      onClose()
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+    setOverrideLoading(false)
+  }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90vh] sm:max-w-3xl overflow-y-auto p-0">
         <div className="border-b p-5">
           <DialogTitle className="font-black text-xl uppercase tracking-tight">Print Job Details</DialogTitle>
+          <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           <p className="mt-1 text-xs font-bold uppercase tracking-widest text-muted-foreground">
             {job.productName} · {job.partLabel}
           </p>
@@ -930,6 +1272,36 @@ function PrintJobDetailsDialog({ job, printInfo, onClose }: { job: any; printInf
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">No STL/3MF file matched this job or variant.</p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 text-left"
+                onClick={() => setAdvancedOpen(open => !open)}
+              >
+                <span>
+                  <span className="block text-[10px] font-black uppercase tracking-widest text-amber-600">Advanced controls</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Use only to recover stuck or manually handled parts.</span>
+                </span>
+                <Wrench className="h-4 w-4 text-amber-600" />
+              </button>
+              {advancedOpen && (
+                <div className="mt-4 grid gap-2">
+                  <Button type="button" variant="outline" size="sm" disabled={overrideLoading} onClick={() => runOverride(() => detachProductionJob(job.id), 'Job returned to queue')}>
+                    Detach to queue
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" disabled={overrideLoading} onClick={() => runOverride(() => overrideProductionJobState(job.id, 'printed', { note: 'Manual override to printed' }), 'Job marked printed')}>
+                    Mark printed
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" disabled={overrideLoading} onClick={() => runOverride(() => overrideProductionJobState(job.id, 'assembled', { note: 'Manual override to assembled' }), 'Job marked assembled')}>
+                    Mark assembled
+                  </Button>
+                  <Button type="button" variant="destructive" size="sm" disabled={overrideLoading} onClick={() => runOverride(() => overrideProductionJobState(job.id, 'cancelled', { detach: true, note: 'Manual override to cancelled' }), 'Job cancelled')}>
+                    Cancel job
+                  </Button>
+                </div>
               )}
             </div>
           </aside>

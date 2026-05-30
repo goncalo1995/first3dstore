@@ -9,10 +9,11 @@ import { Separator } from '@/components/ui/separator'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { db, id } from '@/lib/db'
-import { finishBatchPrint, updatePrinterSlots, updatePrinterStatus } from '@/app/admin/production/actions'
+import { finishBatchPrint, overridePrinterState, resetPrinterPlate, updatePrinterSlots, updatePrinterStatus } from '@/app/admin/production/actions'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -52,6 +53,7 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
   const [loadingSlot, setLoadingSlot] = useState<string | null>(null) // printerId-slotNumber
   const [isAddingPrinter, setIsAddingPrinter] = useState(false)
   const [finishingPrinter, setFinishingPrinter] = useState<any>(null)
+  const [abortingPrinter, setAbortingPrinter] = useState<any>(null)
   const [newPrinter, setNewPrinter] = useState({
     name: 'BambuLab X1C',
     model: 'X1-Carbon',
@@ -106,6 +108,7 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle className="font-black text-lg">Add New Printer</DialogTitle>
+              <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -141,6 +144,10 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
         <div className="grid gap-6 md:grid-cols-2">
           {printers.map((printer: any) => {
             const activeJobIds = Array.isArray(printer.activeJobIds) ? printer.activeJobIds : []
+            const fallbackPrintingJobs = (jobs as any[]).filter(job => job.printerId === printer.id && job.status === 'printing')
+            const activeJobs = (jobs as any[]).filter(job => activeJobIds.includes(job.id) || fallbackPrintingJobs.some(fallback => fallback.id === job.id))
+            const isStuckPrinting = printer.status === 'printing' && activeJobs.length === 0
+            const needsReconcile = activeJobs.length > 0 && printer.status !== 'printing'
             return (
             <Card key={printer.id} className="overflow-hidden border-muted/50 hover:border-primary/30 transition-all shadow-sm">
               <CardHeader className="pb-3 bg-muted/10 border-b">
@@ -174,7 +181,7 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
                     {printer.status}
                   </Badge>
                   <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">
-                    {activeJobIds.length > 0 ? `${activeJobIds.length} jobs on plate` : 'Active Status'}
+                    {activeJobs.length > 0 ? `${activeJobs.length} jobs on plate` : 'Active Status'}
                   </span>
                 </div>
 
@@ -217,7 +224,19 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
                   </div>
                 </div>
 
-                {printer.status === 'printing' && (
+                {(isStuckPrinting || needsReconcile) && (
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700">
+                    <p className="flex items-center gap-2 font-black uppercase tracking-widest">
+                      <AlertTriangle className="h-4 w-4" />
+                      {isStuckPrinting ? 'Stuck printer state' : 'Plate state mismatch'}
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium">
+                      {isStuckPrinting ? 'Printer says printing but no active jobs are attached.' : 'Jobs are attached but printer is not marked printing.'}
+                    </p>
+                  </div>
+                )}
+
+                {(printer.status === 'printing' || activeJobs.length > 0) && (
                   <div className="pt-2 space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
@@ -233,12 +252,55 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
                       size="sm"
                       className="w-full h-8 text-[9px] font-black uppercase tracking-widest bg-emerald-500 hover:bg-emerald-600 shadow-sm"
                       onClick={() => setFinishingPrinter(printer)}
-                      disabled={activeJobIds.length === 0}
+                      disabled={activeJobs.length === 0}
                     >
                       <CheckCircle2 className="mr-2 h-3.5 w-3.5" /> Finish Plate
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full h-8 text-[9px] font-black uppercase tracking-widest"
+                      onClick={() => setAbortingPrinter(printer)}
+                      disabled={activeJobs.length === 0}
+                    >
+                      <XCircle className="mr-2 h-3.5 w-3.5" /> Abort Plate
+                    </Button>
                   </div>
                 )}
+
+                <details className="rounded-xl border border-dashed bg-muted/10 p-3">
+                  <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-muted-foreground">Advanced controls</summary>
+                  <div className="mt-3 grid gap-2">
+                    {isStuckPrinting && (
+                      <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase tracking-widest" onClick={async () => {
+                        try {
+                          await overridePrinterState(printer.id, 'idle', { clearActiveJobs: true })
+                          toast.success('Printer reset to idle')
+                        } catch (err: any) { toast.error(err.message) }
+                      }}>
+                        Reset stuck printer
+                      </Button>
+                    )}
+                    {needsReconcile && (
+                      <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase tracking-widest" onClick={async () => {
+                        try {
+                          await overridePrinterState(printer.id, 'printing', { clearActiveJobs: false })
+                          toast.success('Printer reconciled')
+                        } catch (err: any) { toast.error(err.message) }
+                      }}>
+                        Reconcile plate
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-8 text-[9px] font-black uppercase tracking-widest" onClick={async () => {
+                      try {
+                        await overridePrinterState(printer.id, 'idle', { clearActiveJobs: true })
+                        toast.success('Printer set idle')
+                      } catch (err: any) { toast.error(err.message) }
+                    }}>
+                      Force idle
+                    </Button>
+                  </div>
+                </details>
               </CardContent>
             </Card>
             )
@@ -290,10 +352,21 @@ export function PrinterFleet({ printers, spools, jobs, history = [] }: PrinterFl
           printer={finishingPrinter}
           jobs={jobs.filter((job: any) => {
             const activeJobIds = Array.isArray(finishingPrinter.activeJobIds) ? finishingPrinter.activeJobIds : []
-            return activeJobIds.includes(job.id)
+            return activeJobIds.includes(job.id) || (job.printerId === finishingPrinter.id && job.status === 'printing')
           })}
           onClose={() => setFinishingPrinter(null)}
           onFinished={() => setFinishingPrinter(null)}
+        />
+      )}
+      {abortingPrinter && (
+        <AbortPlateDialog
+          printer={abortingPrinter}
+          jobs={jobs.filter((job: any) => {
+            const activeJobIds = Array.isArray(abortingPrinter.activeJobIds) ? abortingPrinter.activeJobIds : []
+            return activeJobIds.includes(job.id) || (job.printerId === abortingPrinter.id && job.status === 'printing')
+          })}
+          onClose={() => setAbortingPrinter(null)}
+          onFinished={() => setAbortingPrinter(null)}
         />
       )}
     </div>
@@ -333,6 +406,7 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
   const [outcomes, setOutcomes] = useState<Record<string, { status: 'success' | 'failed'; wasteGrams: number }>>(() => {
     return Object.fromEntries(jobs.map(job => [job.id, { status: 'success', wasteGrams: 0 }]))
   })
+  const [failedMode, setFailedMode] = useState<'queued' | 'failed' | 'cancelled'>('queued')
   const [loading, setLoading] = useState(false)
 
   const updateOutcome = (jobId: string, patch: Partial<{ status: 'success' | 'failed'; wasteGrams: number }>) => {
@@ -340,6 +414,10 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
       ...current,
       [jobId]: { ...(current[jobId] || { status: 'success', wasteGrams: 0 }), ...patch },
     }))
+  }
+
+  const setAllOutcomes = (status: 'success' | 'failed') => {
+    setOutcomes(Object.fromEntries(jobs.map(job => [job.id, { status, wasteGrams: 0 }])))
   }
 
   const handleFinish = async () => {
@@ -355,6 +433,7 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
           spoolConsumptions: outcome.status === 'success' ? getSpoolConsumptionsFromAllocations(job, successGrams) : undefined,
           wasteConsumptions: outcome.status === 'failed' ? getSpoolConsumptionsFromAllocations(job, wasteGrams) : undefined,
           failReason: outcome.status === 'failed' ? `Waste recorded: ${wasteGrams}g` : undefined,
+          nextStatusOnFailure: failedMode,
         }
       }))
       toast.success('Build plate finished')
@@ -373,6 +452,7 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
             Finish Build Plate
           </DialogTitle>
+          <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -381,6 +461,18 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
               Grade every logical job from this simultaneous plate run
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase tracking-widest" onClick={() => setAllOutcomes('success')}>Mark all success</Button>
+              <Button type="button" size="sm" variant="outline" className="h-8 text-[10px] font-black uppercase tracking-widest" onClick={() => setAllOutcomes('failed')}>Mark all failed</Button>
+            </div>
+            <div className="mt-3 max-w-xs space-y-1.5">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Failed jobs become</Label>
+              <select value={failedMode} onChange={event => setFailedMode(event.target.value as typeof failedMode)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs font-bold">
+                <option value="queued">Failed and requeue</option>
+                <option value="failed">Failed and blocked</option>
+                <option value="cancelled">Failed and cancel</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -443,6 +535,54 @@ function BatchFinishDialog({ printer, jobs, onClose, onFinished }: {
           <Button onClick={handleFinish} disabled={loading || jobs.length === 0}>
             {loading ? 'Finishing...' : 'Commit Plate Results'}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function AbortPlateDialog({ printer, jobs, onClose, onFinished }: {
+  printer: any
+  jobs: any[]
+  onClose: () => void
+  onFinished: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const runAbort = async (mode: 'detach_to_queue' | 'mark_failed' | 'mark_cancelled') => {
+    setLoading(true)
+    try {
+      const result = await resetPrinterPlate(printer.id, mode)
+      toast.success(`Plate aborted: ${result.affectedJobs} job(s) updated`)
+      onFinished()
+    } catch (err: any) {
+      toast.error(err.message)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+            <XCircle className="h-5 w-5 text-destructive" />
+            Abort Build Plate
+          </DialogTitle>
+          <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <p className="text-sm font-bold">{printer.name}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{jobs.length} active job(s) will be updated.</p>
+          </div>
+          <div className="grid gap-2">
+            <Button disabled={loading} variant="outline" onClick={() => runAbort('detach_to_queue')}>Requeue unprinted jobs</Button>
+            <Button disabled={loading} variant="outline" onClick={() => runAbort('mark_failed')}>Mark failed</Button>
+            <Button disabled={loading} variant="destructive" onClick={() => runAbort('mark_cancelled')}>Cancel jobs</Button>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

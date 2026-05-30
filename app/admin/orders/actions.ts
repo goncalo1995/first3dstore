@@ -3,6 +3,7 @@
 import Stripe from 'stripe'
 import { revalidatePath } from 'next/cache'
 import { dbAdmin } from '@/lib/db-admin'
+import { sendStandardOrderEmails } from '@/lib/order-emails'
 import { requireAdminForAction } from '@/lib/server-auth'
 import type { Order } from '@/types'
 
@@ -52,18 +53,33 @@ export async function recheckStripeOrderPayment(orderId: string) {
   }
 
   const now = new Date()
+  const stripePaymentIntentId = getStripeObjectId(session.payment_intent)
+  const paidOrder = {
+    ...order,
+    status: 'PAID',
+    paymentStatus: 'paid',
+    paidAt: now,
+    stripeSessionId: session.id,
+    ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+    updatedAt: now,
+  }
+
   await dbAdmin.transact(
     dbAdmin.tx.orders[orderId].update({
       status: 'PAID',
       paymentStatus: 'paid',
       paidAt: now,
       stripeSessionId: session.id,
-      ...(getStripeObjectId(session.payment_intent) ? { stripePaymentIntentId: getStripeObjectId(session.payment_intent) } : {}),
+      ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
       updatedAt: now,
     }),
   )
 
+  if (paidOrder.customerEmail) {
+    await sendStandardOrderEmails(paidOrder, orderId)
+  }
+
   revalidatePath('/admin/orders')
 
-  return { updated: true, message: 'Pagamento Stripe confirmado e encomenda marcada como paga.' }
+  return { updated: true, message: 'Pagamento Stripe confirmado, encomenda marcada como paga e emails de confirmação tentados.' }
 }

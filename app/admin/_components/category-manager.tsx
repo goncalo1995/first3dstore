@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -155,6 +156,7 @@ export function CategoryManager({ categories }: { categories: CategoryRecord[] }
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>New category</DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           <form onSubmit={addCategory} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">

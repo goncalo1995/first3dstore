@@ -1,51 +1,102 @@
 import Link from 'next/link'
 import { Instagram, Mail } from 'lucide-react'
 
+const footerGroups = [
+  {
+    title: 'Estúdio',
+    links: [
+      { href: '/', label: 'Home' },
+      { href: '/colecoes/menus', label: 'Menus Modulares' },
+      { href: '/empresas', label: 'Empresas' },
+    ],
+  },
+  {
+    title: 'Produtos',
+    links: [
+      { href: '/loja', label: 'Loja' },
+      { href: '/pedido-personalizado', label: 'Pedido personalizado' },
+      { href: '/#colecoes', label: 'Coleções' },
+    ],
+  },
+  {
+    title: 'Suporte',
+    links: [
+      { href: '/contact', label: 'Contactos' },
+      { href: 'mailto:geral@em3d.pt', label: 'Email' },
+      { href: 'https://www.livroreclamacoes.pt/inicio', label: 'Livro de Reclamações', external: true },
+    ],
+  },
+  {
+    title: 'Legal',
+    links: [
+      { href: '/terms', label: 'Termos e Condições' },
+      { href: '/privacy', label: 'Política de Privacidade' },
+      { href: 'https://www.cniacc.pt/pt/cniacc', label: 'CNIACC', external: true },
+    ],
+  },
+]
+
 export function Footer() {
   return (
-    <footer className="bg-[#f7f2ea] border-t border-[#e2d8ca] pt-12 pb-6">
-      <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+    <footer className="border-t border-border bg-background">
+      <div className="container mx-auto px-4 py-12 md:py-16">
+        <div className="grid gap-10 lg:grid-cols-[1.2fr_2fr]">
           <div>
-            <Link href="/" className="block text-2xl font-bold tracking-tight text-white">EM3D</Link>
-            <p className="mt-3 text-sm text-[#62574d] leading-relaxed">
-              Objetos úteis, personalizados e impressos em 3D em Portugal para casa, secretária, presentes e empresas.
+            <Link href="/" className="inline-flex items-center gap-3 text-foreground">
+              <span className="grid size-9 place-items-center rounded-md border border-border bg-card text-sm font-black tracking-tight text-primary">
+                E
+              </span>
+              <span className="text-2xl font-semibold tracking-tight">EM3D</span>
+            </Link>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-muted-foreground">
+              Estúdio premium de impressão 3D em Portugal para sinalética modular, objetos personalizados e pequenas séries com acabamento físico cuidado.
             </p>
-            <div className="flex gap-4 mt-4">
-              <a href="https://instagram.com/em3d.pt" target="_blank" rel="noopener noreferrer" className="text-primary-foreground hover:text-primary-foreground/80" aria-label="Instagram — EM3D">
-                <Instagram className="w-5 h-5" />
+            <div className="mt-6 flex gap-3">
+              <a
+                href="https://instagram.com/em3d.pt"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="grid size-10 place-items-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                aria-label="Instagram — EM3D"
+              >
+                <Instagram className="size-5" />
               </a>
-              <a href="mailto:geral@em3d.pt" className="text-primary-foreground hover:text-primary-foreground/80" aria-label="Email — EM3D">
-                <Mail className="w-5 h-5" />
+              <a
+                href="mailto:geral@em3d.pt"
+                className="grid size-10 place-items-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+                aria-label="Email — EM3D"
+              >
+                <Mail className="size-5" />
               </a>
             </div>
           </div>
-          <div>
-            <h4 className="font-semibold text-[#231f19] mb-4">Produtos</h4>
-            <ul className="space-y-2">
-              <li><Link href="/loja" className="text-sm text-secondary hover:text-secondary-600">Loja</Link></li>
-              <li><Link href="/pedido-personalizado" className="text-sm text-secondary hover:text-secondary-600">Pedido personalizado</Link></li>
-              <li><Link href="/#colecoes" className="text-sm text-secondary hover:text-secondary-600">Coleções</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold text-[#231f19] mb-4">Ajuda</h4>
-            <ul className="space-y-2">
-              <li><Link href="/empresas" className="text-sm text-secondary hover:text-secondary-600">Empresas</Link></li>
-              <li><Link href="/contact" className="text-sm text-secondary hover:text-secondary-600">Contacto</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-semibold text-[#231f19] mb-4">Legal</h4>
-            <ul className="space-y-2">
-              <li><Link href="/terms" className="text-sm text-secondary hover:text-secondary-600">Termos e Condições</Link></li>
-              <li><Link href="/privacy" className="text-sm text-secondary hover:text-secondary-600">Política de Privacidade</Link></li>
-            </ul>
+
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {footerGroups.map(group => (
+              <div key={group.title}>
+                <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-foreground">{group.title}</h4>
+                <ul className="space-y-3">
+                  {group.links.map(link => (
+                    <li key={`${group.title}-${link.href}`}>
+                      <Link
+                        href={link.href}
+                        target={link.external ? '_blank' : undefined}
+                        rel={link.external ? 'noopener noreferrer' : undefined}
+                        className="text-sm text-muted-foreground transition-colors hover:text-primary"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="border-t border-[#e2d8ca] mt-10 pt-6 flex flex-col md:flex-row justify-between items-center text-xs text-[#62574d]">
-          {/* <p>Feito com cuidado em Lisboa, Portugal</p> */}
+
+        <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
           <p>{new Date().getFullYear()} EM3D. Todos os direitos reservados.</p>
+          <p>EM3D é o nome comercial de Cereja Investment, Lda · NIF 518493385</p>
         </div>
       </div>
     </footer>

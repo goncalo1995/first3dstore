@@ -6,12 +6,12 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'EM3D · Objetos úteis, impressão 3D em Portugal',
-  description: 'Objetos úteis, personalizados e impressos em 3D em Portugal. Peças para casa, secretária, presentes e empresas.',
-  keywords: ['impressão 3D', 'objetos personalizados', 'presentes personalizados', 'produção local', 'Portugal', 'EM3D'],
+  title: 'EM3D · Estúdio de impressão 3D em Portugal',
+  description: 'Estúdio premium de impressão 3D em Portugal para sinalética modular, objetos personalizados e pequenas séries.',
+  keywords: ['impressão 3D', 'sinalética modular', 'objetos personalizados', 'produção local', 'Portugal', 'EM3D'],
   openGraph: {
-    title: 'EM3D · Objetos úteis, impressão 3D em Portugal',
-    description: 'Objetos úteis, personalizados e impressos em 3D em Portugal.',
+    title: 'EM3D · Estúdio de impressão 3D em Portugal',
+    description: 'Sinalética modular, objetos personalizados e pequenas séries impressas em 3D em Portugal.',
     type: 'website',
     locale: 'pt_PT',
   },
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#111111',
+  themeColor: '#09090b',
   width: 'device-width',
   initialScale: 1,
 }

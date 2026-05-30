@@ -2,8 +2,10 @@
 
 import { dbAdmin } from '@/lib/db-admin'
 import { id } from '@instantdb/admin'
+import { buildModularProductionBom } from '@/lib/modular-production-bom'
 
 type JobStatus = 'queued' | 'printing' | 'printed' | 'assembled' | 'failed' | 'cancelled'
+type ProductionPartType = 'catalog_part' | 'rail' | 'letter' | 'extra_letter' | 'assembly'
 
 // ─── Types ───────────────────────────────────────────────────────────
 type OrderItem = {
@@ -47,6 +49,7 @@ type OrderItem = {
     })[]
   }
   customText?: string
+  menuSystem?: any
   unitPrice: number
 }
 
@@ -88,6 +91,19 @@ type BatchOutcome = {
   spoolConsumptions?: { spoolId: string; grams: number; slotNumber?: number }[]
   wasteConsumptions?: { spoolId: string; grams: number; slotNumber?: number }[]
   failReason?: string
+  nextStatusOnFailure?: 'queued' | 'failed' | 'cancelled'
+}
+
+const RAIL_GRAMS_PER_MODULE = 22
+const LETTER_GRAMS_PER_UNIT = 2
+
+function safeKeyPart(value: unknown) {
+  return String(value ?? 'unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'unknown'
 }
 
 function getRequirementKey(colorId: string | undefined, materialType: string | undefined) {
@@ -193,6 +209,237 @@ function getJobRequirements(job: any) {
   }))
 }
 
+function createProductionJobTx({
+  jobId,
+  orderId,
+  item,
+  itemIndex,
+  product,
+  productionKey,
+  partType,
+  partLabel,
+  color,
+  quantity,
+  materialGrams,
+  materialType = 'PLA',
+  now,
+  notes,
+}: {
+  jobId: string
+  orderId: string
+  item: OrderItem
+  itemIndex: number
+  product?: CatalogProduct
+  productionKey?: string
+  partType: ProductionPartType
+  partLabel: string
+  color: { color?: GlobalColor; name: string; hex?: string; resolvedBy?: 'globalColorId' | 'name' | 'hex' | 'unresolved' }
+  quantity: number
+  materialGrams: number
+  materialType?: 'PLA' | 'PETG' | 'ABS' | 'TPU'
+  now: Date
+  notes?: string
+}) {
+  const colorId = color.color?.id ?? 'unassigned'
+  const colorName = color.color?.name ?? color.name
+  const colorHex = color.color?.hex ?? color.hex ?? '#888888'
+  const totalGrams = materialGrams * Math.max(1, Number(quantity || 1))
+  const colorRequirements = [{
+    colorId,
+    colorName,
+    colorHex,
+    grams: materialGrams,
+    materialType,
+    resolvedBy: color.resolvedBy ?? (color.color ? 'globalColorId' : 'unresolved'),
+  }]
+
+  let tx: any = dbAdmin.tx.productionJobs[jobId]
+    .update({
+      orderId,
+      orderItemIndex: itemIndex,
+      productId: product?.id ?? item.productId,
+      selectedVariantId: item.selectedVariant?.id,
+      selectedVariantName: item.selectedVariant?.name,
+      productionKey,
+      partType,
+      productName: item.productName,
+      partLabel,
+      colorName,
+      colorHex,
+      materialGrams,
+      totalGrams,
+      quantity: Math.max(1, Number(quantity || 1)),
+      status: 'queued',
+      isMultiColor: false,
+      colorRequirements,
+      requiredColorIds: colorId,
+      materialType,
+      outsourced: false,
+      customText: item.customText ?? '',
+      notes,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .link({ order: orderId })
+
+  if (color.color) {
+    tx = tx.link({ globalColor: color.color.id })
+  }
+
+  return tx
+}
+
+function buildModularJobTransactions({
+  orderId,
+  item,
+  itemIndex,
+  product,
+  colorLookups,
+  existingProductionKeys,
+  now,
+}: {
+  orderId: string
+  item: OrderItem
+  itemIndex: number
+  product?: CatalogProduct
+  colorLookups: {
+    byId: Map<string, GlobalColor>
+    byName: Map<string, GlobalColor>
+    byHex: Map<string, GlobalColor>
+  }
+  existingProductionKeys: Set<string>
+  now: Date
+}) {
+  if (!item.menuSystem) return []
+  const bom = buildModularProductionBom(item.menuSystem)
+  if (!bom) return []
+
+  const transactions: any[] = []
+  const baseKey = `${orderId}:item-${itemIndex}:menu`
+  const railColorResolved = resolveGlobalColor(colorLookups, item.menuSystem.railColor ?? { name: bom.railColorName, hex: bom.railColorHex })
+  const railColor = {
+    color: railColorResolved.color,
+    name: bom.railColorName,
+    hex: bom.railColorHex,
+    resolvedBy: railColorResolved.resolvedBy,
+  }
+
+  if (bom.totalRailModules > 0) {
+    const productionKey = `${baseKey}:rail:${safeKeyPart(railColor.color?.id ?? railColor.name)}`
+    if (!existingProductionKeys.has(productionKey)) {
+      transactions.push(createProductionJobTx({
+        jobId: id(),
+        orderId,
+        item,
+        itemIndex,
+        product,
+        productionKey,
+        partType: 'rail',
+        partLabel: 'Calha 25cm',
+        color: railColor,
+        quantity: bom.totalRailModules,
+        materialGrams: RAIL_GRAMS_PER_MODULE,
+        now,
+        notes: `${bom.totalRailModules} calhas de 25cm para ${bom.title}`,
+      }))
+      existingProductionKeys.add(productionKey)
+    }
+  }
+
+  const letterGroups = [
+    ...bom.walls.flatMap(wall => wall.colorGroups),
+    ...bom.legacyColorGroups,
+  ]
+  const aggregatedLetters = new Map<string, {
+    character: string
+    count: number
+    colorName: string
+    colorHex?: string
+    resolved: ReturnType<typeof resolveGlobalColor>
+  }>()
+
+  for (const group of letterGroups) {
+    const resolved = resolveGlobalColor(colorLookups, { name: group.colorName, hex: group.colorHex })
+    for (const [character, rawCount] of Object.entries(group.characters ?? {})) {
+      const count = Number(rawCount || 0)
+      if (count <= 0) continue
+      const characterKey = character === ' ' ? 'space' : safeKeyPart(character)
+      const productionKey = `${baseKey}:letter:${safeKeyPart(resolved.color?.id ?? group.colorName)}:${characterKey}`
+      const existing = aggregatedLetters.get(productionKey)
+      aggregatedLetters.set(productionKey, {
+        character,
+        count: (existing?.count ?? 0) + count,
+        colorName: group.colorName,
+        colorHex: group.colorHex,
+        resolved,
+      })
+    }
+  }
+
+  for (const [productionKey, group] of aggregatedLetters) {
+    if (existingProductionKeys.has(productionKey)) continue
+    transactions.push(createProductionJobTx({
+      jobId: id(),
+      orderId,
+      item,
+      itemIndex,
+      product,
+      productionKey,
+      partType: 'letter',
+      partLabel: group.character === ' ' ? 'Letra espaco' : `Letra ${group.character}`,
+      color: {
+        color: group.resolved.color,
+        name: group.colorName,
+        hex: group.colorHex,
+        resolvedBy: group.resolved.resolvedBy,
+      },
+      quantity: group.count,
+      materialGrams: LETTER_GRAMS_PER_UNIT,
+      now,
+      notes: `Letras modulares: ${group.character} x${group.count}`,
+    }))
+    existingProductionKeys.add(productionKey)
+  }
+
+  for (const group of bom.extraLetterGroups) {
+    const resolved = resolveGlobalColor(colorLookups, { name: group.colorName, hex: group.colorHex })
+    const chars = Array.from(String(group.charactersPerUnit || ''))
+    const counts = new Map<string, number>()
+    for (const character of chars) {
+      counts.set(character, (counts.get(character) ?? 0) + Number(group.quantity || 1))
+    }
+    for (const [character, count] of counts) {
+      if (count <= 0) continue
+      const characterKey = character === ' ' ? 'space' : safeKeyPart(character)
+      const productionKey = `${baseKey}:extra-letter:${safeKeyPart(group.label)}:${safeKeyPart(resolved.color?.id ?? group.colorName)}:${characterKey}`
+      if (existingProductionKeys.has(productionKey)) continue
+      transactions.push(createProductionJobTx({
+        jobId: id(),
+        orderId,
+        item,
+        itemIndex,
+        product,
+        productionKey,
+        partType: 'extra_letter',
+        partLabel: character === ' ' ? `${group.label} - espaco` : `${group.label} - ${character}`,
+        color: {
+          color: resolved.color,
+          name: group.colorName,
+          hex: group.colorHex,
+          resolvedBy: resolved.resolvedBy,
+        },
+        quantity: count,
+        materialGrams: LETTER_GRAMS_PER_UNIT,
+        now,
+        notes: `Pack extra: ${group.label}`,
+      }))
+      existingProductionKeys.add(productionKey)
+    }
+  }
+
+  return transactions
+}
+
 // ─── Generate jobs for a single order ────────────────────────────────
 export async function generateProductionJobs(orderId: string) {
   const orderResult = await dbAdmin.query({
@@ -202,7 +449,11 @@ export async function generateProductionJobs(orderId: string) {
   const order = (orderResult.orders as any[])?.find((o: any) => o.id === orderId)
   if (!order) throw new Error(`Order ${orderId} not found`)
 
-  if (order.productionJobs?.length > 0) {
+  const items = (order.items ?? []) as OrderItem[]
+  const existingJobs = (order.productionJobs ?? []) as any[]
+  const hasModularMenuItems = items.some((item) => Boolean(item.menuSystem))
+
+  if (existingJobs.length > 0 && !hasModularMenuItems) {
     return { created: 0, skipped: true, orderId }
   }
 
@@ -224,8 +475,9 @@ export async function generateProductionJobs(orderId: string) {
 
   const now = new Date()
   const transactions: any[] = []
-
-  const items = (order.items ?? []) as OrderItem[]
+  const existingProductionKeys = new Set(
+    existingJobs.map((job: any) => job.productionKey).filter((key: unknown): key is string => typeof key === 'string' && key.length > 0),
+  )
 
   items.forEach((item: OrderItem, itemIndex: number) => {
     let product: CatalogProduct | undefined
@@ -235,6 +487,21 @@ export async function generateProductionJobs(orderId: string) {
     if (!product) {
       product = productByName.get(item.productName)
     }
+
+    if (item.menuSystem) {
+      transactions.push(...buildModularJobTransactions({
+        orderId,
+        item,
+        itemIndex,
+        product,
+        colorLookups,
+        existingProductionKeys,
+        now,
+      }))
+      return
+    }
+
+    if (existingJobs.length > 0) return
 
     const recipe = product?.materialRecipe?.length
       ? product.materialRecipe
@@ -285,6 +552,7 @@ export async function generateProductionJobs(orderId: string) {
             productId: product?.id ?? item.productId,
             selectedVariantId: item.selectedVariant?.id,
             selectedVariantName: item.selectedVariant?.name,
+            partType: 'catalog_part',
             productName: item.productName,
             partLabel: quantity > 1 ? `${part.label} #${unitIndex + 1}` : part.label,
             colorName: primaryColorName,
@@ -313,9 +581,11 @@ export async function generateProductionJobs(orderId: string) {
     })
   })
 
-  if (transactions.length > 0) {
+  const createdCount = transactions.length
+  if (createdCount > 0) {
     transactions.push(dbAdmin.tx.orders[orderId].update({
       status: 'IN_PRODUCTION',
+      fulfillmentStatus: order.fulfillmentStatus === 'new' ? 'printing' : order.fulfillmentStatus,
       updatedAt: now,
     }))
 
@@ -325,7 +595,7 @@ export async function generateProductionJobs(orderId: string) {
     }
   }
 
-  return { created: transactions.length, skipped: false, orderId }
+  return { created: createdCount, skipped: false, orderId }
 }
 
 export async function generateAllPendingJobs() {
@@ -337,7 +607,11 @@ export async function generateAllPendingJobs() {
   const pending = orders.filter(
     (o) =>
       ['new', 'printing'].includes(o.fulfillmentStatus) &&
-      (!o.productionJobs || o.productionJobs.length === 0)
+      (
+        !o.productionJobs ||
+        o.productionJobs.length === 0 ||
+        (Array.isArray(o.items) && o.items.some((item: any) => item?.menuSystem))
+      )
   )
 
   let totalCreated = 0
@@ -485,8 +759,27 @@ export async function startBatchPrint({
   if (jobs.some((job: any) => job.status !== 'queued' || job.outsourced)) {
     throw new Error('Only queued internal jobs can be started')
   }
-  if (Array.isArray(printer.activeJobIds) && printer.activeJobIds.length > 0) {
-    throw new Error('This printer already has an active plate')
+  const printerActiveJobIds = Array.isArray(printer.activeJobIds) ? printer.activeJobIds.filter(Boolean) : []
+  if (printerActiveJobIds.length > 0) {
+    const activeJobsResult = await dbAdmin.query({
+      productionJobs: {
+        $: { where: { id: { $in: printerActiveJobIds } } },
+      },
+    })
+    const activeJobs = (activeJobsResult.productionJobs ?? []) as any[]
+    const hasActivePrintingJob = activeJobs.some((job: any) => job.status === 'printing' && job.printerId === printerId)
+
+    if (hasActivePrintingJob) {
+      throw new Error('This printer already has an active plate')
+    }
+
+    await dbAdmin.transact(
+      dbAdmin.tx.printers[printer.id].update({
+        activeJobIds: [],
+        status: 'idle',
+        updatedAt: new Date(),
+      })
+    )
   }
 
   const assignmentByKey = new Map(slotAssignments.map(assignment => [assignment.requirementKey, assignment]))
@@ -620,7 +913,10 @@ export async function finishBatchPrint(printerId: string, outcomes: BatchOutcome
 
   const activeJobIds = Array.isArray(printer.activeJobIds) ? printer.activeJobIds : []
   const activeSet = new Set(activeJobIds)
-  if (jobIds.some(jobId => !activeSet.has(jobId))) {
+  const allOutcomesBelongToPlate = jobs.every((job: any) => (
+    activeSet.has(job.id) || (job.printerId === printerId && job.status === 'printing')
+  ))
+  if (!allOutcomesBelongToPlate) {
     throw new Error('All outcomes must belong to the active plate')
   }
 
@@ -675,14 +971,16 @@ export async function finishBatchPrint(printerId: string, outcomes: BatchOutcome
         })
       )
     } else {
+      const nextStatus = outcome.nextStatusOnFailure || 'queued'
       transactions.push(
         dbAdmin.tx.productionJobs[outcome.jobId].update({
-          status: 'queued',
+          status: nextStatus,
           printerId: null,
           scheduledDate: null,
           startedAt: null,
           completedAt: null,
           assignedSpoolIds: [],
+          spoolAllocations: [],
           notes: outcome.failReason ? `Failed on plate: ${outcome.failReason}` : 'Failed on plate',
           updatedAt: now,
         })
@@ -789,6 +1087,156 @@ export async function updatePrinterStatus(printerId: string, status: 'idle' | 'p
       updatedAt: new Date(),
     })
   )
+}
+
+export async function overridePrinterState(
+  printerId: string,
+  status: 'idle' | 'printing' | 'maintenance',
+  options: { clearActiveJobs?: boolean; note?: string } = {},
+) {
+  await dbAdmin.transact(
+    dbAdmin.tx.printers[printerId].update({
+      status,
+      ...(options.clearActiveJobs ? { activeJobIds: [] } : {}),
+      updatedAt: new Date(),
+    })
+  )
+  return { success: true }
+}
+
+export async function overrideProductionJobState(
+  jobId: string,
+  nextStatus: JobStatus,
+  options: { detach?: boolean; note?: string } = {},
+) {
+  const result = await dbAdmin.query({
+    productionJobs: {
+      $: { where: { id: jobId } },
+    },
+  })
+  const job = result.productionJobs?.[0] as any
+  if (!job) throw new Error('Job not found')
+
+  const now = new Date()
+  const shouldDetach = options.detach || ['queued', 'failed', 'cancelled', 'assembled'].includes(nextStatus)
+  await dbAdmin.transact(
+    dbAdmin.tx.productionJobs[jobId].update({
+      status: nextStatus,
+      ...(shouldDetach ? {
+        printerId: null,
+        scheduledDate: null,
+        startedAt: null,
+        assignedSpoolIds: [],
+        spoolAllocations: [],
+      } : {}),
+      ...(nextStatus === 'printed' || nextStatus === 'assembled' ? { completedAt: now } : {}),
+      ...(nextStatus === 'queued' ? { completedAt: null } : {}),
+      notes: [job.notes, options.note ? `Override: ${options.note}` : `Override: moved to ${nextStatus}`].filter(Boolean).join('\n'),
+      updatedAt: now,
+    })
+  )
+
+  if (job.printerId && shouldDetach) {
+    const printerResult = await dbAdmin.query({
+      printers: {
+        $: { where: { id: job.printerId } },
+      },
+    })
+    const printer = printerResult.printers?.[0] as any
+    const activeJobIds = Array.isArray(printer?.activeJobIds) ? printer.activeJobIds.filter((id: string) => id !== jobId) : []
+    if (printer) {
+      await dbAdmin.transact(
+        dbAdmin.tx.printers[job.printerId].update({
+          activeJobIds,
+          status: activeJobIds.length > 0 ? printer.status : 'idle',
+          updatedAt: now,
+        })
+      )
+    }
+  }
+
+  if (job.orderId) await syncOrderStates([job.orderId])
+  return { success: true }
+}
+
+export async function detachProductionJob(jobId: string) {
+  return overrideProductionJobState(jobId, 'queued', {
+    detach: true,
+    note: 'Detached from printer and returned to queue',
+  })
+}
+
+async function getPrinterPlateJobs(printerId: string) {
+  const printerResult = await dbAdmin.query({
+    printers: {
+      $: { where: { id: printerId } },
+    },
+  })
+  const printer = printerResult.printers?.[0] as any
+  if (!printer) throw new Error('Printer not found')
+
+  const activeJobIds = Array.isArray(printer.activeJobIds) ? printer.activeJobIds.filter(Boolean) : []
+  const [activeJobsResult, fallbackJobsResult] = await Promise.all([
+    activeJobIds.length > 0
+      ? dbAdmin.query({ productionJobs: { $: { where: { id: { $in: activeJobIds } } } } })
+      : Promise.resolve({ productionJobs: [] }),
+    dbAdmin.query({ productionJobs: { $: { where: { printerId } } } }),
+  ])
+  const jobsById = new Map<string, any>()
+  ;(activeJobsResult.productionJobs ?? []).forEach((job: any) => jobsById.set(job.id, job))
+  ;(fallbackJobsResult.productionJobs ?? [])
+    .filter((job: any) => job.status === 'printing')
+    .forEach((job: any) => jobsById.set(job.id, job))
+
+  return { printer, jobs: Array.from(jobsById.values()) }
+}
+
+export async function resetPrinterPlate(
+  printerId: string,
+  mode: 'detach_to_queue' | 'mark_failed' | 'mark_cancelled' | 'mark_printed',
+) {
+  const { jobs } = await getPrinterPlateJobs(printerId)
+  const now = new Date()
+  const transactions: any[] = []
+
+  for (const job of jobs) {
+    const base = {
+      printerId: null,
+      scheduledDate: null,
+      startedAt: null,
+      assignedSpoolIds: [],
+      spoolAllocations: [],
+      updatedAt: now,
+    }
+    const status = mode === 'detach_to_queue'
+      ? 'queued'
+      : mode === 'mark_failed'
+        ? 'failed'
+        : mode === 'mark_cancelled'
+          ? 'cancelled'
+          : 'printed'
+    transactions.push(
+      dbAdmin.tx.productionJobs[job.id].update({
+        ...base,
+        status,
+        ...(status === 'printed' ? { completedAt: now } : { completedAt: null }),
+        notes: [job.notes, `Printer plate override: ${mode}`].filter(Boolean).join('\n'),
+      })
+    )
+  }
+
+  transactions.push(
+    dbAdmin.tx.printers[printerId].update({
+      status: 'idle',
+      activeJobIds: [],
+      updatedAt: now,
+    })
+  )
+
+  await dbAdmin.transact(transactions)
+  const orderIds = Array.from(new Set(jobs.map((job: any) => job.orderId).filter(Boolean)))
+  if (orderIds.length > 0) await syncOrderStates(orderIds)
+  return { success: true, affectedJobs: jobs.length }
 }
 
 export async function updatePrinterSlots(printerId: string, slots: { slotNumber: number; spoolId?: string; colorId?: string }[]) {

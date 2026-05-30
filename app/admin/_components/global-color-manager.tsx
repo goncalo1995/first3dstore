@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -285,6 +286,7 @@ export function GlobalColorManager({ colors, products }: GlobalColorManagerProps
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingColor ? 'Edit Color' : 'Add New Color'}</DialogTitle>
+            <DialogDescription className="sr-only">Detalhes e ações para este registo.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
