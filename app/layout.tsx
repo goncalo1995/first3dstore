@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { CartProvider } from '@/lib/cart-context'
 import { CartDrawer } from '@/components/cart-drawer'
 import { Toaster } from '@/components/ui/sonner'
@@ -38,6 +39,7 @@ export default function RootLayout({
         </CartProvider>
         <Toaster richColors closeButton position="bottom-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && <SpeedInsights />}
       </body>
     </html>
   )
