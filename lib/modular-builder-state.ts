@@ -183,7 +183,9 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function cleanAlign(value: unknown): RailAlign | TextAlign | undefined {
-  return value === 'left' || value === 'center' || value === 'right' ? value : undefined
+  return value === 'left' || value === 'center' || value === 'right' || value === 'justify'
+    ? value
+    : undefined
 }
 
 function cleanLayoutRole(value: unknown): PhysicalRowLayoutRole | undefined {

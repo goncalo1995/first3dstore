@@ -19,8 +19,8 @@ import {
 
 export type FontStyle = 'classic' | 'modern'
 export type PhysicalGridDimensionSet = 'v1-standard-250'
-export type RailAlign = 'left' | 'center' | 'right'
-export type TextAlign = 'left' | 'center' | 'right'
+export type RailAlign = 'left' | 'center' | 'right' | 'justify'
+export type TextAlign = 'left' | 'center' | 'right' | 'justify'
 export type PhysicalColumnKind = 'title' | 'item'
 export type CheckoutLane = 'stripe_auto_pay' | 'manual_quote'
 export type PhysicalRowLayoutRole = 'title' | 'list' | 'grid'

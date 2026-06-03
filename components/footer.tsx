@@ -96,7 +96,6 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
           <p>{new Date().getFullYear()} em3D. Todos os direitos reservados.</p>
-          <p>em3D é o nome comercial de Cereja Investment, Lda · NIF 518493385</p>
         </div>
       </div>
     </footer>
